@@ -58,15 +58,15 @@ source("./simulation/repeat-fun.R")
 ## set parameters
 #-------------------------------------------------------------------------------------------#
 
-K <- 100#100#100#100#100#80#100
+K <- 30#100#100#100#100#80#100
 run.ltmle <- FALSE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
-run.ctmle2 <- TRUE#FALSE#FALSE
-compute.true.eic <- FALSE
-compute.true.psi <- FALSE
-misspecify.Q <- TRUE
+run.ctmle2 <- FALSE#FALSE#FALSE
+compute.true.eic <- TRUE
+compute.true.psi <- TRUE
+misspecify.Q <- FALSE
 only.A0 <- FALSE
-M <- 3
+M <- 1
 
 #-------------------------------------------------------------------------------------------#
 ## true values

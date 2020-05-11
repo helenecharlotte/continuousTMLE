@@ -2,14 +2,15 @@
 ## parameters of interest
 #-------------------------------------------------------------------------------------------#
 
-K <- 100#100#100#100#100#80#100
+K <- 5#100#100#100#100#80#100
 run.ltmle <- FALSE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
 run.ctmle2 <- TRUE#FALSE#FALSE
 compute.true.eic <- FALSE
 misspecify.Q <- TRUE
+misspecify.Q <- FALSE
 only.A0 <- FALSE
-M <- 50
+M <- 3
 
 #-------------------------------------------------------------------------------------------#
 ## get output from simulations
@@ -27,25 +28,25 @@ out <- readRDS(file=paste0("./simulation/output/",
 ## get true values
 #-------------------------------------------------------------------------------------------#
 
-psi0.A0 <- readRDS(file=paste0("./simulation/output/",
-                               "outlist-est-true-0-2020",
-                               "-K", K, ifelse(misspecify.Q, "-Q", ""),
-                               "-M", M, ".rds"))
+(psi0.A0 <- readRDS(file=paste0("./simulation/output/",
+                                "outlist-est-true-0-2020",
+                                "-K", K, #ifelse(misspecify.Q, "-Q", ""),
+                                "-M", "1", ".rds")))
 
-psi0.A1 <- readRDS(file=paste0("./simulation/output/",
-                               "outlist-est-true-1-2020",
-                               "-K", K, ifelse(misspecify.Q, "-Q", ""),
-                               "-M", M, ".rds"))
+(psi0.A1 <- readRDS(file=paste0("./simulation/output/",
+                                "outlist-est-true-1-2020",
+                                "-K", K, #ifelse(misspecify.Q, "-Q", ""),
+                                "-M", "1", ".rds")))
 
-true.eic.A0 <- readRDS(file=paste0("./simulation/output/",
-                                   "outlist-est-true-sd-0-2020",
-                                   "-K", K, ifelse(misspecify.Q, "-Q", ""),
-                                   "-M", M, ".rds"))
+(true.eic.A0 <- readRDS(file=paste0("./simulation/output/",
+                                    "outlist-est-true-sd-0-2020",
+                                    "-K", K, #ifelse(misspecify.Q, "-Q", ""),
+                                    "-M", "1", ".rds")))
 
-true.eic.A1 <- readRDS(file=paste0("./simulation/output/",
-                                   "outlist-est-true-sd-1-2020",
-                                   "-K", K, ifelse(misspecify.Q, "-Q", ""),
-                                   "-M", M, ".rds"))
+(true.eic.A1 <- readRDS(file=paste0("./simulation/output/",
+                                    "outlist-est-true-sd-1-2020",
+                                    "-K", K, #ifelse(misspecify.Q, "-Q", ""),
+                                    "-M", "1", ".rds")))
 
 #-------------------------------------------------------------------------------------------#
 ## extract results of interest
