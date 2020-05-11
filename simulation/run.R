@@ -21,6 +21,8 @@ library(zoo)
 library(stringr)
 library(ltmle)
 library(parallel)
+library(foreach)
+library(doParallel)
 
 
 numextract <- function(string){ 
@@ -50,19 +52,25 @@ source("./R/sim-data.R")
 source("./R/est-fun.R")
 source("./R/fit-density-by-hazard.R")
 source("./simulation/coverage-fun.R")
+source("./simulation/repeat-fun.R")
 
 
 #-------------------------------------------------------------------------------------------#
-## repeat simulations
+## set parameters
 #-------------------------------------------------------------------------------------------#
 
-K <- 100#100#100#100#100#80#100
+K <- 5#100#100#100#100#80#100
 run.ltmle <- FALSE##TRUE#FALSE
-run.ctmle <- TRUE#FALSE#FALSE
-compute.true.eic <- TRUE
+run.ctmle <- FALSE#FALSE#FALSE
+run.ctmle2 <- TRUE#FALSE#FALSE
+compute.true.eic <- FALSE
 misspecify.Q <- TRUE
 only.A0 <- FALSE
+M <- 5
 
+#-------------------------------------------------------------------------------------------#
+## true values
+#-------------------------------------------------------------------------------------------#
 
 (psi0.test.multi.M0 <- sim.data(1e6, seed=10011,
                                          only.A0=only.A0,
@@ -142,187 +150,31 @@ if (compute.true.eic) {
 }
 
 
-M <- 1#302#502#300#252#300#1#500#400#400#800#10#400
-for (m in 1:M) { 
 
-    dt <- sim.data(1000, seed=10011+m, censoring=TRUE,
-                   only.A0=only.A0,
-                   browse=FALSE,
-                   K=K)
+#-------------------------------------------------------------------------------------------#
+## repeat simulations (parallelize
+#-------------------------------------------------------------------------------------------#
 
-    if (run.ctmle) {
-        
-        (est.list.test.multi.M0[[m+1]] <- est.fun(copy(dt), censoring=TRUE,
-                                                  targeting=1, 
-                                                  smooth.initial=TRUE,
-                                                  browse3=FALSE,
-                                                  intervention.A0=function(L0, A0) logit(1*(A0==0)),
-                                                  intervention.A=function(L0, A0, L.prev, A.prev, A) logit(1*(A==0)),
-                                                  browse0=FALSE, misspecify.Q=misspecify.Q))
+no_cores <- detectCores() - 1
 
-        (est.list.test.multi.M1[[m+1]] <- est.fun(copy(dt), censoring=TRUE,
-                                                  targeting=1, 
-                                                  smooth.initial=TRUE,
-                                                  browse9=FALSE,
-                                                  intervention.A0=function(L0, A0) logit(1*(A0==1)),
-                                                  intervention.A=function(L0, A0, L.prev, A.prev, A) logit(1*(A==1)),
-                                                  browse0=FALSE, misspecify.Q=misspecify.Q))
+registerDoParallel(no_cores)
 
-        (est.list.test.multi.target2.M0[[m+1]] <- est.fun(copy(dt), censoring=TRUE,
-                                                          targeting=2, 
-                                                          smooth.initial=TRUE,
-                                                          browse5=FALSE,
-                                                          intervention.A0=function(L0, A0) logit(1*(A0==0)),
-                                                          intervention.A=function(L0, A0, L.prev, A.prev, A) logit(1*(A==0)),
-                                                          browse0=FALSE, misspecify.Q=misspecify.Q))
-
-        (est.list.test.multi.target2.M1[[m+1]] <- est.fun(copy(dt), censoring=TRUE,
-                                                          targeting=2, 
-                                                          smooth.initial=TRUE,
-                                                          browse9=FALSE,
-                                                          intervention.A0=function(L0, A0) logit(1*(A0==1)),
-                                                          intervention.A=function(L0, A0, L.prev, A.prev, A) logit(1*(A==1)),
-                                                          browse0=FALSE, misspecify.Q=misspecify.Q))
-
-        saveRDS(est.list.test.multi.M1,
-                file=paste0("./simulations/output/",
-                            "outlist-est-maximum-likelihood-multi-M1-2020",
-                            "-K", K, ifelse(only.A0, "-A0", ""), ifelse(misspecify.Q, "-Q", ""), 
-                            "-M", M, ".rds"))
-
-        saveRDS(est.list.test.multi.M0,
-                file=paste0("./simulations/output/",
-                            "outlist-est-maximum-likelihood-multi-M0-2020",
-                            "-K", K, ifelse(only.A0, "-A0", ""), ifelse(misspecify.Q, "-Q", ""),
-                            "-M", M, ".rds"))
-
-        saveRDS(est.list.test.multi.target2.M1,
-                file=paste0("./simulations/output/",
-                            "outlist-est-mininum-loss-multi-M1-2020",
-                            "-K", K, ifelse(only.A0, "-A0", ""), ifelse(misspecify.Q, "-Q", ""),
-                            "-M", M, ".rds"))
-
-        saveRDS(est.list.test.multi.target2.M0,
-                file=paste0("./simulations/output/",
-                            "outlist-est-minimum-loss-multi-M0-2020",
-                            "-K", K, ifelse(only.A0, "-A0", ""), ifelse(misspecify.Q, "-Q", ""),
-                            "-M", M, ".rds"))
-    }
-    
-    if (run.ltmle) {
-
-        df.wide <- as.data.frame(cbind(dt[, "L0"],
-                                       dN.A0=rep(1, nrow(dt)),
-                                       dt[, -c("L0", "id")]))
-        
-        col.order <- names(df.wide)[-1]
-
-        Anodes <- col.order[substr(col.order, 1, 1)=="A"]
-        Ynodes <- col.order[substr(col.order, 1, 1)=="Y"]
-        Cnodes <- col.order[substr(col.order, 1, 1)=="C"]
-        Nnodes <- col.order[substr(col.order, 1, 4)=="dN.A"]
-        Lnodes <- setdiff(col.order, c("L0", Anodes, Ynodes, Cnodes))
-
-        for (ii in Cnodes) {
-            df.wide[, names(df.wide)==ii] <- BinaryToCensoring(is.censored=df.wide[, names(df.wide)==ii])
-        }
-
-        if (TRUE) {
-            abar0 <- (df.wide[, Nnodes] == 1) * 0 + (df.wide[, Nnodes] == 0) * df.wide[, Anodes]
-            abar1 <- (df.wide[, Nnodes] == 1) * 1 + (df.wide[, Nnodes] == 0) * df.wide[, Anodes]
-            #abar <- (df.wide[, Nnodes] == 1) * 0 + (df.wide[, Nnodes] == 0) * 0
-    
-            #--- specify intervention step 2: when dA(dt)=1 : 
-            det.g.fun <- function(data, current.node, nodes) {
-                if (substr(names(data)[current.node], 1, 1)=="C") {
-                    if (FALSE) {
-                        C.node.index <- current.node
-                        observed.C <- data[, C.node.index]
-                        is.deterministic <- observed.C=="censored" | is.na(observed.C)
-                        #browser()
-                        prob1 <- observed.C[is.deterministic]#observed.C[is.deterministic]
-                        # if ( names(data)[current.node] == "C2") browser()
-                        return(list(is.deterministic = is.deterministic, prob1 = prob1))
-                    }
-                    #return(NULL)
-                } else {                
-                    N.nodes.index <- grep("dN.A", names(data))
-                    N.node.index <- max(N.nodes.index[N.nodes.index < current.node]) 
-                    A.node.index <- current.node
-                    N <- data[, N.node.index]
-                    observed.A <- data[, A.node.index]
-                    is.deterministic <- N == 0 | is.na(N)
-                    prob1 <- observed.A[is.deterministic]
-                    #if ( names(data)[current.node] == "A2") browser()
-                    return(list(is.deterministic = is.deterministic, prob1 = prob1))
-                }
-            }
-
-            print("running ltmle with deterministic arule")
-
-            r0 <- suppressMessages(try(ltmle(df.wide,#[,!names(df.wide)%in%Cnodes],##[, col.order]
-                                             Anodes=Anodes, Lnodes=Lnodes, Cnodes=Cnodes,
-                                             abar=as.matrix(abar0),
-                                             #abar=rep(0, length(Anodes)), 
-                                             Ynodes=Ynodes, survivalOutcome=TRUE, 
-                                             deterministic.g.function=det.g.fun,
-                                             estimate.time=FALSE)))
-
-            r1 <- suppressMessages(try(ltmle(df.wide,#[,!names(df.wide)%in%Cnodes],##[, col.order]
-                                             Anodes=Anodes, Lnodes=Lnodes, Cnodes=Cnodes,
-                                             abar=as.matrix(abar1),
-                                             #abar=rep(0, length(Anodes)), 
-                                             Ynodes=Ynodes, survivalOutcome=TRUE, 
-                                             deterministic.g.function=det.g.fun,
-                                             estimate.time=FALSE)))
-        } else {
-
-            r0 <- suppressMessages(try(ltmle(df.wide,#[,!names(df.wide)%in%Cnodes],##[, col.order]
-                                             Anodes=Anodes, Lnodes=Lnodes, Cnodes=Cnodes,
-                                             #abar=as.matrix(abar),
-                                             abar=rep(0, length(Anodes)), 
-                                             Ynodes=Ynodes, survivalOutcome=TRUE, 
-                                             #deterministic.g.function=det.g.fun,
-                                             estimate.time=FALSE)))
-
-            r1 <- suppressMessages(try(ltmle(df.wide,#[,!names(df.wide)%in%Cnodes],##[, col.order]
-                                             Anodes=Anodes, Lnodes=Lnodes, Cnodes=Cnodes,
-                                             #abar=as.matrix(abar),
-                                             abar=rep(1, length(Anodes)), 
-                                             Ynodes=Ynodes, survivalOutcome=TRUE, 
-                                             #deterministic.g.function=det.g.fun,
-                                             estimate.time=FALSE)))
-
-        }
-        
-        if (is(r0, "try-error")) {
-            ltmle.list.0[[m+1]] <- "ERROR"
-        } else {
-            ltmle.list.0[[m+1]] <- list(est=r0$estimates["tmle"],
-                                        sd=summary(r0)$treatment$std.dev)
-        }
-
-        if (is(r1, "try-error")) {
-            ltmle.list.1[[m+1]] <- "ERROR"
-        } else {
-            ltmle.list.1[[m+1]] <- list(est=r1$estimates["tmle"],
-                                        sd=summary(r1)$treatment$std.dev)
-        }
-
-        saveRDS(ltmle.list.0,
-                file=paste0("./simulations/output/",
-                            "outlist-est-ltmle-0-2020",
-                            "-K", K, ifelse(only.A0, "-A0", ""), ifelse(misspecify.Q, "-Q", ""),
-                            "-M", M, ".rds"))
-
-        saveRDS(ltmle.list.1,
-                file=paste0("./simulations/output/",
-                            "outlist-est-ltmle-1-2020",
-                            "-K", K, ifelse(only.A0, "-A0", ""), ifelse(misspecify.Q, "-Q", ""),
-                            "-M", M, ".rds"))
-    }    
-  
+out <- foreach(m=1:3, .combine=list, .multicombine = TRUE) %dopar% {
+    repeat.fun(m, K=5,
+               only.A0=only.A0, run.ltmle=run.ltmle, run.ctmle=run.ctmle, run.ctmle2=run.ctmle2,
+               misspecify.Q=misspecify.Q)
 }
+
+stopImplicitCluster()
+
+saveRDS(out,
+        file=paste0("./simulation/output/",
+                    "outlist-est",
+                    ifelse(run.ltmle, "-ltmle", ""),
+                    ifelse(run.ctmle, "-ctmle", ""),
+                    ifelse(run.ctmle2, "-ctmle2", ""), 
+                    "-2020", "-K", K, ifelse(only.A0, "-A0", ""), ifelse(misspecify.Q, "-Q", ""), 
+                    "-M", M, ".rds"))
 
 
 
