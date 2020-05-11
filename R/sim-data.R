@@ -1,278 +1,193 @@
-sim.data <- function(n=50, tau=365.24, nL=3, nL0=1,  
-                     loop.max=20,
-                     eta = 4/sqrt(2)*(1/8), # scale parameter
-                     nu = 0.5, # shape parameter
-                     alpha.Y=1.55, eta.Y=0.07,
-                     alpha.N=1.2, eta.N=0.05,
-                     alpha.C=1.1, eta.C=0.07,
-                     betaL.Y=c(0.3, -0.1, 0),
-                     betaA.Y=-0.2, betaA.C=0,
-                     betaL.C=c(0, 0, 0),
-                     betaL0.Y=0.8,
-                     betaAL0.Y=0,
-                     randomize.treatment=FALSE,
-                     set.treatment=NULL,
-                     no.censoring=FALSE,
-                     browse=FALSE, seed=sample(4034244, 1),
-                     L.A=TRUE,
-                     compute.target=NULL,
-                     dt.out=TRUE,
-                     compute.true.ic=FALSE) {
+sim.data <- function(n, seed=sample(4034244, 1),
+                              censoring=FALSE,
+                              intervention.A=NULL, 
+                              intervention.dN.A=NULL,
+                              time.since=3,
+                              verbose=FALSE, q0=3,
+                              misspecify.Q=FALSE,
+                              only.A0=FALSE,
+                              form.dN.L=NULL,
+                              form.dN.A=NULL,
+                              form.A=NULL, 
+                              form.Y=NULL,
+                              form.C=NULL,
+                              form.L=NULL,
+                              form.A0=NULL,
+                              intervention.A0=NULL,
+                              rescue=FALSE, ignore.rescue=FALSE, 
+                              obs.mean=FALSE,
+                              K=1,
+                              browse=FALSE) {
 
-    set.seed(seed)
-   
+
+    if (length(form.dN.L)==0) form.dN.L <- function(L0, dN.L.prev, L.prev, A.prev) -0.2-0.05*K-0.025*(K>7)-0.25*dN.L.prev-0.15*L0-0.1*(A.prev==1)+0.3*L.prev
+    if (length(form.dN.A)==0) form.dN.A <- function(L0, dN.A.prev, L.prev, A.prev, no.jumps.A, L.star) -0.75-0.05*K-0.42*dN.A.prev+0.15*L0+0.3*(A.prev==2)+0.4*(A.prev==1)-0.25*L.prev
+    if (length(form.C)==0) form.C <- function(L0, L.prev, A.prev, A0) -3.95+(K>40)*5-0.4*K^{2/3}-0.24*(K>2 & K<=4)-0.4*(K>4 & K<=9)-(K>9)*0.4*K^{1/5}+0.2*(K>25)*K^{1/4}+0.1*L0+0.2*(A0==1)+0.9*(A0==2)+2.15*L.prev
+    if (length(form.Y)==0) form.L <- function(L0, L.prev, A.prev, A0) 0.5-0.4*A0+0.15*L0-0.25*(A.prev==1)+0.4*L.prev
+    if (length(form.A0)==0) form.A0 <- function(L0) cbind(-0.1+0.25*L0)
+    if (length(form.A)==0) form.A <- function(L0, L.prev, A.prev, A0) cbind(-1+(1-A0)*0.6+(1-A.prev)*0.4+L.prev*0.6-0.15*(K>15)*L.prev)
+    if (length(form.Y)==0) {
+        if (!only.A0) {
+            form.Y <- function(L0, L.prev, A.prev, A0, no.jumps.A, dN.A.prev) -1.1-
+                0.33*K/3*(K>2 & K<=4)-0.25*K^{2/3}-0.25*(K>4 & K<=9)-
+                (K>25 & K<45)*0.3*K^{1/5}-
+                (K>75)*0.31+(K>85)*0.2-
+                (K>25 & K<75)*0.5*K^{1/5}+0.6*(K>25)*K^{1/4}-0.25*A.prev+
+                0.4*L.prev-0.25*A0+0.35*L.prev*A0+(K>75)*0.1*A0+(K>85)*0.01*A0
+        } else {
+            form.Y <- function(L0, L.prev, A.prev, A0, no.jumps.A, dN.A.prev) -1.1-
+                0.33*K/3*(K>2 & K<=4)-0.25*K^{2/3}-0.25*(K>4 & K<=9)-
+                (K>25 & K<45)*0.3*K^{1/5}-
+                (K>75)*0.31+(K>85)*0.2-
+                (K>25 & K<75)*0.5*K^{1/5}+0.6*(K>25)*K^{1/4}+L0*0.2-0.25*A0+
+                (K>75)*0.1*A0+(K>85)*0.01*A0
+        }
+    }
+    
+    if (length(seed)>0) {
+        set.seed(seed)
+    }
+    
     rexpit <- function(x) rbinom(n=n, size=1, prob=plogis(x))
+    rmulti <- function(x) {
+        out <- rep(0, n)
+        for (p in 1:ncol(x)) {
+            out <- p*rexpit(logit(x[,p]))*(out==0) + out 
+        }
+        out[out==0] <- ncol(x)+1
+        return(out-1)
+    }
+
+    print(k.grid <- ceiling(seq(0, K, length=q0+1)[-c(1,q0+1)]))
+    
+    ## rmulti <- function(x) {
+    ##     apply(x, 1, function(p) {
+    ##         browser()
+    ##         sample(0:2, prob=c(plogis(p[1])plogis(p[2]), plogis(p[1]), plogis(p[2])), size=1)
+    ##     })}
+
+    L0 <- #runif(n)
+        sample(1:6, n, replace=1000)/6
+
+    ## if (length(true.value)>0) {
+    ##     A0 <- rep(true.value, n)
+    ## } else
+    A0 <- rmulti(plogis(form.A0(L0)))
+    
+    if (length(intervention.A)>0 & length(intervention.A0)==0) {
+        A0 <- rmulti(plogis(intervention.A(L0, 0, 0, A0)))        
+    }
+    if (length(intervention.A0)>0){
+        A0 <- rmulti(plogis(intervention.A0(L0, A0)))        
+    }
+
+    A.prev <- A0
+    dN.A.prev <- rep(0, n)
+    dN.L.prev <- rep(0, n)
+    L.prev <- rep(0, n)
+    Y.prev <- rep(0, n)
+    C.prev <- rep(0, n)
+
+    no.jumps.A.k <- rep(1, n)
+
+    no.jumps.A <- 0
+    L.star <- 1
+    L.star.last <- 0
+
+    if (verbose) {
+        dt <- data.table(id=1:n, L0=L0, A0=A0, no.jumps.A=no.jumps.A)
+    } else {
+        dt <- data.table(id=1:n, L0=L0, A0=A0)
+    }
+    
+    for (k in 1:K) {
+
+        #-- generate outcome:
+        
+        Y1 <- Y.prev + rexpit(form.Y(L0, L.prev, A.prev, A0, no.jumps.A, dN.A.prev))*(1-C.prev)*(1-Y.prev)
+
+        #-- generate covariates: 
+
+        dN.L1 <- rexpit(form.dN.L(L0, dN.L.prev, L.prev, A.prev))
+        L1 <- dN.L1*rexpit(form.L(L0, L.prev, A.prev, A0))+(1-dN.L1)*L.prev
+
+        #-- generate treatment: 
+
+        if (length(intervention.dN.A)>0) {
+            dN.A1 <- rexpit(logit(intervention.dN.A(L0, dN.A.prev, L.prev, A.prev,
+                                                    plogis(form.dN.A(L0, dN.A.prev, L.prev, A.prev,
+                                                                     no.jumps.A, L.star)),
+                                                    no.jumps.A, k, no.jumps.A.k,
+                                                    L.star, k.grid, K)))
+        } else {
+            dN.A1 <- rexpit(form.dN.A(L0, dN.A.prev, L.prev, A.prev, no.jumps.A, L.star))
+        }
+
+        ## if (length(true.value)>0) {
+        ##     A1 <- rep(true.value, n)
+        ## } else
+
+        A1 <- rmulti(plogis(form.A(L0, L.prev, A.prev, A0)))
+        
+        if (rescue & !ignore.rescue & length(intervention.A0)>0) {#(rescue & !ignore.rescue) {
+            ## A1 <- rexpit(qlogis(0.5*plogis(form.A(L0, L.prev, A.prev, 1))+
+            ##                     0.5*plogis(form.A(L0, L.prev, A.prev, 0))))
+            A1 <- rmulti(0.5*plogis(form.A(L0, L.prev, A.prev, 1))+
+                         0.5*plogis(form.A(L0, L.prev, A.prev, 0)))
+        } else if (length(intervention.A)>0){
+            A1 <- rmulti(plogis(intervention.A(L0, L.prev, A.prev, A1)))
+        } 
+
+        if (rescue & k>1) {
+            A1 <- dN.A1*A1 + (1-dN.A1)*A.prev
+        } else if (rescue) {
+            A1 <- dN.A1*A1 + (1-dN.A1)*0
+        } else {
+            A1 <- dN.A1*A1 + (1-dN.A1)*A.prev
+        }
+        #-- generate censoring: 
+        
+        if (length(intervention.A)==0 & length(intervention.dN.A)==0 & length(intervention.A0)==0 & censoring) {
+            C1 <- (1-Y1)*(C.prev+(1-C.prev)*rexpit(form.C(L0, L.prev, A.prev, A0)))
+        } else {
+            C1 <- rep(0, n)
+        }
+        
+        no.jumps.A <- no.jumps.A+dN.A1
+        if (k %in% (k.grid+1)) {
+            no.jumps.A.k <- dN.A1
+        } else {
+            no.jumps.A.k <- no.jumps.A.k+dN.A1
+        }
+        L.star.last <- dN.A1*k + (1-dN.A1)*L.star.last
+        L.star <- dN.A1+(1-dN.A1)*(L.star.last>=k+1-time.since)
+
+        if (verbose) {
+            dt.tmp <- data.table(Y1, dN.L1, L1, dN.A1, A1, C1, no.jumps.A, no.jumps.A.k)
+            names(dt.tmp) <- paste0(c("Y", "dN.L", "L", "dN.A", "A", "C", "no.jumps.A", "no.jumps.A.k"), k)
+        } else {
+            dt.tmp <- data.table(Y1, dN.L1, L1, dN.A1, A1, C1)
+            names(dt.tmp) <- paste0(c("Y", "dN.L", "L", "dN.A", "A", "C"), k)
+        }
+        
+        dN.A.prev <- dN.A1
+        A.prev <- A1
+        dN.L.prev <- dN.L1
+        L.prev <- L1
+        Y.prev <- Y1
+        C.prev <- C1
+        
+        dt <- cbind(dt, dt.tmp)
+
+    }
+
+    dt[, (paste0("Y", K+1)):=Y.prev + rexpit(form.Y(L0, L.prev, A.prev, A0, no.jumps.A, dN.A.prev))*(1-C.prev)*(1-Y.prev)]
 
     if (browse) browser()
     
-    #-- baseline covariate and baseline treatment:
-    if (nL0>1) {
-        L0 <- sapply(1:nL0, function(l) runif(n))
-        colnames(L0) <- paste0("L0.", 1:nL0)
+    if (length(intervention.A)>0 | length(intervention.A0)>0 | length(intervention.dN.A)>0 | obs.mean) {
+        return(mean(dt[, paste0("Y", K+1), with=FALSE][[1]]))
     } else {
-        L0 <- runif(n, 0, 1)
-    }
-
-    
-    if (length(compute.target)>0) {
-        A  <- rep(compute.target, n)
-    } else if (randomize.treatment) {
-        A <- rexpit(0.5)
-    } else if (nL0>1) {
-        A  <- rexpit(0.5+0.15*L0[, 1]-0.25*L0[, 2])
-    } else {
-        A  <- rexpit(0.5+0.01*L0)
-    }
-
-    if (length(set.treatment)>0) {
-        A <- rep(set.treatment, n)
-    }    
-    
-    #-- initial values of time-varying covariates:
-    L <- sapply(1:nL, function(l) runif(n))
-    colnames(L) <- paste0("L", 1:nL)
-
-    #------- intensities:
-   
-    #-- phi for outcome: 
-    phiY <- function(t, A, L0, L1, L2, L3, k, etaY=eta.Y, alphaY=alpha.Y,
-                     betaA=betaA.Y, betaL0=betaL0.Y, betaL=betaL.Y, betaAL0=betaAL0.Y) {
-        if (nL0>1){
-            add.L0 <- apply(do.call("cbind", lapply(1:length(betaL0), function(j) betaL0[j] * L0[, j])),
-                            1, sum)
-            return(etaY*alphaY^{(k>2)}*exp(add.L0 + betaAL0*A*L0[,4] + betaL[1]*L1 +
-                                           betaL[2]*L2 + betaL[3]*L3 + betaA*A))
-        } else {
-            return(etaY*alphaY^{(k>2)}*exp(betaL0*L0 + betaL[1]*L1 + betaL[2]*L2 + betaL[3]*L3 + betaA*A))
-        }
-    }
-
-    #-- phi for time-varying covariates: 
-    phiN <- function(t, A, L0, L1, L2, L3, k, etaN=eta.N, alphaN=alpha.N,
-                     betaA=0.4, betaL0=0.5, Kmax=4) {
-        if (nL0>1){
-            return(etaN*alphaN^{min(k, Kmax)}*exp(betaL0*L0[,1] + betaA*A))
-        } else {
-            return(etaN*alphaN^{min(k, Kmax)}*exp(betaL0*L0 + betaA*A))
-        }
-    }
-
-    #-- phi for time-varying censoring:
-    if (length(compute.target)>0 | no.censoring) {
-        phiC <- function(t, A, L0, L1, L2, L3, k, etaC=eta.C, alphaC=alpha.C,
-                         betaA=betaA.C, betaL0=0.1, betaL.C) {
-            return(0)
-        }
-    } else {
-        phiC <- function(t, A, L0, L1, L2, L3, k, etaC=eta.C, alphaC=alpha.C,
-                         betaA=betaA.C, betaL0=0.1, betaL=betaL.C) {
-            if (nL0>1){
-                return(etaC*alphaC^{(k>2)}*exp(betaL0*L0[, 3] + betaA*A + betaL[1]*L1 +
-                                               betaL[2]*L2 + betaL[3]*L3))
-            } else{
-                return(etaC*alphaC^{(k>2)}*exp(betaL0*L0 + betaA*A + betaL[1]*L1 +
-                                               betaL[2]*L2 + betaL[3]*L3))
-            }
-        }
-    }
-    
-    #-- collected phi: 
-    phi <- function(t, A, L0, L1, L2, L3, k) {
-        phiY(t, A, L0, L1, L2, L3, k) + phiN(t, A, L0, L1, L2, L3, k) + phiC(t, A, L0, L1, L2, L3, k)
-    }
-
-    #-- intensity for outcome: 
-    lambdaY <- function(t, A, L0, L1, L2, L3, k, etaY=eta, nuY=nu) {
-        phiY(t, A, L0, L1, L2, L3, k)*etaY*nuY*t^{nuY-1}
-    }
-
-    #-- intensity for monitoring of time-varying covariates: 
-    lambdaN <- function(t, A, L0, L1, L2, L3, k, etaN=eta, nuN=nu) {
-        phiN(t, A, L0, L1, L2, L3, k)*etaN*nuN*t^{nuN-1}
-    }
-
-    #-- intensity for censoring: 
-    lambdaC <- function(t, A, L0, L1, L2, L3, k, etaC=eta, nuC=nu) {
-        phiC(t, A, L0, L1, L2, L3, k)*etaC*nuC*t^{nuC-1}
-    }
-
-    #-- we simulate by using inverse cumulative hazard:
-    Lambda.inv <- function(u, t, k, L, A, L0) {
-        L1 <- L[, 1]; L2 <- L[, 2]; L3 <- L[, 3]
-        return(( (u + eta*phi(t, A, L0, L1, L2, L3, k)*t^{nu}) /
-                 (eta*phi(t, A, L0, L1, L2, L3, k)) )^{1/nu} - t)
-    }
-
-    #-- intialize monitoring times: 
-    Tlist <- list(cbind(time=rep(0, n), delta=rep(1, n), id=1:n, L=L))
-
-    #-- function to loop over for time-points: 
-    loop.fun <- function(k, Tprev, Lprev) {
-
-        #-- simulate event time: 
-        U <- -log(runif(n))
-        Tout <- Lambda.inv(U, Tprev, k, Lprev, A, L0) + Tprev
-
-        L1 <- Lprev[, 1]; L2 <- Lprev[, 2]; L3 <- Lprev[, 3]
-    
-        #-- character of event:
-        denom <- (lambdaY(Tout, A, L0, L1, L2, L3, k) +
-                  lambdaN(Tout, A, L0, L1, L2, L3, k) +
-                  lambdaC(Tout, A, L0, L1, L2, L3, k))
-        probY <- lambdaY(Tout, A, L0, L1, L2, L3, k) / (denom)
-        probN <- lambdaN(Tout, A, L0, L1, L2, L3, k) / (denom)
-        probC <- lambdaC(Tout, A, L0, L1, L2, L3, k) / (denom)
-        which <- apply(cbind(probY, probN, probC), 1, function(p) sample(0:2, size=1, prob=p))
-
-        which <- (Tout>tau)*3 + (Tout<=tau)*which
-        Tout <- (Tout>tau)*tau + (Tout<=tau)*Tout
-
-        if (L.A) {
-            Lout <- (which==1)*sapply(1:nL, function(l) rnorm(n, mean=A*(l-1)*0.02 +
-                                                                     L0/l*0.05 + Lprev[, l], sd=0.1)) +
-                (which!=1)*Lprev
-        } else {
-            Lout <- (which==1)*sapply(1:nL, function(l) rnorm(n, mean=L0/l*0.05 + Lprev[, l], sd=0.1)) +
-                (which!=1)*Lprev
-        }
-        return(cbind(time=Tout, delta=which, id=1:n, L=Lout))
-    }
-
-    #-- run simulations: 
-    for (k in 1:loop.max) {
-        Tlist[[k+1]] <- loop.fun(k, Tlist[[k]][,1], Tlist[[k]][,4:(4+nL-1)])
-    }
-
-    #-- collect data:
-    dt <- data.table(do.call("rbind", Tlist))
-
-    #-- order & throw away observations after censoring/event: 
-    setorder(dt, id, time)
-    dt[, keep:=c(1, cumprod(delta==1)[-.N]), by="id"]
-    dt <- dt[keep==1][, -"keep"]
-
-    #-- merge with baseline information:
-    setkey(dt, id)
-    if (nL0>1) {
-        baseline <- data.table(A=A, L0, id=as.numeric(1:n))
-    } else {
-        baseline <- data.table(A=A, L0=L0, id=as.numeric(1:n))
-    }
-    setkey(dt, id)
-    dt <- merge(dt, baseline, by="id")
-
-    if (compute.true.ic) {
-
-        if (length(compute.target)>0) {
-            compute.target <- 0
-        }
-        dt[, idN:=1:.N, by="id"]
-        dt[, N:=.N, by="id"]
-
-        n <- length(dt[, unique(id)])
-        unique.times <- sort(unique(dt[, time]))
-
-        dt.all <- do.call("rbind", lapply(dt[, unique(id)], function(i) {
-            dt.i <- dt[id==i]
-            out.i <- rbind(dt.i, data.table(time=unique.times[!(unique.times %in% dt.i[, time])]),
-                           fill=TRUE)
-            out.i <- out.i[order(time)]
-            out.i[is.na(delta), delta:=4]
-            fill.na(out.i)
-            return(out.i)
-        }))
-
-        dt[, k:=c(0, idN[-.N]), by="id"]
-
-        LambdaY <- function(t, A, L0, L1, L2, L3, k, etaY=eta, nuY=nu) {
-            phiY(t, A, L0, L1, L2, L3, k)*etaY*t^{nuY}
-        }
-
-        LambdaC <- function(t, A, L0, L1, L2, L3, k, etaC=eta, nuC=nu) {
-            phiC(t, A, L0, L1, L2, L3, k)*etaC*t^{nuC}
-        }
-        
-        dt.all[, lambda.Y:=lambdaY(time, A, cbind(L0.1,L0.2,L0.3,L0.4), L1, L2, L3, k, etaY=eta, nuY=nu)]
-        dt.all[, Lambda.Y:=LambdaY(time, A, cbind(L0.1,L0.2,L0.3,L0.4), L1, L2, L3, k, etaY=eta, nuY=nu)]
-        dt.all[, Lambda.C:=LambdaC(time, A, cbind(L0.1,L0.2,L0.3,L0.4), L1, L2, L3, k, etaC=eta, nuC=nu)]
-        dt.all[, pi.A:=plogis(0.5+0.15*L0.1-0.25*L0.2)]
-
-        dt.all[, surv.Y:=exp(-Lambda.Y), by="id"]
-        dt.all[, surv.C.tminus:=c(1, exp(-Lambda.C)[-.N]), by="id"]
-        dt.all[, surv.Y.t0:=surv.Y[.N], by="id"]
-
-        dt.all[, time.diff:=c(time[-1], time[.N])-time, by="id"]
-
-        dt.all[, keep:=cumprod(delta != 0 & delta!= 2), by="id"]
-        dt.all[, keep:=c(1, keep[-.N]), by="id"]
-
-        dt.all[, Ht:=(keep) * (A==compute.target) *
-                     1/ ( pi.A^compute.target*(1-pi.A)^compute.target * surv.C.tminus )]
-        dt.all[, Ht.lambda:=-surv.Y.t0/surv.Y]
-        
-        out <- dt.all[, sum( (keep) * Ht * Ht.lambda *
-                             ( (delta==0) - lambda.Y * time.diff
-                             )), by="id"]
-
-        ic.squared <- out[, 2][[1]]^2
-        sqrt(mean(ic.squared)/n)
-
-        dt.all[, test:=cumsum(lambda.Y*time.diff), by="id"]
-        dt.all[ , c("lambda.Y", "Lambda.Y", "test")]
-    }
-    
-    #-- output dataset:
-    if (dt.out) {
-        # if events at same date:
-        dt[, time.round:=round(time, 6)]
-        dt[, N.tmp:=.N, by=c("id", "time.round")]
-        if (dt[, any(N.tmp>1)]) {
-            dt[, any.Y:=any(delta==0), by="id"]
-            dt[, any.C:=any(delta==2), by="id"]
-            if (dt[, any(N.tmp>1 & any.C & delta %in% c(1,4))]) {
-                dt <- dt[!(N.tmp>1 & any.C & delta %in% c(1,4))]
-            } 
-            if (dt[, any(N.tmp>1 & any.Y & delta!=0)]) {
-                dt <- dt[!(N.tmp>1 & any.Y & delta!=0)]
-            }
-            dt <- dt[, -c("any.C", "any.Y"), with=FALSE]
-        }
-        dt <- dt[, -c("time.round", "N.tmp"), with=FALSE]
-        return(dt)
-    } else if (compute.true.ic) {
-        out <- sqrt(mean(ic.squared)/n) # OBS: if want sd, divide by sqrt(n).
-        return(out)
-    } else {
-        dt[, Y:=1*(delta[.N]==0), by="id"]
-        out <- mean(dt[time==0, Y])
-        return(out)
+        return(dt[1:nrow(dt)])
     }
 }
-
-
-
-
-
-
-
-
