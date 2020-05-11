@@ -24,7 +24,6 @@ library(parallel)
 library(foreach)
 library(doParallel)
 
-
 numextract <- function(string){ 
     as.numeric(str_extract(string, "\\-*\\d+\\.*\\d*"))
 }
@@ -59,7 +58,7 @@ source("./simulation/repeat-fun.R")
 ## set parameters
 #-------------------------------------------------------------------------------------------#
 
-K <- 5#100#100#100#100#80#100
+K <- 100#100#100#100#100#80#100
 run.ltmle <- FALSE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
 run.ctmle2 <- TRUE#FALSE#FALSE
@@ -159,7 +158,7 @@ no_cores <- detectCores() - 1
 
 registerDoParallel(no_cores)
 
-out <- foreach(m=1:3, .combine=list, .multicombine = TRUE) %dopar% {
+out <- foreach(m=1:M, .combine=list, .multicombine = TRUE) %dopar% {
     repeat.fun(m, K=5,
                only.A0=only.A0, run.ltmle=run.ltmle, run.ctmle=run.ctmle, run.ctmle2=run.ctmle2,
                misspecify.Q=misspecify.Q)
