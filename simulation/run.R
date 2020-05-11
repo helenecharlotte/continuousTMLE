@@ -66,7 +66,7 @@ compute.true.eic <- FALSE
 compute.true.psi <- FALSE
 misspecify.Q <- TRUE
 only.A0 <- FALSE
-M <- 5
+M <- 3
 
 #-------------------------------------------------------------------------------------------#
 ## true values
@@ -169,7 +169,7 @@ if (system("echo $USER",intern=TRUE)%in%c("jhl781")){
 registerDoParallel(no_cores)
 
 out <- foreach(m=1:M, .combine=list, .multicombine = TRUE) %dopar% {
-    repeat.fun(m, K=5,
+    repeat.fun(m, K=K,
                only.A0=only.A0, run.ltmle=run.ltmle, run.ctmle=run.ctmle, run.ctmle2=run.ctmle2,
                misspecify.Q=misspecify.Q)
 }
