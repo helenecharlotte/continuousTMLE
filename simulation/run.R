@@ -63,7 +63,7 @@ run.ltmle <- FALSE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
 run.ctmle2 <- TRUE#FALSE#FALSE
 compute.true.eic <- FALSE
-comput.true.psi <- FALSE
+compute.true.psi <- FALSE
 misspecify.Q <- TRUE
 only.A0 <- FALSE
 M <- 5
@@ -144,24 +144,15 @@ if (compute.true.eic) {
                         "-K", K, ifelse(misspecify.Q, "-Q", ""),
                         "-M", M, ".rds"))
 
-    est.list.test.multi.M0 <- list(true=c(psi0.test.multi.M0, true.eic0))
-    est.list.test.multi.M1 <- list(true=c(psi0.test.multi.M1, true.eic1))
-    est.list.test.multi.target2.M0 <- list(true=c(psi0.test.multi.M0, true.eic0))
-    est.list.test.multi.target2.M1 <- list(true=c(psi0.test.multi.M1, true.eic1))
+    ## est.list.test.multi.M0 <- list(true=c(psi0.test.multi.M0, true.eic0))
+    ## est.list.test.multi.M1 <- list(true=c(psi0.test.multi.M1, true.eic1))
+    ## est.list.test.multi.target2.M0 <- list(true=c(psi0.test.multi.M0, true.eic0))
+    ## est.list.test.multi.target2.M1 <- list(true=c(psi0.test.multi.M1, true.eic1))
 
-    ltmle.list.0 <- list(true=c(psi0.test.multi.M0, true.eic0))
-    ltmle.list.1 <- list(true=c(psi0.test.multi.M1, true.eic1))
+    ## ltmle.list.0 <- list(true=c(psi0.test.multi.M0, true.eic0))
+    ## ltmle.list.1 <- list(true=c(psi0.test.multi.M1, true.eic1))
     
-} else {
-
-    est.list.test.multi.M0 <- list(true=psi0.test.multi.M0)
-    est.list.test.multi.M1 <- list(true=psi0.test.multi.M1)
-    est.list.test.multi.target2.M0 <- list(true=psi0.test.multi.M0)
-    est.list.test.multi.target2.M1 <- list(true=psi0.test.multi.M1)
-
-    ltmle.list.0 <- list(true=psi0.test.multi.M0)
-    ltmle.list.1 <- list(true=psi0.test.multi.M1)
-}
+} 
 
 
 
@@ -169,7 +160,11 @@ if (compute.true.eic) {
 ## repeat simulations (parallelize
 #-------------------------------------------------------------------------------------------#
 
-no_cores <- detectCores() - 1
+if (system("echo $USER",intern=TRUE)%in%c("jhl781")){ 
+    no_cores <- 44
+} else {
+    no_cores <- detectCores() - 1
+}
 
 registerDoParallel(no_cores)
 
