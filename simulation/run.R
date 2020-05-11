@@ -58,15 +58,15 @@ source("./simulation/repeat-fun.R")
 ## set parameters
 #-------------------------------------------------------------------------------------------#
 
-K <- 30#100#100#100#100#80#100
-run.ltmle <- FALSE##TRUE#FALSE
+K <- 5#100#100#100#100#80#100
+run.ltmle <- TRUE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
 run.ctmle2 <- FALSE#FALSE#FALSE
-compute.true.eic <- TRUE
-compute.true.psi <- TRUE
+compute.true.eic <- FALSE
+compute.true.psi <- FALSE
 misspecify.Q <- FALSE
 only.A0 <- FALSE
-M <- 1
+M <- 300
 
 #-------------------------------------------------------------------------------------------#
 ## true values
@@ -161,18 +161,19 @@ if (compute.true.eic) {
 #-------------------------------------------------------------------------------------------#
 
 if (system("echo $USER",intern=TRUE)%in%c("jhl781")){ 
-    no_cores <- 44
+    no_cores <- 24
 } else {
     no_cores <- detectCores() - 1
 }
 
 registerDoParallel(no_cores)
 
-out <- foreach(m=1:M, .combine=list, .multicombine = TRUE) %dopar% {
-    repeat.fun(m, K=K,
-               only.A0=only.A0, run.ltmle=run.ltmle, run.ctmle=run.ctmle, run.ctmle2=run.ctmle2,
-               misspecify.Q=misspecify.Q)
-}
+out <- foreach(m=1:M, #.combine=list,
+               .multicombine = TRUE) %dopar% {
+                   repeat.fun(m, K=K,
+                              only.A0=only.A0, run.ltmle=run.ltmle, run.ctmle=run.ctmle, run.ctmle2=run.ctmle2,
+                              misspecify.Q=misspecify.Q)
+               }
 
 stopImplicitCluster()
 

@@ -2,15 +2,15 @@
 ## parameters of interest
 #-------------------------------------------------------------------------------------------#
 
-K <- 5#100#100#100#100#80#100
+K <- 5#20#100#100#100#100#80#100
 run.ltmle <- FALSE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
 run.ctmle2 <- TRUE#FALSE#FALSE
 compute.true.eic <- FALSE
-misspecify.Q <- TRUE
+misspecify.Q <- FALSE
 misspecify.Q <- FALSE
 only.A0 <- FALSE
-M <- 3
+M <- 300
 
 #-------------------------------------------------------------------------------------------#
 ## get output from simulations
@@ -21,7 +21,8 @@ out <- readRDS(file=paste0("./simulation/output/",
                            ifelse(run.ltmle, "-ltmle", ""),
                            ifelse(run.ctmle, "-ctmle", ""),
                            ifelse(run.ctmle2, "-ctmle2", ""), 
-                           "-2020", "-K", K, ifelse(only.A0, "-A0", ""), ifelse(misspecify.Q, "-Q", ""), 
+                           "-2020", "-K", K, ifelse(only.A0, "-A0", ""),
+                           ifelse(misspecify.Q, "-Q", ""), 
                            "-M", M, ".rds"))
 
 #-------------------------------------------------------------------------------------------#
@@ -54,7 +55,7 @@ out <- readRDS(file=paste0("./simulation/output/",
 
 psiA0 <- unlist(lapply(out, function(xout, A=0, which=1) {
     yout <- xout[[A+1]]
-    yout[[length(yout)]][which]
+    if (run.ltmle) yout[1] else yout[[length(yout)]][which]
 }))
 
 psiA0.init <- unlist(lapply(out, function(xout, A=0, which=1) {
@@ -64,7 +65,7 @@ psiA0.init <- unlist(lapply(out, function(xout, A=0, which=1) {
 
 psiA1 <- unlist(lapply(out, function(xout, A=1, which=1) {
     yout <- xout[[A+1]]
-    yout[[length(yout)]][which]
+    if (run.ltmle) yout[1] else yout[[length(yout)]][which]
 }))
 
 
@@ -73,14 +74,15 @@ psiA1.init <- unlist(lapply(out, function(xout, A=1, which=1) {
     yout[[1]][which]
 }))
 
+
 sdA0 <- unlist(lapply(out, function(xout, A=0, which=3) {
     yout <- xout[[A+1]]
-    yout[[length(yout)]][which]
+    if (run.ltmle) yout[2] else yout[[length(yout)]][which]
 }))
 
 sdA1 <- unlist(lapply(out, function(xout, A=1, which=3) {
     yout <- xout[[A+1]]
-    yout[[length(yout)]][which]
+    if (run.ltmle) yout[2] else yout[[length(yout)]][which]
 }))
 
 #-------------------------------------------------------------------------------------------#
