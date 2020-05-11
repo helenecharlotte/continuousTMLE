@@ -63,6 +63,7 @@ run.ltmle <- FALSE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
 run.ctmle2 <- TRUE#FALSE#FALSE
 compute.true.eic <- FALSE
+comput.true.psi <- FALSE
 misspecify.Q <- TRUE
 only.A0 <- FALSE
 M <- 5
@@ -71,19 +72,34 @@ M <- 5
 ## true values
 #-------------------------------------------------------------------------------------------#
 
-(psi0.test.multi.M0 <- sim.data(1e6, seed=10011,
+if (compute.true.psi) {
+    print(psi0.test.multi.M0 <- sim.data(1e6, seed=10011,
                                          only.A0=only.A0,
                                          intervention.A=function(L0, L.prev, A.prev, A1) cbind(logit(1)),
                                          K=K
                                          ))
 
-(psi0.test.multi.M1 <- sim.data(1e6, seed=10011,
+    print(psi0.test.multi.M1 <- sim.data(1e6, seed=10011,
                                          only.A0=only.A0,
                                          intervention.A=function(L0, L.prev, A.prev, A1) cbind(logit(0)),
                                          K=K
                                          ))
 
-psi0.test.multi.M1 - psi0.test.multi.M0
+
+    saveRDS(psi0.test.multi.M0,
+            file=paste0("./simulation/output/",
+                        "outlist-est-true-0-2020",
+                        "-K", K, ifelse(misspecify.Q, "-Q", ""),
+                        "-M", M, ".rds"))
+
+    saveRDS(psi0.test.multi.M1,
+            file=paste0("./simulation/output/",
+                        "outlist-est-true-1-2020",
+                        "-K", K, ifelse(misspecify.Q, "-Q", ""),
+                        "-M", M, ".rds"))
+
+    print(psi0.test.multi.M1 - psi0.test.multi.M0)
+}
 
 if (compute.true.eic) {
 
@@ -117,17 +133,16 @@ if (compute.true.eic) {
     print(true.eic1 <- true.eic.1[[1]][3] * sqrt(N) / sqrt(1000))
 
     saveRDS(true.eic0,
-            file=paste0("./simulations/output/",
-                        "outlist-est-maximum-likelihood-multi-true-sd-0-2020",
+            file=paste0("./simulation/output/",
+                        "outlist-est-true-sd-0-2020",
                         "-K", K, ifelse(misspecify.Q, "-Q", ""),
                         "-M", M, ".rds"))
 
     saveRDS(true.eic1,
-            file=paste0("./simulations/output/",
-                        "outlist-est-maximum-likelihood-multi-true-sd-1-2020",
+            file=paste0("./simulation/output/",
+                        "outlist-est-true-sd-1-2020",
                         "-K", K, ifelse(misspecify.Q, "-Q", ""),
                         "-M", M, ".rds"))
-
 
     est.list.test.multi.M0 <- list(true=c(psi0.test.multi.M0, true.eic0))
     est.list.test.multi.M1 <- list(true=c(psi0.test.multi.M1, true.eic1))
