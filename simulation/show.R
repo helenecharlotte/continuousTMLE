@@ -10,20 +10,20 @@ compute.true.eic <- FALSE
 misspecify.Q <- FALSE
 misspecify.Q <- FALSE
 only.A0 <- FALSE
-M <- 300
+M <- 500
 
 #-------------------------------------------------------------------------------------------#
 ## get output from simulations
 #-------------------------------------------------------------------------------------------#
 
-out <- readRDS(file=paste0("./simulation/output/",
-                           "outlist-est",
-                           ifelse(run.ltmle, "-ltmle", ""),
-                           ifelse(run.ctmle, "-ctmle", ""),
-                           ifelse(run.ctmle2, "-ctmle2", ""), 
-                           "-2020", "-K", K, ifelse(only.A0, "-A0", ""),
-                           ifelse(misspecify.Q, "-Q", ""), 
-                           "-M", M, ".rds"))
+length(out <- readRDS(file=paste0("./simulation/output/",
+                                  "outlist-est",
+                                  ifelse(run.ltmle, "-ltmle", ""),
+                                  ifelse(run.ctmle, "-ctmle", ""),
+                                  ifelse(run.ctmle2, "-ctmle2", ""), 
+                                  "-2020", "-K", K, ifelse(only.A0, "-A0", ""),
+                                  ifelse(misspecify.Q, "-Q", ""), 
+                                  "-M", M, ".rds")))
 
 #-------------------------------------------------------------------------------------------#
 ## get true values
@@ -54,43 +54,57 @@ out <- readRDS(file=paste0("./simulation/output/",
 #-------------------------------------------------------------------------------------------#
 
 psiA0 <- unlist(lapply(out, function(xout, A=0, which=1) {
-    yout <- xout[[A+1]]
-    if (run.ltmle) yout[1] else yout[[length(yout)]][which]
+    if (xout[1]!="ERROR") {
+        yout <- xout[[2-A]]
+        if (run.ltmle) yout[1] else yout[[length(yout)]][which]
+    }
 }))
 
 psiA0.init <- unlist(lapply(out, function(xout, A=0, which=1) {
-    yout <- xout[[A+1]]
-    yout[[1]][which]
+    if (xout[1]!="ERROR") {
+        yout <- xout[[2-A]]
+        yout[[1]][which]
+    }
 }))
 
 psiA1 <- unlist(lapply(out, function(xout, A=1, which=1) {
-    yout <- xout[[A+1]]
-    if (run.ltmle) yout[1] else yout[[length(yout)]][which]
+    if (xout[1]!="ERROR") {
+        yout <- xout[[2-A]]
+        if (run.ltmle) yout[1] else yout[[length(yout)]][which]
+    }
 }))
-
 
 psiA1.init <- unlist(lapply(out, function(xout, A=1, which=1) {
-    yout <- xout[[A+1]]
-    yout[[1]][which]
+    if (xout[1]!="ERROR") {
+        yout <- xout[[2-A]]
+        yout[[1]][which]
+    }
 }))
 
-
 sdA0 <- unlist(lapply(out, function(xout, A=0, which=3) {
-    yout <- xout[[A+1]]
-    if (run.ltmle) yout[2] else yout[[length(yout)]][which]
+    if (xout[1]!="ERROR") {
+        yout <- xout[[2-A]]
+        if (run.ltmle) yout[2] else yout[[length(yout)]][which]
+    }
 }))
 
 sdA1 <- unlist(lapply(out, function(xout, A=1, which=3) {
-    yout <- xout[[A+1]]
-    if (run.ltmle) yout[2] else yout[[length(yout)]][which]
+    if (xout[1]!="ERROR") {
+        yout <- xout[[2-A]]
+        if (run.ltmle) yout[2] else yout[[length(yout)]][which]
+    }
 }))
+
+(count.na <- mean(unlist(lapply(out, function(xout, A=1, which=3) {
+    1*(xout[1]=="ERROR")
+}))))
 
 #-------------------------------------------------------------------------------------------#
 ## extract results of interest
 #-------------------------------------------------------------------------------------------#
 
 message("----------------------------")
-message("look at estimates from tmle:")
+message("look at estimates from tmle:") 
 message("------------------")
 message(paste0("init (A=0): ", round(mean(psiA0.init), 4)))
 message(paste0("tmle (A=0): ", round(mean(psiA0), 4)))
@@ -117,10 +131,10 @@ message(paste0("mse        : ", round(mse(psiA1), 4)))
 
 message("-------------------------------")
 message("look at efficiency (A=0):")
-message(paste0("max-like           : ", round(mse(psiA0)/mean(sdA0), 4)))
-message(paste0("max-like, true eic : ", round(mse(psiA0)/true.eic.A0, 4)))
+message(paste0("MSE / sd       : ", round(mse(psiA0)/mean(sdA0), 4)))
+message(paste0("MSE / true eic : ", round(mse(psiA0)/true.eic.A0, 4)))
 
 message("-------------------------------")
 message("look at efficiency (A=1):")
-message(paste0("max-like           : ", round(mse(psiA1)/mean(sdA1), 4)))
-message(paste0("max-like, true eic : ", round(mse(psiA1)/true.eic.A1, 4)))
+message(paste0("MSE / sd       : ", round(mse(psiA1)/mean(sdA1), 4)))
+message(paste0("MSE / true eic : ", round(mse(psiA1)/true.eic.A1, 4)))

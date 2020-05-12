@@ -38,18 +38,13 @@ mse <- function(x, x0=NULL) {
 }
 
 #-------------------------------------------------------------------------------------------#
-## set working directory
+## source relevant scripts
 #-------------------------------------------------------------------------------------------#
-
-if (system("echo $USER",intern=TRUE)%in%c("jhl781")){
-    setwd("/home/ifsv/jhl781/research/phd/berkeley/continuousTMLE/")
-} else {
-    setwd("~/research/phd/berkeley/continuousTMLE/")
-}
 
 source("./R/sim-data.R")
 source("./R/est-fun.R")
 source("./R/fit-density-by-hazard.R")
+source("./simulation/set-wd.R")
 source("./simulation/coverage-fun.R")
 source("./simulation/repeat-fun.R")
 
@@ -58,7 +53,7 @@ source("./simulation/repeat-fun.R")
 ## set parameters
 #-------------------------------------------------------------------------------------------#
 
-K <- 5#100#100#100#100#80#100
+K <- 40#100#100#100#100#80#100
 run.ltmle <- TRUE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
 run.ctmle2 <- FALSE#FALSE#FALSE
@@ -161,7 +156,7 @@ if (compute.true.eic) {
 #-------------------------------------------------------------------------------------------#
 
 if (system("echo $USER",intern=TRUE)%in%c("jhl781")){ 
-    no_cores <- 24
+    no_cores <- 25
 } else {
     no_cores <- detectCores() - 1
 }
