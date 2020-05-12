@@ -26,10 +26,6 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
 
  
     K <- max(numextract(names(dt)[grep("Y", substr(names(dt), 1, 1))]))-1
-
-    #if (length(intervention.A)<=K) {
-    #    intervention.A <- rep(intervention.A, length=K+1)
-    #}
     
     if (browse0) browser()
 
@@ -57,17 +53,10 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
     if (TRUE) {
         dN.A.vars <- names(dt)[substr(names(dt), 1, 4)=="dN.A"]
         dt[, (paste0("prev.jump.A", "0")):=0]
-        ## dt[, (paste0("L.star", "0")):=1]
     
         for (var in dN.A.vars) {
             dt[, (paste0("prev.jump.A", numextract(var))):=
                      as.numeric((get(paste0("prev.jump.A", numextract(var)-1))+get(var))>0)]
-            ## dt[, (paste0("L.star", numextract(var))):=0]
-            ## for (var2 in paste0("dN.A", max(1, numextract(var)-time.since):numextract(var))) {
-            ##     dt[, (paste0("L.star", numextract(var))):=
-            ##              get(var2)+get(paste0("L.star", numextract(var)))]
-            ## }
-            ## dt[get(paste0("L.star", numextract(var)))>1, (paste0("L.star", numextract(var))):=1]
         }
 
         dt[, (paste0("jump.A", "0")):=0]
@@ -382,9 +371,9 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                      (get(paste0("fit.A", k)))]
         }
 
-        print(paste0("Clever weight, ", "W", k+1, ", maximal value"))
-        print(save.weights.max[k+1] <- max(dt[, get(paste0("W", k+1))]))
-        print(save.weights.zeros[k+1] <- sum(dt[, 1*(get(paste0("W", k+1))==0)]))
+        if (verbose) print(paste0("Clever weight, ", "W", k+1, ", maximal value"))
+        if (verbose) print(save.weights.max[k+1] <- max(dt[, get(paste0("W", k+1))]))
+        if (verbose) print(save.weights.zeros[k+1] <- sum(dt[, 1*(get(paste0("W", k+1))==0)]))
 
         if (truncate.weights) {
             weights.truncated[k] <- sum(dt[, abs(get((paste0("W", k+1))))>750])
@@ -406,8 +395,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
 
     dt.Z.list <- lapply(1:(length(var.order)-1), function(k) {
 
-        print(k)
-        ## if (k==27) browser()
+        if (verbose) print(k)
         
         k.var <- var.order[k]
         pa.k <- var.order[(k+1):length(var.order)]
@@ -460,7 +448,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
         if (include.pseudo2) { # FIXME: 
             if (numextract(k.var)>1) {
                 if ((numextract(k.var)-1) %in% (k.grid+1)) {
-                    print(numextract(k.var)-1)
+                    if (verbose) print(numextract(k.var)-1)
                     dt.Z.tmp[, (paste0("jump.A", numextract(k.var)-1)):=
                                    get(paste0("dN.A", numextract(k.var)-1))]
                 } else {
@@ -1109,9 +1097,12 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
     ## return
     #-------------------------------------------------------------------------------------------#
 
-    return(list(c(fit.list[[1]], weights.max=save.weights.max, weights.zeros=save.weights.zeros, weights.truncated=weights.truncated),
-                fit.list[-1]))
+    out.list <- list(c(fit.list[[1]], weights.max=save.weights.max, weights.zeros=save.weights.zeros, weights.truncated=weights.truncated))
+    for (mm in 2:length(fit.list)) {
+        out.list[[mm]] <- fit.list[[mm]]
+    }
 
+    return(out.list)
 }
 
 
