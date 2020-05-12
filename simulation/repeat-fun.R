@@ -21,7 +21,7 @@ repeat.fun <- function(m, K, only.A0=FALSE,
         (est.list.test.multi.M1 <- est.fun(copy(dt), censoring=TRUE,
                                                   targeting=1, 
                                                   smooth.initial=TRUE,
-                                                  browse9=FALSE,
+                                                  browse5=FALSE,
                                                   intervention.A0=function(L0, A0) logit(1*(A0==1)),
                                                   intervention.A=function(L0, A0, L.prev, A.prev, A) logit(1*(A==1)),
                                                   browse0=FALSE, misspecify.Q=misspecify.Q))

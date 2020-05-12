@@ -62,7 +62,7 @@ source("./simulation/compute-true.R")
 ## set parameters
 #-------------------------------------------------------------------------------------------#
 
-K <- 5#100#100#100#100#80#100
+K <- 50#100#100#100#100#80#100
 run.ltmle <- FALSE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
 run.ctmle2 <- FALSE#FALSE#FALSE

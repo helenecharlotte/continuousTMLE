@@ -2,7 +2,7 @@
 ## parameters of interest
 #-------------------------------------------------------------------------------------------#
 
-K <- 5#20#100#100#100#100#80#100
+K <- 10#20#100#100#100#100#80#100
 run.ltmle <- FALSE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
 run.ctmle2 <- TRUE#FALSE#FALSE
@@ -10,7 +10,7 @@ compute.true.eic <- FALSE
 misspecify.Q <- FALSE
 misspecify.Q <- FALSE
 only.A0 <- FALSE
-M <- 500
+M <- 300
 
 #-------------------------------------------------------------------------------------------#
 ## get output from simulations
@@ -138,3 +138,4 @@ message("-------------------------------")
 message("look at efficiency (A=1):")
 message(paste0("MSE / sd       : ", round(mse(psiA1)/mean(sdA1), 4)))
 message(paste0("MSE / true eic : ", round(mse(psiA1)/true.eic.A1, 4)))
+
