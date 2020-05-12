@@ -1,3 +1,7 @@
+#-------------------------------------------------------------------------------------------#
+## function that carries out initial estimation + targeting
+#-------------------------------------------------------------------------------------------#
+
 est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FALSE,
                     intervention.dN.A=NULL, intervention.A0=NULL, 
                     include.pseudo=FALSE,
@@ -1106,9 +1110,12 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
     ## return
     #-------------------------------------------------------------------------------------------#
 
-    out.list <- list(c(fit.list[[1]], weights.max=save.weights.max, weights.zeros=save.weights.zeros, weights.truncated=weights.truncated))
-    for (mm in 2:length(fit.list)) {
-        out.list[[mm]] <- fit.list[[mm]]
+    out.list <- list(c(fit.list[[1]], weights.max=save.weights.max, weights.zeros=save.weights.zeros,
+                       weights.truncated=weights.truncated, no.iteration=length(fit.list)))
+    if (length(fit.list)>1) {
+        for (mm in 2:length(fit.list)) {
+            out.list[[mm]] <- fit.list[[mm]]
+        }
     }
 
     return(out.list)

@@ -62,21 +62,21 @@ source("./simulation/compute-true.R")
 ## set parameters
 #-------------------------------------------------------------------------------------------#
 
-K <- 50#100#100#100#100#80#100
+K <- 5#5#100#100#100#100#80#100
 run.ltmle <- FALSE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
-run.ctmle2 <- FALSE#FALSE#FALSE
-compute.true.eic <- TRUE
+run.ctmle2 <- TRUE#FALSE#FALSE
+compute.true.eic <- FALSE
 compute.true.psi <- FALSE
 misspecify.Q <- FALSE
 only.A0 <- FALSE
-M <- 1
+M <- 300
 
 #-------------------------------------------------------------------------------------------#
 ## true values (outputs to file)
 #-------------------------------------------------------------------------------------------#
 
-compute.true(compute.true.psi=compute.true.psi, compute.true.eic=compute.true.eic)
+compute.true(compute.true.psi=compute.true.psi, compute.true.eic=compute.true.eic, only.A0=only.A0)
 
 #-------------------------------------------------------------------------------------------#
 ## repeat simulations (parallelize
@@ -90,10 +90,11 @@ if (system("echo $USER",intern=TRUE)%in%c("jhl781")){
 
 registerDoParallel(no_cores)
 
-out <- foreach(m=1:M, #.combine=list,
-               .multicombine = TRUE) %dopar% {
+out <- foreach(m=1:M, .errorhandling="pass"#, #.combine=list, .multicombine = TRUE
+               ) %dopar% {
                    repeat.fun(m, K=K,
-                              only.A0=only.A0, run.ltmle=run.ltmle, run.ctmle=run.ctmle, run.ctmle2=run.ctmle2,
+                              only.A0=only.A0, run.ltmle=run.ltmle, run.ctmle=run.ctmle,
+                              run.ctmle2=run.ctmle2,
                               misspecify.Q=misspecify.Q)
                }
 
