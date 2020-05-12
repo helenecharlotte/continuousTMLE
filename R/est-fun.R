@@ -17,7 +17,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                         (K>25 & K<45)*0.3*K^{1/5}-
                         (K>75)*0.31+(K>85)*0.2-
                         (K>25 & K<75)*0.5*K^{1/5}+0.6*(K>25)*K^{1/4}-0.25*A.prev+
-                        0.4*L.prev-0.25*A0+0.45*L.prev*A0+(K>75)*0.1*A0+(K>85)*0.01*A0,
+                        0.4*L.prev-0.25*A0+0.35*L.prev*A0+(K>75)*0.1*A0+(K>85)*0.01*A0,
                     form.L=function(L0, L.prev, A.prev, A0) 0.5-0.15*L0+0.25*(A.prev==1)+0.2*L.prev,
                     form.dN.L=function(L0, dN.L.prev, L.prev, A.prev) -0.2-0.05*K-0.025*(K>7)-0.25*dN.L.prev-0.15*L0-0.1*(A.prev==1)+0.3*L.prev,
                     form.dN.A=function(L0, dN.A.prev, L.prev, A.prev, no.jumps.A, L.star) -0.75-0.05*K-0.42*dN.A.prev+0.15*L0+0.3*(A.prev==2)+0.4*(A.prev==1)-0.25*L.prev) {
