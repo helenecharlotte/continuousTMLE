@@ -11,6 +11,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                     browse5=FALSE, browse9=FALSE, 
                     browse=FALSE, browse2=FALSE, misspecify.Q=FALSE,
                     compute.true.eic=FALSE,
+                    only.A0=FALSE, 
                     form.A0=function(L0) cbind(-0.1+0.25*L0),
                     form.C=function(L0, L.prev, A.prev, A0) -3.95+(K>40)*5-0.4*K^{2/3}-0.24*(K>2 & K<=4)-0.4*(K>4 & K<=9)-(K>9)*0.4*K^{1/5}+0.2*(K>25)*K^{1/4}+0.1*L0+0.2*(A0==1)+0.9*(A0==2)+2.15*L.prev,
                     form.A=function(L0, L.prev, A.prev, A0) cbind(-1+(1-A0)*0.6+(1-A.prev)*0.4+L.prev*0.5-0.15*(K>15)*L.prev),
@@ -24,6 +25,14 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                     form.dN.L=function(L0, dN.L.prev, L.prev, A.prev) -0.2-0.05*K-0.025*(K>7)-0.25*dN.L.prev-0.15*L0-0.1*(A.prev==1)+0.3*L.prev,
                     form.dN.A=function(L0, dN.A.prev, L.prev, A.prev, no.jumps.A, L.star) -0.75-0.05*K-0.42*dN.A.prev+0.15*L0+0.3*(A.prev==2)+0.4*(A.prev==1)-0.25*L.prev) {
 
+    if (only.A0) {
+            form.Y <- function(L0, L.prev, A.prev, A0, no.jumps.A, dN.A.prev) -1.1-
+                0.33*K/3*(K>2 & K<=4)-0.25*K^{2/3}-0.25*(K>4 & K<=9)-
+                (K>25 & K<45)*0.3*K^{1/5}-
+                (K>75)*0.31+(K>85)*0.2-
+                (K>25 & K<75)*0.5*K^{1/5}+0.6*(K>25)*K^{1/4}+L0*0.2-0.25*A0+
+                (K>75)*0.1*A0+(K>85)*0.01*A0
+    }
  
     K <- max(numextract(names(dt)[grep("Y", substr(names(dt), 1, 1))]))-1
     

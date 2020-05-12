@@ -2,7 +2,7 @@
 ## true values of parameters
 #-------------------------------------------------------------------------------------------#
 
-compute.true <- function(compute.true.psi=FALSE, compute.true.eic=FALSE) {
+compute.true <- function(compute.true.psi=FALSE, compute.true.eic=FALSE, only.A0=FALSE) {
                          
     if (compute.true.psi) {
     
@@ -21,13 +21,13 @@ compute.true <- function(compute.true.psi=FALSE, compute.true.eic=FALSE) {
         saveRDS(psi0.test.multi.M0,
                 file=paste0("./simulation/output/",
                             "outlist-est-true-0-2020",
-                            "-K", K, ifelse(misspecify.Q, "-Q", ""),
+                            "-K", K, ifelse(only.A0, "-A0", ""),
                             "-M", M, ".rds"))
 
         saveRDS(psi0.test.multi.M1,
                 file=paste0("./simulation/output/",
                             "outlist-est-true-1-2020",
-                            "-K", K, ifelse(misspecify.Q, "-Q", ""),
+                            "-K", K, ifelse(only.A0, "-A0", ""),
                             "-M", M, ".rds"))
 
         print(psi0.test.multi.M1 - psi0.test.multi.M0)
@@ -43,7 +43,8 @@ compute.true <- function(compute.true.psi=FALSE, compute.true.eic=FALSE) {
                        K=K)
 
         true.eic.0 <-  suppressMessages(est.fun(copy(dt), censoring=TRUE,
-                                                targeting=1, 
+                                                targeting=1,
+                                                only.A0=only.A0,
                                                 smooth.initial=TRUE,
                                                 browse9=FALSE,
                                                 compute.true.eic=TRUE,
@@ -52,7 +53,8 @@ compute.true <- function(compute.true.psi=FALSE, compute.true.eic=FALSE) {
                                                 browse0=FALSE, misspecify.Q=misspecify.Q))
     
         true.eic.1 <- suppressMessages(est.fun(copy(dt), censoring=TRUE,
-                                               targeting=1, 
+                                               targeting=1,
+                                               only.A0=only.A0,
                                                smooth.initial=TRUE,
                                                browse9=FALSE,
                                                compute.true.eic=TRUE,
@@ -67,13 +69,13 @@ compute.true <- function(compute.true.psi=FALSE, compute.true.eic=FALSE) {
         saveRDS(true.eic0,
                 file=paste0("./simulation/output/",
                             "outlist-est-true-sd-0-2020",
-                            "-K", K, ifelse(misspecify.Q, "-Q", ""),
+                            "-K", K, ifelse(only.A0, "-A0", ""),
                             "-M", M, ".rds"))
 
         saveRDS(true.eic1,
                 file=paste0("./simulation/output/",
                             "outlist-est-true-sd-1-2020",
-                            "-K", K, ifelse(misspecify.Q, "-Q", ""),
+                            "-K", K, ifelse(only.A0, "-A0", ""),
                             "-M", M, ".rds"))
     }
 } 
