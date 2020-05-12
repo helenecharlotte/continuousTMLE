@@ -3,7 +3,9 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                     include.pseudo=FALSE,
                     include.pseudo2=FALSE, q0=3,
                     truncate.weights=TRUE,
-                    targeting=1, 
+                    targeting=1,
+                    maxIter=25,
+                    verbose=FALSE, 
                     smooth.initial=FALSE, 
                     browse0=FALSE, browse3=FALSE, browse4=FALSE,
                     browse5=FALSE, browse9=FALSE, 
@@ -397,19 +399,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
     }
 
     if (browse9) browser()
-    
-    #-------------------------------------------------------------------------------------------#
-    ## estimate densities
-    #-------------------------------------------------------------------------------------------#
-
-    if (FALSE) { # DELETE: I DONT THINK WE NEED THIS HERE -> ALL IN Z MATRICES INSTEAD
-        dt[, pred.Y2:=predict(fit.Y2, newdata=dt, type="response")]
-        dt[, pred.dN.L1:=predict(fit.dN.L1, newdata=dt, type="response")]
-        dt[, pred.L1:=predict(fit.L1, newdata=dt, type="response")]
-        dt[, pred.dN.A1:=predict(fit.dN.A1, newdata=dt, type="response")]
-        dt[, pred.Y1:=predict(fit.Y1, newdata=dt, type="response")]
-    }
-    
+       
     #-------------------------------------------------------------------------------------------#
     ## matrices for computing clever covariates 
     #-------------------------------------------------------------------------------------------#
@@ -718,21 +708,6 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
 
         return(dt.Z.tmp)
     })
-        
-    #-------------------------------------------------------------------------------------------#
-    ## initial estimators for densities
-    #-------------------------------------------------------------------------------------------#
-
-    if (FALSE) { # DELETE: NOW INCLUDED ABOVE :) 
-        dt.Z[, pred.Y2:=predict(fit.Y2, newdata=dt.Z, type="response")]
-        dt.Z[, pred.dN.L1:=predict(fit.dN.L1, newdata=dt.Z, type="response")]
-        dt.Z[, pred.L1:=predict(fit.L1, newdata=dt.Z, type="response")]
-        dt.Z[, pred.dN.A1:=predict(fit.dN.A1, newdata=dt.Z, type="response")]
-        dt.Z[, pred.Y1:=predict(fit.Y1, newdata=dt.Z, type="response")]
-
-        dt.Z[, pred.A1:=intervention.A[2]]
-        dt.Z[, pred.A0:=intervention.A[1]]
-    }
 
     #-------------------------------------------------------------------------------------------#
     ## define variable order for integrating out 
@@ -1018,277 +993,57 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
            
     
     #-------------------------------------------------------------------------------------------#
-    ## function for integrating out
+    ## repeat integrating out, targeting and estimation of target parameter and sd
     #-------------------------------------------------------------------------------------------#
 
     if (browse3) browser()
     
     dt.Z.k.list2 <- list()
-
-    dt.Z.k1 <- copy(dt.Z.list[[1]])
-
-    #dt <- copy(dt1)
+    fit.list <- list()
     dt1 <- copy(dt)
-    
-    for (k in 1:(length(var.order)-1)) {
 
-        ##if (k==(length(var.order)-1)) browser()
-        print(k.var <- var.order[k])
-        #if (k.var=="A0") browser()
-        #if (k.var=="dN.L5") browser()
-        tmp.kk <- int.fun(k.var, dt.Z.k1, copy(dt.Z.list[[k]]), iter=0, fit.tmle=NULL, browse=FALSE)
-
-        dt.Z.k1 <- tmp.kk[[1]]
-        #print(dt.Z.k1)
-        ## print(names(dt.Z.k1))
-        dt.Z.k.list2[[k]] <- tmp.kk[[2]]
-
-        ## need dt.Z.k.list2 for targeting: to be merged on dt
-        ## also need this one for updating afterwards, since it has the predicted/updated densities
-        
-        if (length(tmp.kk[[2]])>0 & ((length(intervention.A)==0) | substr(k.var, 1, 1)!="A") &
-            numextract(k.var)>0) {
-            if (targeting==2 & substr(k.var, 1, 1)=="L") {
-                dt.Z.k2 <- dt.Z.k.list2[[k]]
-                setnames(dt.Z.k1, "Z", paste0("Z.L"))
-                pa.k <- names(dt.Z.k1)[substr(names(dt.Z.k1), 1, 1)!="Z"]
-                dt.Z.k2 <- merge(dt.Z.k1, dt.Z.k2, by=pa.k)
-                pa.k <- c(k.var, remove.Y(pa.k))
-                dt <- merge(dt, unique(unique(remove.Y(dt.Z.k2,
-                                                       remove=c("Y", paste0("pred.", k.var)))),
-                                       by=pa.k), by=pa.k)
-                dt[get(paste0("Y", numextract(k.var)))==1, Z:=1]
-                dt[get(paste0("Y", numextract(k.var)))==1, Z.L:=1]
-                setnames(dt, "Z", paste0("Z.", numextract(k.var)))
-                setnames(dt, "Z.L", paste0("Z.", k.var))
-                dt.Z.k.list2[[k]] <- dt.Z.k2
-                setnames(dt.Z.k1, paste0("Z.L"), "Z")
-            } else {
-                pa.k <- remove.Y(names(dt.Z.k1)[names(dt.Z.k1)!="Z"])
-                dt <- merge(dt, unique(unique(remove.Y(tmp.kk[[2]], remove=c("Y", "Z", k.var))),
-                                       by=pa.k), by=pa.k)
-            }
-
-            print(nrow(dt))
-            if (substr(k.var, 1, 1)=="Y" & numextract(k.var)>1) {
-                dt[get(paste0("Y", numextract(k.var)-1))==1, (paste0("H.", k.var)):=0]
-                ## ADDED:
-                if (include.pseudo2) {
-                    dt.Z.k1 <- dt.Z.k1[, -paste0("jump.A", numextract(k.var)-1), with=FALSE]
-                }
-            } else if (substr(k.var, 1, 1)!="Y" & numextract(k.var)>0) {
-                dt[get(paste0("Y", numextract(k.var)))==1, (paste0("H.", k.var)):=0]
-            }
-        }
-    }
-
-    if (browse5) browser()
-
-    dt <- merge(dt, unique(dt.Z.k1[, c("L0", "Z"), with=FALSE]), by="L0")
-
-    dt[, psi.hat:=  
-             dt.Z.k1[, mean(Z)]]
-
-    compute.eic(dt, browse=FALSE, targeting=targeting)
-
-    fit.tmle <- try(target.fun(dt, targeting=targeting))
-   
-    if (is(fit.tmle, "try-error")) {
-        fit1 <- "ERROR"
-    } else {
-        fit1 <- c(psi.hat=dt[, psi.hat][1], eps.hat=coef(fit.tmle),
-                  sd.eic=dt[, sqrt(mean(eic^2)/nrow(dt))])
-    }
-
-    if (is(fit.tmle, "try-error")) {
-        return(c(fit1, weights.max=save.weights.max, weights.zeros=save.weights.zeros, weights.truncated=weights.truncated))
-    }
-
-    if (abs(coef(fit.tmle))>10) {
-        return(c(fit1, weights.max=save.weights.max, weights.zeros=save.weights.zeros, weights.truncated=weights.truncated))
-    }
-    
-    
-    #-------------------------------------------------------------------------------------------#
-    ## so far, so good. now start over. 
-    #-------------------------------------------------------------------------------------------#
-
-    #dt.Z.k.list3 <- dt.Z.k.list2
-    dt.Z.list
-    #unique(dt.Z.k.list2[[14]][, -"L1", with=FALSE])
-    
-    dt.Z.k1 <- copy(dt.Z.k.list2[[1]])
-
-    #unlist(lapply( dt.Z.list, ncol))
-    #unlist(lapply( dt.Z.k.list2, ncol))
-   
-    dt <- copy(dt1)
-    
-    for (k in 1:(length(var.order)-1)) {
-        print(k.var <- var.order[k])
-        #if (k.var=="L4") browser()
-        tmp.kk <- int.fun(k.var, dt.Z.k1, dt.Z.k.list2[[k]], iter=0, fit.tmle=fit.tmle,
-                          browse=FALSE)
-
-        dt.Z.k1 <- tmp.kk[[1]]#unique(tmp.kk[[1]])
-        #print(dt.Z.k1)
-        dt.Z.k.list2[[k]] <- tmp.kk[[2]]
-
-        if (length(tmp.kk[[2]])>0 & ((length(intervention.A)==0) | substr(k.var, 1, 1)!="A") &
-            numextract(k.var)>0) {
-            if (targeting==2 & substr(k.var, 1, 1)=="L") {
-                dt.Z.k2 <- dt.Z.k.list2[[k]]
-                setnames(dt.Z.k1, "Z", paste0("Z.L"))
-                pa.k <- names(dt.Z.k1)[substr(names(dt.Z.k1), 1, 1)!="Z" & substr(names(dt.Z.k1), 1, 4)!="pred"]
-                dt.Z.k2 <- merge(dt.Z.k1, dt.Z.k2, by=pa.k)
-                pa.k <- c(k.var, remove.Y(pa.k))
-                dt <- merge(dt, unique(unique(remove.Y(dt.Z.k2,
-                                                       remove=c("Y", paste0("pred.", k.var)))),
-                                       by=pa.k), by=pa.k)
-                dt[get(paste0("Y", numextract(k.var)))==1, Z:=1]
-                dt[get(paste0("Y", numextract(k.var)))==1, Z.L:=1]
-                setnames(dt, "Z", paste0("Z.", numextract(k.var)))
-                setnames(dt, "Z.L", paste0("Z.", k.var))
-                dt.Z.k.list2[[k]] <- dt.Z.k2
-                setnames(dt.Z.k1, paste0("Z.L"), "Z")
-            } else {
-                pa.k <- remove.Y(names(dt.Z.k1)[names(dt.Z.k1)!="Z"])
-                #dt <- merge(dt, unique(remove.Y(tmp.kk[[2]], remove=c("Y", "Z", k.var))), by=pa.k)
-                dt <- merge(dt, unique(unique(remove.Y(tmp.kk[[2]], remove=c("Y", "Z", k.var))),
-                                       by=pa.k), by=pa.k)
-            }
-            print(nrow(dt))
-            ## ADDED: 
-            if (include.pseudo2) {
-                dt.Z.k1 <- dt.Z.k1[, -paste0("jump.A", numextract(k.var)-1), with=FALSE]
-            }
-            if (substr(k.var, 1, 1)=="Y" & numextract(k.var)>1) {
-                dt[get(paste0("Y", numextract(k.var)-1))==1, (paste0("H.", k.var)):=0]
-            } else if (!(substr(k.var, 1, 1)%in%c("Y", "A") & length(intervention.A)>0) & numextract(k.var)>0) {
-                dt[get(paste0("Y", numextract(k.var)))==1, (paste0("H.", k.var)):=0]
-            }
-        }
-    }
-
-    dt <- merge(dt, unique((dt.Z.k1[, c("L0", "Z"), with=FALSE])), by="L0")
-
-    dt[, psi.hat:=  
-             dt.Z.k1[, mean(Z)]]
-
-    compute.eic(dt, targeting=targeting)
-
-    fit.tmle <- try(target.fun(dt, targeting=targeting))
-
-    if (is(fit.tmle, "try-error")) {
-        fit2 <- "ERROR"
-    } else {
-        fit2 <- c(psi.hat=dt[, psi.hat][1], eps.hat=coef(fit.tmle),
-                  sd.eic=dt[, sqrt(mean(eic^2)/nrow(dt))])
-    }
-
-    #-------------------------------------------------------------------------------------------#
-    ## repeat 2->3
-    #-------------------------------------------------------------------------------------------#
-
-    #dt.Z.k.list3 <- dt.Z.k.list2
-
-    dt.Z.k1 <- copy(dt.Z.k.list2[[1]])
-
-    dt <- copy(dt1)
-    
-    for (k in 1:(length(var.order)-1)) {
-        print("2->3")
-        print(k.var <- var.order[k])
-        #if (k.var=="L4") browser()
-        tmp.kk <- int.fun(k.var, dt.Z.k1, dt.Z.k.list2[[k]], iter=0, fit.tmle=fit.tmle,
-                          browse=FALSE)
-
-        dt.Z.k1 <- tmp.kk[[1]]#unique(tmp.kk[[1]])
-        #print(dt.Z.k1)
-        dt.Z.k.list2[[k]] <- tmp.kk[[2]]
-
-        if (length(tmp.kk[[2]])>0 & ((length(intervention.A)==0) | substr(k.var, 1, 1)!="A") &
-            numextract(k.var)>0) {
-            if (targeting==2 & substr(k.var, 1, 1)=="L") {
-                dt.Z.k2 <- dt.Z.k.list2[[k]]
-                setnames(dt.Z.k1, "Z", paste0("Z.L"))
-                pa.k <- names(dt.Z.k1)[substr(names(dt.Z.k1), 1, 1)!="Z" & substr(names(dt.Z.k1), 1, 4)!="pred"]
-                dt.Z.k2 <- merge(dt.Z.k1, dt.Z.k2, by=pa.k)
-                pa.k <- c(k.var, remove.Y(pa.k))
-                dt <- merge(dt, unique(unique(remove.Y(dt.Z.k2,
-                                                       remove=c("Y", paste0("pred.", k.var)))),
-                                       by=pa.k), by=pa.k)
-                dt[get(paste0("Y", numextract(k.var)))==1, Z:=1]
-                dt[get(paste0("Y", numextract(k.var)))==1, Z.L:=1]
-                setnames(dt, "Z", paste0("Z.", numextract(k.var)))
-                setnames(dt, "Z.L", paste0("Z.", k.var))
-                dt.Z.k.list2[[k]] <- dt.Z.k2
-                setnames(dt.Z.k1, paste0("Z.L"), "Z")
-            } else {
-                pa.k <- remove.Y(names(dt.Z.k1)[names(dt.Z.k1)!="Z"])
-                #dt <- merge(dt, unique(remove.Y(tmp.kk[[2]], remove=c("Y", "Z", k.var))), by=pa.k)
-                dt <- merge(dt, unique(unique(remove.Y(tmp.kk[[2]], remove=c("Y", "Z", k.var))),
-                                       by=pa.k), by=pa.k)
-            }
-            print(nrow(dt))
-            ## ADDED: 
-            if (include.pseudo2) {
-                dt.Z.k1 <- dt.Z.k1[, -paste0("jump.A", numextract(k.var)-1), with=FALSE]
-            }
-            if (substr(k.var, 1, 1)=="Y" & numextract(k.var)>1) {
-                dt[get(paste0("Y", numextract(k.var)-1))==1, (paste0("H.", k.var)):=0]
-            } else if (!(substr(k.var, 1, 1)%in%c("Y", "A") & length(intervention.A)>0) & numextract(k.var)>0) {
-                dt[get(paste0("Y", numextract(k.var)))==1, (paste0("H.", k.var)):=0]
-            }
-        }
-    }
-
-   
-    dt <- merge(dt, unique(dt.Z.k1[, c("L0", "Z"), with=FALSE]), by="L0")
-
-    dt[, psi.hat:=  
-             dt.Z.k1[, mean(Z)]]
-
-    compute.eic(dt, targeting=targeting)
-
-    fit.tmle <- try(target.fun(dt, targeting=targeting))
-
-    if (is(fit.tmle, "try-error")) {
-        fit3 <- "ERROR"
-    } else {
-        fit3 <- c(psi.hat=dt[, psi.hat][1], eps.hat=coef(fit.tmle),
-                  sd.eic=dt[, sqrt(mean(eic^2)/nrow(dt))])
-    }
-
-    if (targeting==2) {
-    
-        #-------------------------------------------------------------------------------------------#
-        ## repeat 3->4
-        #-------------------------------------------------------------------------------------------#
-
-        #dt.Z.k.list3 <- dt.Z.k.list2
-
-        dt.Z.k1 <- copy(dt.Z.k.list2[[1]])
+    for (mm in 1:maxIter) {
 
         dt <- copy(dt1)
-    
-        for (k in 1:(length(var.order)-1)) {
-            print("3->4")
-            print(k.var <- var.order[k])
-            #if (k.var=="L4") browser()
-            tmp.kk <- int.fun(k.var, dt.Z.k1, dt.Z.k.list2[[k]], iter=0, fit.tmle=fit.tmle,
-                              browse=FALSE)
 
-            dt.Z.k1 <- tmp.kk[[1]]#unique(tmp.kk[[1]])
-            #print(dt.Z.k1)
+        print(paste0(mm, "->", mm+1))
+
+        #if (mm>1) browser()
+        
+        if (mm==1) {
+            dt.Z.k1 <- copy(dt.Z.list[[1]])
+        } else {
+            dt.Z.k1 <- copy(dt.Z.k.list2[[1]])
+        }
+
+        for (k in 1:(length(var.order)-1)) {
+
+            k.var <- var.order[k]
+           
+            if (verbose) print(k.var)
+
+            if (mm==1) {
+                tmp.kk <- int.fun(k.var, dt.Z.k1, copy(dt.Z.list[[k]]), iter=0, fit.tmle=NULL)
+            } else {
+                tmp.kk <- int.fun(k.var, dt.Z.k1, dt.Z.k.list2[[k]], iter=0, fit.tmle=fit.tmle)
+            }
+
+            dt.Z.k1 <- tmp.kk[[1]]
             dt.Z.k.list2[[k]] <- tmp.kk[[2]]
 
+            ## need dt.Z.k.list2 for targeting: to be merged on dt
+            ## also need this one for updating afterwards, since it has the predicted/updated densities
+        
             if (length(tmp.kk[[2]])>0 & ((length(intervention.A)==0) | substr(k.var, 1, 1)!="A") &
                 numextract(k.var)>0) {
                 if (targeting==2 & substr(k.var, 1, 1)=="L") {
                     dt.Z.k2 <- dt.Z.k.list2[[k]]
                     setnames(dt.Z.k1, "Z", paste0("Z.L"))
-                    pa.k <- names(dt.Z.k1)[substr(names(dt.Z.k1), 1, 1)!="Z" & substr(names(dt.Z.k1), 1, 4)!="pred"]
+                    if (mm==1) {
+                        pa.k <- names(dt.Z.k1)[substr(names(dt.Z.k1), 1, 1)!="Z"]
+                    } else {
+                        pa.k <- names(dt.Z.k1)[substr(names(dt.Z.k1), 1, 1)!="Z" & substr(names(dt.Z.k1), 1, 4)!="pred"]
+                    }
                     dt.Z.k2 <- merge(dt.Z.k1, dt.Z.k2, by=pa.k)
                     pa.k <- c(k.var, remove.Y(pa.k))
                     dt <- merge(dt, unique(unique(remove.Y(dt.Z.k2,
@@ -1302,130 +1057,64 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                     setnames(dt.Z.k1, paste0("Z.L"), "Z")
                 } else {
                     pa.k <- remove.Y(names(dt.Z.k1)[names(dt.Z.k1)!="Z"])
-                    #dt <- merge(dt, unique(remove.Y(tmp.kk[[2]], remove=c("Y", "Z", k.var))), by=pa.k)
                     dt <- merge(dt, unique(unique(remove.Y(tmp.kk[[2]], remove=c("Y", "Z", k.var))),
                                            by=pa.k), by=pa.k)
                 }
-                print(nrow(dt))
-                ## ADDED: 
-                if (include.pseudo2) {
-                    dt.Z.k1 <- dt.Z.k1[, -paste0("jump.A", numextract(k.var)-1), with=FALSE]
-                }
+
+                if (verbose) print(nrow(dt))
                 if (substr(k.var, 1, 1)=="Y" & numextract(k.var)>1) {
                     dt[get(paste0("Y", numextract(k.var)-1))==1, (paste0("H.", k.var)):=0]
-                } else if (!(substr(k.var, 1, 1)%in%c("Y", "A") & length(intervention.A)>0) & numextract(k.var)>0) {
+                    if (include.pseudo2) {
+                        dt.Z.k1 <- dt.Z.k1[, -paste0("jump.A", numextract(k.var)-1), with=FALSE]
+                    }
+                } else if (substr(k.var, 1, 1)!="Y" & numextract(k.var)>0) {
                     dt[get(paste0("Y", numextract(k.var)))==1, (paste0("H.", k.var)):=0]
-                }
+                } # HELY! else if (!(substr(k.var, 1, 1)%in%c("Y", "A") & length(intervention.A)>0) & numextract(k.var)>0) {
+                  #  dt[get(paste0("Y", numextract(k.var)))==1, (paste0("H.", k.var)):=0]
+                #}
             }
         }
 
-   
+        if (browse5) browser()
+
         dt <- merge(dt, unique(dt.Z.k1[, c("L0", "Z"), with=FALSE]), by="L0")
 
         dt[, psi.hat:=  
                  dt.Z.k1[, mean(Z)]]
 
-        compute.eic(dt, targeting=targeting)
+        compute.eic(dt, browse=FALSE, targeting=targeting)
 
         fit.tmle <- try(target.fun(dt, targeting=targeting))
-
+   
         if (is(fit.tmle, "try-error")) {
-            fit4 <- "ERROR"
+            fit.list[[mm]] <- "ERROR"
         } else {
-            fit4 <- c(psi.hat=dt[, psi.hat][1], eps.hat=coef(fit.tmle),
-                      sd.eic=dt[, sqrt(mean(eic^2)/nrow(dt))])
-        }
-    
-
-        #-------------------------------------------------------------------------------------------#
-        ## repeat 4->5
-        #-------------------------------------------------------------------------------------------#
-
-        #dt.Z.k.list3 <- dt.Z.k.list2
-
-        dt.Z.k1 <- copy(dt.Z.k.list2[[1]])
-
-        dt <- copy(dt1)
-    
-        for (k in 1:(length(var.order)-1)) {
-            print("4->5")
-            print(k.var <- var.order[k])
-            #if (k.var=="L4") browser()
-            tmp.kk <- int.fun(k.var, dt.Z.k1, dt.Z.k.list2[[k]], iter=0, fit.tmle=fit.tmle,
-                              browse=FALSE)
-
-            dt.Z.k1 <- tmp.kk[[1]]#unique(tmp.kk[[1]])
-            #print(dt.Z.k1)
-            dt.Z.k.list2[[k]] <- tmp.kk[[2]]
-
-            if (length(tmp.kk[[2]])>0 & ((length(intervention.A)==0) | substr(k.var, 1, 1)!="A") &
-                numextract(k.var)>0) {
-                if (targeting==2 & substr(k.var, 1, 1)=="L") {
-                    dt.Z.k2 <- dt.Z.k.list2[[k]]
-                    setnames(dt.Z.k1, "Z", paste0("Z.L"))
-                    pa.k <- names(dt.Z.k1)[substr(names(dt.Z.k1), 1, 1)!="Z" & substr(names(dt.Z.k1), 1, 4)!="pred"]
-                    dt.Z.k2 <- merge(dt.Z.k1, dt.Z.k2, by=pa.k)
-                    pa.k <- c(k.var, remove.Y(pa.k))
-                    dt <- merge(dt, unique(unique(remove.Y(dt.Z.k2,
-                                                           remove=c("Y", paste0("pred.", k.var)))),
-                                           by=pa.k), by=pa.k)
-                    dt[get(paste0("Y", numextract(k.var)))==1, Z:=1]
-                    dt[get(paste0("Y", numextract(k.var)))==1, Z.L:=1]
-                    setnames(dt, "Z", paste0("Z.", numextract(k.var)))
-                    setnames(dt, "Z.L", paste0("Z.", k.var))
-                    dt.Z.k.list2[[k]] <- dt.Z.k2
-                    setnames(dt.Z.k1, paste0("Z.L"), "Z")
-                } else {
-                    pa.k <- remove.Y(names(dt.Z.k1)[names(dt.Z.k1)!="Z"])
-                    #dt <- merge(dt, unique(remove.Y(tmp.kk[[2]], remove=c("Y", "Z", k.var))), by=pa.k)
-                    dt <- merge(dt, unique(unique(remove.Y(tmp.kk[[2]], remove=c("Y", "Z", k.var))),
-                                           by=pa.k), by=pa.k)
-                }
-                print(nrow(dt))
-                ## ADDED: 
-                if (include.pseudo2) {
-                    dt.Z.k1 <- dt.Z.k1[, -paste0("jump.A", numextract(k.var)-1), with=FALSE]
-                }
-                if (substr(k.var, 1, 1)=="Y" & numextract(k.var)>1) {
-                    dt[get(paste0("Y", numextract(k.var)-1))==1, (paste0("H.", k.var)):=0]
-                } else if (!(substr(k.var, 1, 1)%in%c("Y", "A") & length(intervention.A)>0) & numextract(k.var)>0) {
-                    dt[get(paste0("Y", numextract(k.var)))==1, (paste0("H.", k.var)):=0]
-                }
+            fit.list[[mm]] <- print(c(psi.hat=dt[, psi.hat][1], eps.hat=coef(fit.tmle),
+                                      sd.eic=dt[, sqrt(mean(eic^2)/nrow(dt))]))
+            if (abs(dt[, mean(eic)])<=dt[, sqrt(mean(eic^2)/nrow(dt))]/(sqrt(nrow(dt))*log(nrow(dt)))) {
+                break
             }
         }
 
-   
-        dt <- merge(dt, unique(dt.Z.k1[, c("L0", "Z"), with=FALSE]), by="L0")
-
-        dt[, psi.hat:=  
-                 dt.Z.k1[, mean(Z)]]
-
-        compute.eic(dt, targeting=targeting)
-
-        fit.tmle <- try(target.fun(dt, targeting=targeting))
-
         if (is(fit.tmle, "try-error")) {
-            fit5 <- "ERROR"
-        } else {
-            fit5 <- c(psi.hat=dt[, psi.hat][1], eps.hat=coef(fit.tmle),
-                      sd.eic=dt[, sqrt(mean(eic^2)/nrow(dt))])
+            return(c(fit.list[[mm]], weights.max=save.weights.max, weights.zeros=save.weights.zeros, weights.truncated=weights.truncated))
         }
-    
 
-        
-    }
-    
+        if (abs(coef(fit.tmle))>10) {
+            return(c(fit.list[[mm]], weights.max=save.weights.max, weights.zeros=save.weights.zeros, weights.truncated=weights.truncated))
+        }
+    }  
 
     #-------------------------------------------------------------------------------------------#
     ## return
     #-------------------------------------------------------------------------------------------#
 
+    return(list(c(fit.list[[1]], weights.max=save.weights.max, weights.zeros=save.weights.zeros, weights.truncated=weights.truncated),
+                fit.list[-1]))
 
-    if (targeting!=2) {    
-        return(list(c(c(fit1, weights.max=save.weights.max, weights.zeros=save.weights.zeros, weights.truncated=weights.truncated)),
-                    fit2, fit3))
-    } else {
-        return(list(c(c(fit1, weights.max=save.weights.max, weights.zeros=save.weights.zeros, weights.truncated=weights.truncated)),
-                    fit2, fit3, fit4, fit5))
-    }
 }
+
+
+#-------------------------------------------------------------------------------------------#
+## end of file
+#-------------------------------------------------------------------------------------------#
