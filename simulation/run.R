@@ -38,118 +38,45 @@ mse <- function(x, x0=NULL) {
 }
 
 #-------------------------------------------------------------------------------------------#
+## set working directory
+#-------------------------------------------------------------------------------------------#
+
+if (system("echo $USER",intern=TRUE)%in%c("jhl781")){
+    setwd("/home/ifsv/jhl781/research/phd/berkeley/continuousTMLE/")
+} else {
+    setwd("~/research/phd/berkeley/continuousTMLE/")
+}
+
+#-------------------------------------------------------------------------------------------#
 ## source relevant scripts
 #-------------------------------------------------------------------------------------------#
 
 source("./R/sim-data.R")
 source("./R/est-fun.R")
 source("./R/fit-density-by-hazard.R")
-source("./simulation/set-wd.R")
 source("./simulation/coverage-fun.R")
 source("./simulation/repeat-fun.R")
-
+source("./simulation/compute-true.R")
 
 #-------------------------------------------------------------------------------------------#
 ## set parameters
 #-------------------------------------------------------------------------------------------#
 
-K <- 40#100#100#100#100#80#100
-run.ltmle <- TRUE##TRUE#FALSE
+K <- 5#100#100#100#100#80#100
+run.ltmle <- FALSE##TRUE#FALSE
 run.ctmle <- FALSE#FALSE#FALSE
 run.ctmle2 <- FALSE#FALSE#FALSE
-compute.true.eic <- FALSE
+compute.true.eic <- TRUE
 compute.true.psi <- FALSE
 misspecify.Q <- FALSE
 only.A0 <- FALSE
-M <- 300
+M <- 1
 
 #-------------------------------------------------------------------------------------------#
-## true values
+## true values (outputs to file)
 #-------------------------------------------------------------------------------------------#
 
-if (compute.true.psi) {
-    print(psi0.test.multi.M0 <- sim.data(1e6, seed=10011,
-                                         only.A0=only.A0,
-                                         intervention.A=function(L0, L.prev, A.prev, A1) cbind(logit(1)),
-                                         K=K
-                                         ))
-
-    print(psi0.test.multi.M1 <- sim.data(1e6, seed=10011,
-                                         only.A0=only.A0,
-                                         intervention.A=function(L0, L.prev, A.prev, A1) cbind(logit(0)),
-                                         K=K
-                                         ))
-
-
-    saveRDS(psi0.test.multi.M0,
-            file=paste0("./simulation/output/",
-                        "outlist-est-true-0-2020",
-                        "-K", K, ifelse(misspecify.Q, "-Q", ""),
-                        "-M", M, ".rds"))
-
-    saveRDS(psi0.test.multi.M1,
-            file=paste0("./simulation/output/",
-                        "outlist-est-true-1-2020",
-                        "-K", K, ifelse(misspecify.Q, "-Q", ""),
-                        "-M", M, ".rds"))
-
-    print(psi0.test.multi.M1 - psi0.test.multi.M0)
-}
-
-if (compute.true.eic) {
-
-    N <- 1e5
-    m <- 1
-    dt <- sim.data(N, seed=10011+m, censoring=TRUE,
-                            only.A0=only.A0,
-                            browse=FALSE,
-                            K=K)
-
-    true.eic.0 <-  suppressMessages(est.fun(copy(dt), censoring=TRUE,
-                                            targeting=1, 
-                                            smooth.initial=TRUE,
-                                            browse9=FALSE,
-                                            compute.true.eic=TRUE,
-                                            intervention.A0=function(L0, A0) logit(1*(A0==0)),
-                                            intervention.A=function(L0, A0, L.prev, A.prev, A) logit(1*(A==0)),
-                                            browse0=FALSE, misspecify.Q=misspecify.Q))
-    
-    true.eic.1 <- suppressMessages(est.fun(copy(dt), censoring=TRUE,
-                                           targeting=1, 
-                                           smooth.initial=TRUE,
-                                           browse9=FALSE,
-                                           compute.true.eic=TRUE,
-                                           intervention.A0=function(L0, A0) logit(1*(A0==1)),
-                                           intervention.A=function(L0, A0, L.prev, A.prev, A) logit(1*(A==1)),
-                                           browse0=FALSE, misspecify.Q=misspecify.Q))
-
-    message("--------------------------------")
-    print(true.eic0 <- true.eic.0[[1]][3] * sqrt(N) / sqrt(1000))
-    print(true.eic1 <- true.eic.1[[1]][3] * sqrt(N) / sqrt(1000))
-
-    saveRDS(true.eic0,
-            file=paste0("./simulation/output/",
-                        "outlist-est-true-sd-0-2020",
-                        "-K", K, ifelse(misspecify.Q, "-Q", ""),
-                        "-M", M, ".rds"))
-
-    saveRDS(true.eic1,
-            file=paste0("./simulation/output/",
-                        "outlist-est-true-sd-1-2020",
-                        "-K", K, ifelse(misspecify.Q, "-Q", ""),
-                        "-M", M, ".rds"))
-
-    ## est.list.test.multi.M0 <- list(true=c(psi0.test.multi.M0, true.eic0))
-    ## est.list.test.multi.M1 <- list(true=c(psi0.test.multi.M1, true.eic1))
-    ## est.list.test.multi.target2.M0 <- list(true=c(psi0.test.multi.M0, true.eic0))
-    ## est.list.test.multi.target2.M1 <- list(true=c(psi0.test.multi.M1, true.eic1))
-
-    ## ltmle.list.0 <- list(true=c(psi0.test.multi.M0, true.eic0))
-    ## ltmle.list.1 <- list(true=c(psi0.test.multi.M1, true.eic1))
-    
-} 
-
-
+compute.true(compute.true.psi=compute.true.psi, compute.true.eic=compute.true.eic)
 
 #-------------------------------------------------------------------------------------------#
 ## repeat simulations (parallelize
