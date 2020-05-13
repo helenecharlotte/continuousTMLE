@@ -1,23 +1,24 @@
 sim.data <- function(n, seed=sample(4034244, 1),
-                              censoring=FALSE,
-                              intervention.A=NULL, 
-                              intervention.dN.A=NULL,
-                              time.since=3,
-                              verbose=FALSE, q0=3,
-                              misspecify.Q=FALSE,
-                              only.A0=FALSE,
-                              form.dN.L=NULL,
-                              form.dN.A=NULL,
-                              form.A=NULL, 
-                              form.Y=NULL,
-                              form.C=NULL,
-                              form.L=NULL,
-                              form.A0=NULL,
-                              intervention.A0=NULL,
-                              rescue=FALSE, ignore.rescue=FALSE, 
-                              obs.mean=FALSE,
-                              K=1,
-                              browse=FALSE) {
+                     censoring=FALSE,
+                     intervention.A=NULL, 
+                     intervention.dN.A=NULL,
+                     time.since=3,
+                     q0=3,
+                     misspecify.Q=FALSE,
+                     only.A0=FALSE,
+                     form.dN.L=NULL,
+                     form.dN.A=NULL,
+                     form.A=NULL, 
+                     form.Y=NULL,
+                     form.C=NULL,
+                     form.L=NULL,
+                     form.A0=NULL,
+                     intervention.A0=NULL,
+                     rescue=FALSE, ignore.rescue=FALSE, 
+                     obs.mean=FALSE,
+                     K=1,
+                     verbose=FALSE, 
+                     browse=FALSE) {
 
 
     if (length(form.dN.L)==0) form.dN.L <- function(L0, dN.L.prev, L.prev, A.prev) -0.2-0.05*K-0.025*(K>7)-0.25*dN.L.prev-0.15*L0-0.1*(A.prev==1)+0.3*L.prev
@@ -58,7 +59,8 @@ sim.data <- function(n, seed=sample(4034244, 1),
         return(out-1)
     }
 
-    print(k.grid <- ceiling(seq(0, K, length=q0+1)[-c(1,q0+1)]))
+    k.grid <- ceiling(seq(0, K, length=q0+1)[-c(1,q0+1)])
+    if (verbose) print(k.grid)
     
     ## rmulti <- function(x) {
     ##     apply(x, 1, function(p) {
