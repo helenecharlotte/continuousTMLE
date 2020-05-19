@@ -507,7 +507,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                 } else {
                     dt.Z.tmp[, `:=`(k=numextract(k.var),
                                     dN.A.prev=0,
-                                    A.prev=get(paste0("A", numextract(k.var)-1)),
+                                    A.prev=0,#get(paste0("A", numextract(k.var)-1)),
                                     L.prev=0,
                                     A=get(paste0("A", numextract(k.var)-1)))]
                 }
