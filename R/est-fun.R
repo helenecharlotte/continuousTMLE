@@ -5,6 +5,7 @@
 est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FALSE,
                     intervention.dN.A=NULL, intervention.A0=NULL, 
                     include.pseudo=FALSE,
+                    rescue=FALSE,
                     include.pseudo2=FALSE, q0=3,
                     truncate.weights=TRUE,
                     targeting=1,
@@ -134,13 +135,12 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
         dt.long[dN.A==0, keep:=0]
         fit.A <- fit.density(dt.long, "A", c("L0", "A0", "L.prev", "A.prev", "k"), subset="keep")
 
-        summary(glm(A~L0+A0 + L.prev+A.prev, data=dt.long[keep==1], family=binomial()))
+        #summary(glm(A~L0+A0 + L.prev+A.prev, data=dt.long[keep==1], family=binomial()))
         
-        if (stochastic.A) { #--- stochastic intervention that is estimated from the data!
-            fit.A.stochastic <- fit.density(dt.long, "A", c("L0", "L.prev"), subset="keep")
+        if (stochastic.A) { #--- stochastic intervention that is estimated from the data
+            fit.A.stochastic <- fit.density(dt.long, "A", c("L0", "L.prev", "A.prev"), subset="keep")
             setnames(fit.A.stochastic, paste0("fit.", "A"), paste0("int.", "A"))
             fit.A <- merge(fit.A, fit.A.stochastic, by=names(fit.A.stochastic)[1:(length(fit.A.stochastic)-1)])
-            # fixme: check that it works
         } else if (length(intervention.A)>0) {            
             fit.A[, int.A:=plogis(intervention.A(L0, A0, L.prev, A.prev, A))]
         }
@@ -158,7 +158,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
     }
     
     #-------------------------------------------------------------------------------------------#
-    ## fit models to estimate densities
+    ## separate models to estimate densities
     #-------------------------------------------------------------------------------------------#
 
     if (!smooth.initial) {
@@ -233,12 +233,11 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                 dt[get(paste0("dN.A", k))==0, keep:=0]
                 out <- fit.density(dt, paste0("A", k),
                                    unique(c("L0", "A0", paste0("L", k-1), paste0("A", k-1))), subset="keep")
-                if (stochastic.A) { #--- stochastic intervention that is estimated from the data!
+                if (stochastic.A) { #--- stochastic intervention that is estimated from the data;
                     out.stochastic <- fit.density(dt, paste0("A", k),
                                                   unique(c("L0", paste0("L", k-1))), subset="keep")
                     setnames(out.stochastic, paste0("fit.", "A", k), paste0("int.", "A", k))
                     out <- merge(out, out.stochastic, by=names(out.stochastic)[1:(length(out.stochastic)-1)])
-                    # fixme: check that it works
                 } else {            
                     if (k>1) {
                         out[, (paste0("int.A", k)):=plogis(intervention.A(L0, A0,
@@ -254,11 +253,12 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                 }
             } else {
                 out <- fit.density(dt, "A0", "L0", subset="keep")
-                if (stochastic.A) { #--- fixme: stochastic intervention at baseline!?
+                if (stochastic.A & length(intervention.A0)==0) { #--- stochastic intervention at baseline
                     out.stochastic <- fit.density(dt, "A0", "L0", subset="keep")
                     setnames(out.stochastic, paste0("fit.", "A", "0"), paste0("int.", "A", "0"))
                     out <- merge(out, out.stochastic, by=names(out.stochastic)[1:(length(out.stochastic)-1)])
-                    # TODO: check that it works
+                } else if (length(intervention.A0)>0) {
+                    out[, (paste0("int.A", k)):=plogis(intervention.A0(L0, A0))]
                 } else { 
                     out[, (paste0("int.A", k)):=plogis(intervention.A(L0, get(paste0("A", k)),
                                                                       0,
@@ -294,12 +294,11 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
     for (k in 0:K) {
 
         if (smooth.initial) {
-            # fixed: passede ikke til A0
             if (k>1) {
                 dt[, `:=`(k=k, L=get(paste0("L", k)), L.prev=get(paste0("L", k-1)),
                           A=get(paste0("A", k)), A.prev=get(paste0("A", k-1)), 
                           dN.L.prev=get(paste0("dN.L", k-1)), dN.A.prev=get(paste0("dN.A", k-1)))]
-            } else  {
+            } else {
                 dt[, `:=`(k=k, L.prev=0, L=get(paste0("L", k)), A.prev=A0,
                           A=get(paste0("A", k)), dN.L.prev=0, dN.A.prev=0)]
             } 
@@ -450,7 +449,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
 
         #-- remove impossible values of prev.jump:
 
-        if (include.pseudo) { # FIXME: 
+        if (include.pseudo) { # pseudo: 
             if (numextract(k.var)>1) {
                 dt.Z.tmp <-
                     dt.Z.tmp[get(paste0("prev.jump.A", numextract(k.var)-1))-
@@ -458,7 +457,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
             }
         }
         
-        if (include.pseudo2) { # FIXME: 
+        if (include.pseudo2) { # pseudo2: 
             if (numextract(k.var)>1) {
                 if ((numextract(k.var)-1) %in% (k.grid+1)) {
                     if (verbose) print(numextract(k.var)-1)
@@ -479,7 +478,6 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
         
         #-- get previous value if no jump:
 
-        # FIXME: 
         if (substr(k.var, 1, 1) %in% c("L", "A") & numextract(k.var)>0) {
 
             k.var.dN <- paste0("dN.", k.var)
@@ -509,7 +507,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                 } else {
                     dt.Z.tmp[, `:=`(k=numextract(k.var),
                                     dN.A.prev=0,
-                                    A.prev=0,
+                                    A.prev=get(paste0("A", numextract(k.var)-1)),
                                     L.prev=0,
                                     A=get(paste0("A", numextract(k.var)-1)))]
                 }
@@ -714,8 +712,6 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
     ## define variable order for integrating out 
     #-------------------------------------------------------------------------------------------#
     
-    #var.order <- c("A1", "dN.A1", "L1", "dN.L1", "Y1", "A0", "L0")
-
     remove.Y <- function(x, remove="Y") {
         if (is.data.table(x)) {
             return(x[, !(substr(names(x), 1, 1) %in% remove | names(x) %in% remove), with=FALSE])
