@@ -62,13 +62,13 @@ source("./simulation/compute-true.R")
 ## set parameters
 #-------------------------------------------------------------------------------------------#
 
-K <- 100
-run.ltmle <- FALSE
-run.ctmle2 <- TRUE
-misspecify.Q <- FALSE
-only.A0 <- FALSE
-M <- 500
-n <- 1000
+K <- 100               # end of follow-up (tau)
+run.ltmle <- FALSE     # run ltmle, OR (!!)
+run.ctmle2 <- TRUE     # run continuous tmle 
+misspecify.Q <- FALSE  # if TRUE, then misspecified model for outcome
+only.A0 <- FALSE       # only baseline effect (not interesting here)
+M <- 500               # number of simulation repetitions
+n <- 1000              # sample size
 
 #-------------------------------------------------------------------------------------------#
 ## don't change here
