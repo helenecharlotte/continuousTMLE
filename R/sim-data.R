@@ -14,7 +14,7 @@ sim.data <- function(n, seed=sample(4034244, 1),
                      form.L=NULL,
                      form.A0=NULL,
                      intervention.A0=NULL,
-                     rescue=FALSE, ignore.rescue=FALSE, 
+                     rescue=FALSE, rescue.itt=FALSE, 
                      obs.mean=FALSE,
                      K=1,
                      verbose=FALSE, 
@@ -24,7 +24,7 @@ sim.data <- function(n, seed=sample(4034244, 1),
     if (length(form.dN.L)==0) form.dN.L <- function(L0, dN.L.prev, L.prev, A.prev) -0.2-0.05*K-0.025*(K>7)-0.25*dN.L.prev-0.15*L0-0.1*(A.prev==1)+0.3*L.prev
     if (length(form.dN.A)==0) form.dN.A <- function(L0, dN.A.prev, L.prev, A.prev, no.jumps.A, L.star) -0.75-0.05*K-0.42*dN.A.prev+0.15*L0+0.3*(A.prev==2)+0.4*(A.prev==1)-0.25*L.prev
     if (length(form.C)==0) form.C <- function(L0, L.prev, A.prev, A0) -3.95+(K>40)*5-0.4*K^{2/3}-0.24*(K>2 & K<=4)-0.4*(K>4 & K<=9)-(K>9)*0.4*K^{1/5}+0.2*(K>25)*K^{1/4}+0.1*L0+0.2*(A0==1)+0.9*(A0==2)+2.15*L.prev
-    if (length(form.Y)==0) form.L <- function(L0, L.prev, A.prev, A0) 0.5-0.4*A0+0.15*L0-0.25*(A.prev==1)+0.4*L.prev
+    if (length(form.L)==0) form.L <- function(L0, L.prev, A.prev, A0) 0.5-0.4*A0+0.15*L0-0.25*(A.prev==1)+0.4*L.prev
     if (length(form.A0)==0) form.A0 <- function(L0) cbind(-0.1+0.25*L0)
     if (length(form.A)==0) form.A <- function(L0, L.prev, A.prev, A0) cbind(-1+(1-A0)*0.6+(1-A.prev)*0.4+L.prev*0.6-0.15*(K>15)*L.prev)
     if (length(form.Y)==0) {
@@ -44,6 +44,13 @@ sim.data <- function(n, seed=sample(4034244, 1),
                 (K>75)*0.1*A0+(K>85)*0.01*A0
         }
     }
+
+    if (rescue) {
+        form.dN.A <- function(L0, dN.A.prev, L.prev, A.prev, no.jumps.A, L.star) -0.75-0.05*K-0.42*dN.A.prev+0.15*L0
+        form.A <- function(L0, L.prev, A.prev, A0) cbind(-4.7+(A0==1)*5.8+L0*0.4+L.prev*0.5-
+                                                         0.15*(K>15)*L.prev)
+        form.A0 <- function(L0) cbind(-0.1+0.25*L0)
+    }
     
     if (length(seed)>0) {
         set.seed(seed)
@@ -62,18 +69,8 @@ sim.data <- function(n, seed=sample(4034244, 1),
     k.grid <- ceiling(seq(0, K, length=q0+1)[-c(1,q0+1)])
     if (verbose) print(k.grid)
     
-    ## rmulti <- function(x) {
-    ##     apply(x, 1, function(p) {
-    ##         browser()
-    ##         sample(0:2, prob=c(plogis(p[1])plogis(p[2]), plogis(p[1]), plogis(p[2])), size=1)
-    ##     })}
+    L0 <- sample(1:6, n, replace=1000)/6
 
-    L0 <- #runif(n)
-        sample(1:6, n, replace=1000)/6
-
-    ## if (length(true.value)>0) {
-    ##     A0 <- rep(true.value, n)
-    ## } else
     A0 <- rmulti(plogis(form.A0(L0)))
     
     if (length(intervention.A)>0 & length(intervention.A0)==0) {
@@ -125,15 +122,9 @@ sim.data <- function(n, seed=sample(4034244, 1),
             dN.A1 <- rexpit(form.dN.A(L0, dN.A.prev, L.prev, A.prev, no.jumps.A, L.star))
         }
 
-        ## if (length(true.value)>0) {
-        ##     A1 <- rep(true.value, n)
-        ## } else
-
         A1 <- rmulti(plogis(form.A(L0, L.prev, A.prev, A0)))
         
-        if (rescue & !ignore.rescue & length(intervention.A0)>0) {#(rescue & !ignore.rescue) {
-            ## A1 <- rexpit(qlogis(0.5*plogis(form.A(L0, L.prev, A.prev, 1))+
-            ##                     0.5*plogis(form.A(L0, L.prev, A.prev, 0))))
+        if (rescue & !rescue.itt & length(intervention.A0)>0) {
             A1 <- rmulti(0.5*plogis(form.A(L0, L.prev, A.prev, 1))+
                          0.5*plogis(form.A(L0, L.prev, A.prev, 0)))
         } else if (length(intervention.A)>0){
