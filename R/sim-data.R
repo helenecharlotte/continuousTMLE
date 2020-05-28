@@ -49,7 +49,21 @@ sim.data <- function(n, seed=sample(4034244, 1),
         form.dN.A <- function(L0, dN.A.prev, L.prev, A.prev, no.jumps.A, L.star) -0.75-0.05*K-0.42*dN.A.prev+0.15*L0
         form.A <- function(L0, L.prev, A.prev, A0) cbind(-4.7+(A0==1)*5.8+L0*0.4+L.prev*0.5-
                                                          0.15*(K>15)*L.prev)
-        form.A0 <- function(L0) cbind(-0.1+0.25*L0)
+        form.A <- function(L0, L.prev, A.prev, A0) cbind(-1.7+(A0==1)*1.8+L0*0.4+L.prev*0.5-
+                                                         0.15*(K>15)*L.prev)
+        form.A <- function(L0, L.prev, A.prev, A0) cbind(-4.2+(A0==1)*4.3+L0*0.4+L.prev*0.5-
+                                                         0.15*(K>15)*L.prev)
+        form.A <- function(L0, L.prev, A.prev, A0) cbind(-3.2+(A0==1)*3.3+L0*0.4+L.prev*0.5-
+                                                         0.15*(K>15)*L.prev)
+        form.A <- function(L0, L.prev, A.prev, A0) cbind(-2.2+(A0==1)*2.3+L0*0.4+L.prev*0.5-
+                                                         0.15*(K>15)*L.prev)
+        form.A0 <- function(L0) cbind(-0.25+0.25*L0)
+        form.Y <- function(L0, L.prev, A.prev, A0, no.jumps.A, dN.A.prev) -1.1-
+            0.33*K/3*(K>2 & K<=4)-0.25*K^{2/3}-0.25*(K>4 & K<=9)-
+            (K>25 & K<45)*0.3*K^{1/5}-
+            (K>75)*0.31+(K>85)*0.2-
+            (K>25 & K<75)*0.5*K^{1/5}+0.6*(K>25)*K^{1/4}-0.65*A.prev+
+            0.6*L.prev-0.25*A0+0.35*L.prev*A0+(K>75)*0.1*A0+(K>85)*0.01*A0
     }
     
     if (length(seed)>0) {
