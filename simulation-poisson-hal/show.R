@@ -1,12 +1,11 @@
-### run.R --- 
+### show.R --- 
 #----------------------------------------------------------------------
 ## Author: Helene Charlotte Rytgaard
 ## Created: May, 2020 
 #----------------------------------------------------------------------
 ## 
 ### Commentary:
-## Run TMLE across different sample sizes and different
-## numbers of time points. 
+## Look at output from TMLE estimation.
 ##  
 ### Change Log:
 #----------------------------------------------------------------------
@@ -18,8 +17,6 @@
 
 library(data.table)
 library(zoo)
-library(glmnet)
-library(survival)
 library(stringr)
 library(ltmle)
 library(parallel)
@@ -58,80 +55,53 @@ source("./R/fit-poisson-hal.R")
 source("./R/fit-coxph.R")
 source("./R/estimate-target-from-intensity.R")
 source("./R/log-linear-targeting.R")
-source("./simulation-poisson-hal/repeat-fun.R")
 
 #-------------------------------------------------------------------------------------------#
-## set parameters
+## parameters of interest
 #-------------------------------------------------------------------------------------------#
 
-betaA <- -0.1
-betaL <- 0.3
-nu <- 1.3#1.1#0.9#1.2
-eta <- 1#1.2#1#4/sqrt(2)*(1/8)
-tau <- 1#5
-M <- 500#250
-get.truth <- TRUE
-interaction.AL <- TRUE
+M <- 250
 
 #-------------------------------------------------------------------------------------------#
-## true value of target parameter
+## get output from simulations
 #-------------------------------------------------------------------------------------------#
 
-if (get.truth) {
-    
-    print(psi0 <- sim.data(1e6, betaA=betaA, betaL=betaL, nu=nu, eta=eta, intervention.A=1, tau=tau,
-                           interaction.AL=interaction.AL) -
-              sim.data(1e6, betaA=betaA, betaL=betaL, nu=nu, eta=eta, intervention.A=0, tau=tau,
-                       interaction.AL=interaction.AL))
-
-     saveRDS(psi0,
-            file=paste0("./simulation-poisson-hal/output/",
-                        "outlist-psi0",
-                        ifelse(interaction.AL, "-interactionAL", ""),
-                        ".rds"))
-}
+length(out <- readRDS(file=paste0("./simulation-poisson-hal/output/",
+                                  "outlist-est",
+                                  ifelse(interaction.AL, "-interactionAL", ""),
+                                  "-M", M, ".rds")))
 
 #-------------------------------------------------------------------------------------------#
-## true intensity
+## get true value
 #-------------------------------------------------------------------------------------------#
 
-true.lambda <- function(t, A, L, betaA, betaL, nu, eta) {
-    return(nu*eta*t^{nu-1}*exp(A*betaA + L*betaL))
-}
-
-true.Lambda <- function(t, A, L, betaA, betaL, nu, eta) {
-    return(eta*t^{nu}*exp(A*betaA + L*betaL))
-}
+(psi0 <- readRDS(file=paste0("./simulation-poisson-hal/output/",
+                             "outlist-psi0",
+                             ifelse(interaction.AL, "-interactionAL", ""),
+                             ".rds")))
 
 #-------------------------------------------------------------------------------------------#
-## repeat simulations (parallelize)
+## look at results of interest
 #-------------------------------------------------------------------------------------------#
 
-if (system("echo $USER",intern=TRUE)%in%c("jhl781")){ 
-    no_cores <- 30
-} else {
-    no_cores <- detectCores() - 1
-}
+#-- initial estimator: 
+mean(unlist(lapply(out, function(x) x[2])))
 
-registerDoParallel(no_cores)
+#-- tmle estimator: 
+mean(unlist(lapply(out, function(x) x[length(x)])))
+#mse(unlist(lapply(out, function(x) x[length(x)])))
 
+#-- cox estimator: 
+mean(unlist(lapply(out, function(x) x[1])))
+#mse(unlist(lapply(out, function(x) x[1])))
 
-
-out <- foreach(m=1:M, .errorhandling="pass"#, #.combine=list, .multicombine = TRUE
-               ) %dopar% {
-                   repeat.fun(m, betaA=betaA, betaL=betaL, nu=nu, eta=eta, tau=tau,
-                              interaction.AL=interaction.AL, verbose=FALSE)
-               }
-
-stopImplicitCluster()
-
-
-saveRDS(out,
-        file=paste0("./simulation-poisson-hal/output/",
-                    "outlist-est",
-                    ifelse(interaction.AL, "-interactionAL", ""),
-                    "-M", M, ".rds"))
-
-
+par(mfrow=c(1,3))
+hist(unlist(lapply(out, function(x) x[2])), main="initial")
+abline(v=psi0, col="red")
+hist(unlist(lapply(out, function(x) x[length(x)])), main="TMLE")
+abline(v=psi0, col="red")
+hist(unlist(lapply(out, function(x) x[1])), main="Cox")
+abline(v=psi0, col="red")
+par(mfrow=c(1,1))
 
 
