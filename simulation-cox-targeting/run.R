@@ -26,6 +26,8 @@ library(nleqslv)
 library(parallel)
 library(foreach)
 library(doParallel)
+library(survival)
+library(riskRegression)
 
 numextract <- function(string){ 
     as.numeric(str_extract(string, "\\-*\\d+\\.*\\d*"))
@@ -67,37 +69,66 @@ source("./simulation-cox-targeting/repeat-fun.R")
 #-------------------------------------------------------------------------------------------#
 
 betaA <- 0#0
-betaL <- 0.3
-nu <- 1.3#1.1#0.9#1.2
-eta <- 1#1.2#1#4/sqrt(2)*(1/8)
+betaL <- 0.6
+nu <- 1.7#1.1#0.9#1.2
+eta <- 0.7#1#1.2#1#4/sqrt(2)*(1/8)
 tau <- 1#5
-M <- 500#250#250
+M <- 500#500#100#250#250
 get.truth <- FALSE
-interaction.AL <- TRUE
-misspecify.Y <- TRUE
+interaction.AL <- FALSE
+misspecify.Y <- FALSE
+interaction.Atime <- TRUE
+fit.km <- TRUE
+
+if (interaction.Atime) betaA <- -0.65
+t0 <- 0.9
+tau <- 1.2
 
 #-------------------------------------------------------------------------------------------#
 ## true value of target parameter
 #-------------------------------------------------------------------------------------------#
 
 if (get.truth) {
-    
+
+    source("./R/sim-data-continuous.R")
+
+    par(mfrow=c(1,2))
     print(psi0.A1 <- sim.data(1e6, betaA=betaA, betaL=betaL, nu=nu, eta=eta,
                               categorical=FALSE,
-                              intervention.A=1, tau=tau,
+                              intervention.A=1, t0=t0, tau=tau, verbose=TRUE,
+                              interaction.Atime=interaction.Atime,
                               interaction.AL=interaction.AL))
     print(psi0.A0 <- sim.data(1e6, betaA=betaA, betaL=betaL, nu=nu, eta=eta,
                               categorical=FALSE,
-                              intervention.A=0, tau=tau,
+                              intervention.A=0, t0=t0, tau=tau,
+                              interaction.Atime=interaction.Atime, verbose=TRUE,
                               interaction.AL=interaction.AL))
-
     print(psi0 <- psi0.A1 - psi0.A0)
 
     saveRDS(c(psi0=psi0, psi0.A1=psi0.A1, psi0.A0=psi0.A0),
             file=paste0("./simulation-cox-targeting/output/",
                         "outlist-psi0",
                         ifelse(interaction.AL, "-interactionAL", ""),
+                        ifelse(interaction.Atime, "-interactionAtime", ""),
                         ".rds"))
+
+
+    surv.A1.list <- list()
+    tlist <- seq(0.5, 5, length=10)
+    for (jj in 1:length(tlist)) {
+        psi0.A1.jj <- sim.data(1e4, betaA=betaA, betaL=betaL, nu=nu, eta=eta,
+                                  categorical=FALSE,
+                                  intervention.A=1, t0=tlist[jj], tau=tau, verbose=TRUE,
+                                  interaction.Atime=interaction.Atime,
+                                  interaction.AL=interaction.AL)
+        psi0.A0.jj <- sim.data(1e4, betaA=betaA, betaL=betaL, nu=nu, eta=eta,
+                                  categorical=FALSE,
+                                  intervention.A=0, t0=tlist[jj], tau=tau,
+                                  interaction.Atime=interaction.Atime, verbose=TRUE,
+                                  interaction.AL=interaction.AL)
+        print(surv.A1.list[[jj]] <- psi0.A1.jj - psi0.A0.jj)
+    }
+
 }
 
 #-------------------------------------------------------------------------------------------#
@@ -126,9 +157,10 @@ registerDoParallel(no_cores)
 
 out <- foreach(m=1:M, .errorhandling="pass"#, #.combine=list, .multicombine = TRUE
                ) %dopar% {
-                   repeat.fun(m, betaA=betaA, betaL=betaL, nu=nu, eta=eta, tau=tau,
+                   repeat.fun(m, betaA=betaA, betaL=betaL, nu=nu, eta=eta, tau=tau, t0=t0,
                               misspecify.Y=misspecify.Y,
-                              interaction.AL=interaction.AL, verbose=FALSE)
+                              interaction.Atime=interaction.Atime, fit.km=fit.km,
+                              interaction.AL=interaction.AL, verbose=TRUE, browse=FALSE)
                }
 
 stopImplicitCluster()
@@ -138,6 +170,7 @@ saveRDS(out,
         file=paste0("./simulation-cox-targeting/output/",
                     "outlist-est",
                     ifelse(interaction.AL, "-interactionAL", ""),
+                    ifelse(interaction.Atime, "-interactionAtime", ""),
                     ifelse(misspecify.Y, "-misspecifyY", ""),
                     "-M", M, ".rds"))
 

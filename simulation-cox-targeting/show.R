@@ -78,6 +78,7 @@ length(out <- readRDS(file=paste0("./simulation-cox-targeting/output/",
 (psi0 <- readRDS(file=paste0("./simulation-cox-targeting/output/",
                              "outlist-psi0",
                              ifelse(interaction.AL, "-interactionAL", ""),
+                             ifelse(interaction.Atime, "-interactionAtime", ""),
                              ".rds")))
 
 psi0.A1 <- psi0["psi0.A1"]
@@ -88,12 +89,14 @@ psi0 <- psi0["psi0"]
 ## look at results of interest
 #-------------------------------------------------------------------------------------------#
 
-M <- 500
+M <- 450#500#500#200#250#100#500
 misspecify.Y <- FALSE
-interaction.AL <- TRUE
+interaction.AL <- FALSE
+interaction.Atime <- TRUE
 length(out <- readRDS(file=paste0("./simulation-cox-targeting/output/",
                                   "outlist-est",
                                   ifelse(interaction.AL, "-interactionAL", ""),
+                                  ifelse(interaction.Atime, "-interactionAtime", ""),
                                   ifelse(misspecify.Y, "-misspecifyY", ""),
                                   "-M", M, ".rds")))
 
@@ -129,9 +132,28 @@ sd2 <- sd(unlist(lapply(out, function(x) x[[length(x)]][1])))
 }))))
 
 
+#--- look at other;
+
+#-- naive hr:
+mean(unlist(lapply(out, function(x) x[[1]]["hr.A"])))
+mean(unlist(lapply(out, function(x) x[[1]]["hr.pval"]))<=0.05)
+
+#-- unadjusted km:
+c("km.fit"=mean(unlist(lapply(out, function(x) x[[1]]["km.est"]))), "truth"=psi0.A1)
+c("km.se"=sd(unlist(lapply(out, function(x) x[[1]]["km.est"]))), "tmle.se"=sd2)
+c("km.se.est"=mean(unlist(lapply(out, function(x) x[[1]]["km.se"]))), "tmle.se.est"=mean(unlist(lapply(out, function(x) x[[length(x)]][2]))))
+
+#-- model check; estimation of time-varying coef:
+if (!misspecify.Y) {
+    c(mean(unlist(lapply(out, function(x) x[[1]][5]))), betaA)
+    c(mean(unlist(lapply(out, function(x) x[[1]][6]))), -0.35*betaA)
+    c(mean(unlist(lapply(out, function(x) x[[1]][7]))), -betaL)
+}
 
 
 
+
+#------ old; 
 
 #-- initial and tmle1 estimator of diff: 
 mean(unlist(lapply(out, function(x) x$init["init.diff"])))
