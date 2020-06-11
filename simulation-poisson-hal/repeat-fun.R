@@ -14,7 +14,7 @@ repeat.fun <- function(m, betaA, betaL, nu, eta, tau, interaction.AL=FALSE, verb
                               browse=FALSE)
     
     #-- initial estimation of target parameter;
-    est.init <- estimate.target(dt.hal)
+    est.init <- estimate.target(dt.hal, dt)
 
     #-- fit intensity for censoring process; 
     dt.hal.cens <- fit.poisson.hal(dt, type=c("equal_range"), which.delta=0, nbins=40,
@@ -30,13 +30,13 @@ repeat.fun <- function(m, betaA, betaL, nu, eta, tau, interaction.AL=FALSE, verb
 
     #-- targeting steps; 
     log.linear.targeting(dt.hal)
-    est1 <- estimate.target(dt.hal, iteration=1)
+    est1 <- estimate.target(dt.hal, dt, iteration=1)
     log.linear.targeting(dt.hal, iteration=2)
-    est2 <- estimate.target(dt.hal, iteration=2)
+    est2 <- estimate.target(dt.hal, dt, iteration=2)
     log.linear.targeting(dt.hal, iteration=3)
-    est3 <- estimate.target(dt.hal, iteration=3)
+    est3 <- estimate.target(dt.hal, dt, iteration=3)
     log.linear.targeting(dt.hal, iteration=4)
-    est4 <- estimate.target(dt.hal, iteration=4)
+    est4 <- estimate.target(dt.hal, dt, iteration=4)
 
     return(list(psi.fit.cox, est.init, est1, est2, est3, est4))
     

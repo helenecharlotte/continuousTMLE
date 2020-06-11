@@ -64,12 +64,12 @@ source("./simulation-poisson-hal/repeat-fun.R")
 ## set parameters
 #-------------------------------------------------------------------------------------------#
 
-betaA <- -0.1
+betaA <- 0#0
 betaL <- 0.3
 nu <- 1.3#1.1#0.9#1.2
 eta <- 1#1.2#1#4/sqrt(2)*(1/8)
 tau <- 1#5
-M <- 500#250
+M <- 1000#250
 get.truth <- TRUE
 interaction.AL <- TRUE
 

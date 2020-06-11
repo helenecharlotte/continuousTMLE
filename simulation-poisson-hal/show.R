@@ -88,7 +88,7 @@ length(out <- readRDS(file=paste0("./simulation-poisson-hal/output/",
 mean(unlist(lapply(out, function(x) x[2])))
 
 #-- tmle estimator: 
-mean(unlist(lapply(out, function(x) x[length(x)])))
+mean(na.omit(unlist(lapply(out, function(x) x[length(x)]))))
 #mse(unlist(lapply(out, function(x) x[length(x)])))
 
 #-- cox estimator: 
