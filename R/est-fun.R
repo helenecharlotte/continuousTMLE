@@ -127,7 +127,7 @@ est.fun <- function(dt, censoring=TRUE, intervention.A=c(1, 1), stochastic.A=FAL
                         data=dt.long[keep==1])
         fit.dN.A <- glm(dN.A ~ L0 + dN.A.prev + L.prev + A.prev, family=binomial(),
                         data=dt.long[keep==1])
-        fit.L <- glm(L ~ L0 + L.prev + A.prev, family=binomial(),
+        fit.L <- glm(L ~ L0 + L.prev + A.prev + A0, family=binomial(),
                      data=dt.long[keep==1 & dN.L==1])
         fit.C <- glm(C ~ L0 + factor(A0) + L.prev + factor(A.prev), family=binomial(),
                      data=dt.long[keep==1])

@@ -2,7 +2,7 @@ cox.targeting <- function(dt, m, tau=1, a=1,
                           interaction.AL=FALSE, interaction.Atime=interaction.Atime,
                           misspecify.Y=FALSE, t0=0.3,
                           do.targeting=TRUE, maxIter=5, fit.km=FALSE,
-                          verbose=FALSE, browse=FALSE) {
+                          verbose=FALSE, browse=FALSE, centered=FALSE) {
 
     dt[, idN:=1:.N, by="id"]
     dt[, N:=.N, by="id"]
@@ -12,8 +12,9 @@ cox.targeting <- function(dt, m, tau=1, a=1,
     unique.times <- sort(unique(dt[, time]))     
     
     #-- 1 -- estimate censoring survival; add to observed data:
-    
-    cens.cox <- coxph(Surv(time, delta==0) ~ L1+L2+L3+A, data=dt)
+
+    #cens.cox <- coxph(Surv(time, delta==0) ~ L1+L2+L3+L1*L3+A+L1*A, data=dt)
+    cens.cox <- coxph(Surv(time, delta==0) ~ L1+L2+L3+A*L1, data=dt)
     #dt[, cens.surv:=exp(-predict(cens.cox, newdata=dt, type="expected"))]
     
     #-- 2 -- estimate treatment propensity; add to observed data:
@@ -23,7 +24,7 @@ cox.targeting <- function(dt, m, tau=1, a=1,
 
     #-- 3 -- initial estimator for hazard of survival/outcome:
 
-    if (interaction.AL & !misspecify.Y) {
+    if (!interaction.Atime & interaction.AL & !misspecify.Y) {
         dt[, L1.squared:=L1^2]
         fit.cox <- coxph(Surv(time, delta==1) ~ L1*L2 + L1.squared*A + A + L1.squared + L2 + L3 +
                              (abs(L2*L1)), data=dt)
@@ -37,22 +38,33 @@ cox.targeting <- function(dt, m, tau=1, a=1,
         dt2[period==1, `:=`(tstart=0, tstop=(time<=t0)*time+(time>t0)*t0)]
         dt2[period==2, `:=`(tstart=t0, tstop=time)]
         dt2[period==1 & !time.indicator, delta:=0]
-        
-        fit.cox <- coxph(Surv(tstart, tstop, delta==1) ~ 1 + I((period==1)&(A==1)) + I((period==2)&(A==1)) + L1, data=dt2)
+
+        if (interaction.AL) {
+            fit.cox <- coxph(Surv(tstart, tstop, delta==1) ~ I((period==1)&(A==1)) +
+                                 I((period==2)&(A==1))*L3 + L1 + L2 + L3, data=dt2)
+        } else {        
+            fit.cox <- coxph(Surv(tstart, tstop, delta==1) ~ 1 + I((period==1)&(A==1)) +
+                                 I((period==2)&(A==1)) + L1 + L2 + L3, data=dt2)
+        }
         if (browse) browser()
         if (verbose) print(fit.cox)
 
-        hr <- coxph(Surv(time, delta==1) ~ A+L1, data=dt)
+        hr <- coxph(Surv(time, delta==1) ~ A, data=dt)
         if (verbose) {
             print(hr)
         }
         hr.pval <- summary(hr)$coefficients["A",5]
         hr <- coef(hr)["A"]
     } else if (interaction.Atime & misspecify.Y) {
-        fit.cox <- coxph(Surv(time, delta==1) ~ A+L1, data=dt)
-        hr <- coef(fit.cox)["A"]
-        hr.pval <- summary(fit.cox)$coefficients["A",5]
+        fit.cox <- coxph(Surv(time, delta==1) ~ A*L3+L1+L2+L3*L1, data=dt)
+        hr <- coxph(Surv(time, delta==1) ~ A, data=dt)
+        if (verbose) {
+            print(hr)
+        }
+        hr.pval <- summary(hr)$coefficients["A",5]
+        hr <- coef(hr)["A"]
     } else if (!misspecify.Y) {
+        print("her?")
         fit.cox <- coxph(Surv(time, delta==1) ~ A+L1+L2, data=dt)
     } else {
         fit.cox <- coxph(Surv(time, delta==1) ~ L1, data=dt)
@@ -72,7 +84,7 @@ cox.targeting <- function(dt, m, tau=1, a=1,
 
     #-- 5a -- get baseline hazard: 
     bhaz.cox <- rbind(data.table(time=0, hazard=0),
-                      merge(data.table(time=unique.times), setDT(basehaz(fit.cox, centered=FALSE)),
+                      merge(data.table(time=unique.times), setDT(basehaz(fit.cox, centered=centered)),
                             by="time", all.x=TRUE))
     bhaz.cox[, dhaz:=c(0,diff(hazard))]
     setnames(bhaz.cox, "hazard", "chaz")
@@ -113,7 +125,7 @@ cox.targeting <- function(dt, m, tau=1, a=1,
         #init.diff <- dt[, mean(surv.cox.A0-surv.cox.A1)]
         #init.A1 <- dt[, mean(1-surv.cox.A1)]
         #init.A0 <- dt[, mean(1-surv.cox.A0)]
-        init <- dt[, mean(1-surv.cox.a)]
+        print(paste0("init = ", init <- dt[, mean(1-surv.cox.a)]))
     }
     
     if (do.targeting) {
@@ -122,7 +134,7 @@ cox.targeting <- function(dt, m, tau=1, a=1,
 
         #-- 5b -- add censoring baseline hazard:
         bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
-                                          setDT(basehaz(cens.cox, centered=FALSE))),
+                                          setDT(basehaz(cens.cox, centered=centered))),
                           by="time", all.x=TRUE)
         setnames(bhaz.cox, "hazard", "cens.chaz")
 
@@ -131,6 +143,7 @@ cox.targeting <- function(dt, m, tau=1, a=1,
         if (interaction.Atime & !misspecify.Y) {
             bhaz.cox[time==t0, cens.chaz:=cens.chaz.1]
             bhaz.cox[is.na(cens.chaz.1), cens.chaz.1:=cens.chaz]
+            bhaz.cox[is.na(cens.chaz), cens.chaz:=cens.chaz.1]
         }
 
         #-- 5c -- dublicate bhaz.cox; for each treatment option:
@@ -179,8 +192,19 @@ cox.targeting <- function(dt, m, tau=1, a=1,
 
         #-- xx -- init fit:
 
-        init.fit <- mean(mat[A==a, 1-surv.tau[1], by="id"][,2][[1]])
+        ## bhaz.cox1 <- copy(bhaz.cox)
+        ## bhaz.cox1[, period:=(time<=t0)*1+(time>t0)*2]
+
+        ## dt2[, A:=a]
+        ## dt2[, fit.cox:=predict(fit.cox, newdata=dt2, type="risk")]
         
+        ## dt4 <- merge(dt2, bhaz.cox[time %in% c(bhaz.cox[, max(time[time<=t0])],
+        ##                                        bhaz.cox[, max(time[time<=tau])])], by="period")
+
+        ## mean(1-dt4[, exp(-sum(chaz*fit.cox)), by="id"][,2][[1]])
+
+        init.fit <- mean(mat[A==a, 1-surv.tau[1], by="id"][,2][[1]])
+
         eval.ic <- function(mat) {
             out <- mat[, sum( (A==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
                               ( (delta.obs==1 & time==time.obs) -
@@ -202,8 +226,8 @@ cox.targeting <- function(dt, m, tau=1, a=1,
 
             xx <- summary(fit.km <- prodlim(Hist(time, delta==1)~A, data=dt),
                           times=tau, asMatrix=TRUE)$table
-            km.est <- 1-as.numeric(xx[xx[,1]=="A=1",]["surv"])
-            km.se <- as.numeric(xx[xx[,1]=="A=1",]["se.surv"])
+            km.est <- 1-as.numeric(xx[xx[,1]==paste0("A=", a),]["surv"])
+            km.se <- as.numeric(xx[xx[,1]==paste0("A=", a),]["se.surv"])
 
             tmle.list[[1]] <- c(tmle.list[[1]], km.est=km.est, km.se=km.se)
 
@@ -234,7 +258,8 @@ cox.targeting <- function(dt, m, tau=1, a=1,
 
             #-- 6e -- update clever covariate:
             
-            mat[, Ht.lambda:=surv.tau/surv.t]
+            mat[surv.t>0, Ht.lambda:=surv.tau/surv.t]
+            mat[surv.t==0, Ht.lambda:=0]
 
             #-- 6d -- compute sd:
             
@@ -252,8 +277,8 @@ cox.targeting <- function(dt, m, tau=1, a=1,
             eval.equation(mat, 0)
             
             tmle.list[[iter+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
-
-            if (abs(eval.equation(mat, 0))<=eval.ic(mat)/(sqrt(n)*log(n))) {
+            
+            if  (abs(eval.equation(mat, 0))<=eval.ic(mat)/(sqrt(n)*log(n))) {
                 break
             }
             

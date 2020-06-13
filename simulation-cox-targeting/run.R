@@ -68,19 +68,26 @@ source("./simulation-cox-targeting/repeat-fun.R")
 ## set parameters
 #-------------------------------------------------------------------------------------------#
 
-betaA <- 0#0
-betaL <- 0.6
+betaA <- 0.5#0
+betaL <- 1.1#0.6#1.1
 nu <- 1.7#1.1#0.9#1.2
 eta <- 0.7#1#1.2#1#4/sqrt(2)*(1/8)
 tau <- 1#5
-M <- 500#500#100#250#250
+M <- 1000#350#1000#250#1000#402#600#250#M <- 600#500#100#250#250
 get.truth <- FALSE
-interaction.AL <- FALSE
-misspecify.Y <- FALSE
-interaction.Atime <- TRUE
+interaction.AL <- FALSE#TRUE
+misspecify.Y <- TRUE
+interaction.Atime <- TRUE#TRUE#TRUE
+randomize.A <- TRUE
+censoring.informative <- FALSE#TRUE#TRUE#FALSE
+censoring.high <- FALSE
 fit.km <- TRUE
+centered <- TRUE
 
-if (interaction.Atime) betaA <- -0.65
+#--  which effect estimated? 
+a <- 1
+
+if (interaction.Atime) betaA <- -0.75
 t0 <- 0.9
 tau <- 1.2
 
@@ -112,21 +119,42 @@ if (get.truth) {
                         ifelse(interaction.Atime, "-interactionAtime", ""),
                         ".rds"))
 
-
+    surv.list <- list()
     surv.A1.list <- list()
-    tlist <- seq(0.5, 5, length=10)
+    surv.A0.list <- list()
+    tlist <- seq(0, 1.5, length=19)
     for (jj in 1:length(tlist)) {
-        psi0.A1.jj <- sim.data(1e4, betaA=betaA, betaL=betaL, nu=nu, eta=eta,
-                                  categorical=FALSE,
-                                  intervention.A=1, t0=tlist[jj], tau=tau, verbose=TRUE,
-                                  interaction.Atime=interaction.Atime,
-                                  interaction.AL=interaction.AL)
-        psi0.A0.jj <- sim.data(1e4, betaA=betaA, betaL=betaL, nu=nu, eta=eta,
-                                  categorical=FALSE,
-                                  intervention.A=0, t0=tlist[jj], tau=tau,
-                                  interaction.Atime=interaction.Atime, verbose=TRUE,
-                                  interaction.AL=interaction.AL)
-        print(surv.A1.list[[jj]] <- psi0.A1.jj - psi0.A0.jj)
+        psi0.A1.jj <- sim.data(1e6, betaA=betaA, betaL=betaL, nu=nu, eta=eta,
+                               categorical=FALSE,
+                               intervention.A=1, t0=t0, tau=tlist[jj], verbose=TRUE,
+                               interaction.Atime=interaction.Atime,
+                               interaction.AL=interaction.AL)
+        psi0.A0.jj <- sim.data(1e6, betaA=betaA, betaL=betaL, nu=nu, eta=eta,
+                               categorical=FALSE,
+                               intervention.A=0, t0=t0, tau=tlist[jj],
+                               interaction.Atime=interaction.Atime, verbose=TRUE,
+                               interaction.AL=interaction.AL)
+        print(surv.list[[jj]] <- psi0.A1.jj - psi0.A0.jj)
+        surv.A1.list[[jj]] <- psi0.A1.jj
+        surv.A0.list[[jj]] <- psi0.A0.jj
+        saveRDS(cbind(t=tlist[1:jj], surv.list),
+                file=paste0("./simulation-cox-targeting/output/",
+                            "outlist-psi0-survival-function",
+                            ifelse(interaction.AL, "-interactionAL", ""),
+                            ifelse(interaction.Atime, "-interactionAtime", ""),
+                            ".rds"))
+        saveRDS(cbind(t=tlist[1:jj], surv.A1.list),
+                file=paste0("./simulation-cox-targeting/output/",
+                            "outlist-psi0-survival-A1-function",
+                            ifelse(interaction.AL, "-interactionAL", ""),
+                            ifelse(interaction.Atime, "-interactionAtime", ""),
+                            ".rds"))
+        saveRDS(cbind(t=tlist[1:jj], surv.A0.list),
+                file=paste0("./simulation-cox-targeting/output/",
+                            "outlist-psi0-survival-A0-function",
+                            ifelse(interaction.AL, "-interactionAL", ""),
+                            ifelse(interaction.Atime, "-interactionAtime", ""),
+                            ".rds"))
     }
 
 }
@@ -136,7 +164,12 @@ if (get.truth) {
 #-------------------------------------------------------------------------------------------#
 
 true.lambda <- function(t, A, L, betaA, betaL, nu, eta) {
-    return(nu*eta*t^{nu-1}*exp(A*betaA + L*betaL))
+    #return(nu*eta*t^{nu-1}*exp(A*betaA + L*betaL))
+    return(exp(#-0.45+#0.55*A*(t<=tau/3)-0.65*A*(t>=tau/3)+
+    (t<=t0)*betaA*A+
+    (t>t0)*(-0.45)*betaA*A-
+    L1*betaL-0.6*L2+0.8*L3-0.3*L3*L1
+    + 0.3))
 }
 
 true.Lambda <- function(t, A, L, betaA, betaL, nu, eta) {
@@ -148,7 +181,7 @@ true.Lambda <- function(t, A, L, betaA, betaL, nu, eta) {
 #-------------------------------------------------------------------------------------------#
 
 if (system("echo $USER",intern=TRUE)%in%c("jhl781")){ 
-    no_cores <- 30
+    no_cores <- 10
 } else {
     no_cores <- detectCores() - 1
 }
@@ -157,8 +190,10 @@ registerDoParallel(no_cores)
 
 out <- foreach(m=1:M, .errorhandling="pass"#, #.combine=list, .multicombine = TRUE
                ) %dopar% {
-                   repeat.fun(m, betaA=betaA, betaL=betaL, nu=nu, eta=eta, tau=tau, t0=t0,
-                              misspecify.Y=misspecify.Y,
+                   repeat.fun(m, betaA=betaA, betaL=betaL, nu=nu, eta=eta, tau=tau, t0=t0, a=a,
+                              misspecify.Y=misspecify.Y, randomize.A=randomize.A,
+                              censoring.informative=censoring.informative,
+                              censoring.high=censoring.high, centered=TRUE, 
                               interaction.Atime=interaction.Atime, fit.km=fit.km,
                               interaction.AL=interaction.AL, verbose=TRUE, browse=FALSE)
                }
@@ -169,9 +204,14 @@ stopImplicitCluster()
 saveRDS(out,
         file=paste0("./simulation-cox-targeting/output/",
                     "outlist-est",
+                    ifelse(a==0, "-A=0", "-A=1"),
                     ifelse(interaction.AL, "-interactionAL", ""),
                     ifelse(interaction.Atime, "-interactionAtime", ""),
+                    ifelse(randomize.A, "-randomizeA", ""),
+                    ifelse(censoring.informative, "", "-almostUninformativeCensoring"),
+                    ifelse(censoring.high, "-highLevelOfCensoring", ""),
                     ifelse(misspecify.Y, "-misspecifyY", ""),
+                    ifelse(centered, "-centered", ""),
                     "-M", M, ".rds"))
 
 
