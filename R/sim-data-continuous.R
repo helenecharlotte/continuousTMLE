@@ -49,7 +49,6 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
         }
     } else if (interaction.Atime) {
         if (interaction.AL) {
-            print("Hallo")
             phiT <- function(t, A, L1, L2, L3, betaA, betaL) {
                 return(exp(#-0.45+#0.55*A*(t<=tau/3)-0.65*A*(t>=tau/3)+
                 (t<=t0)*betaA*A+
@@ -58,14 +57,6 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
                 + 0.1))
             }
         } else {
-            print("Hallo2")
-            phiT <- function(t, A, L1, L2, L3, betaA, betaL) {
-                return(exp(#-0.45+#0.55*A*(t<=tau/3)-0.65*A*(t>=tau/3)+
-                (t<=t0)*betaA*A+
-                (t>t0)*(-0.45)*betaA*A-
-                L1*betaL-0.6*L2+0.8*L3
-                + 0.1))
-            }
             phiT <- function(t, A, L1, L2, L3, betaA, betaL) {
                 return(exp(#-0.45+#0.55*A*(t<=tau/3)-0.65*A*(t>=tau/3)+
                 (t<=t0)*betaA*A+
@@ -78,7 +69,6 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
         phiT <- function(t, A, L1, L2, L3, betaA, betaL) {
             return(exp(A*betaA + L1*betaL))
         }
-        #print(phiT)
     }    
     
     lambdaT <- function(t, A, L1, L2, L3, betaA, betaL, eta, nu) {
@@ -87,39 +77,13 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
 
     #-- censoring density's dependence on covariates/treatment:
     if (censoring.informative) {
-        print("Yes")
         phiC <- function(t, A, L1, L2, L3) {
             return(exp(-0.1+censoring.alpha))#-A*0.1 - L1*0.4 - L2*0.5 + ifelse(censoring.high, 0.4, 0.7)*censoring.alpha))#7 + L3*0.35 - 2.1))
         }
     } else {
         phiC <- function(t, A, L1, L2, L3) {
-            return(exp(-L1*0.2 + censoring.alpha))#7 + L3*0.35 - 2.1))
-        }
-        print("Here")
-        phiC <- function(t, A, L1, L2, L3) {
-            return(exp(-L3*1.2+0.8*L1 + 0.9 + censoring.alpha))#7 + L3*0.35 - 2.1))
-        }
-        phiC <- function(t, A, L1, L2, L3) {
-            return(exp(1.2*L1+0.9 + censoring.alpha))#7 + L3*0.35 - 2.1))
-        }
-        phiC <- function(t, A, L1, L2, L3) {
-            return(exp(1.5*L1-0.65*A-0.65*L3*L1+0.15 + censoring.alpha))#7 + L3*0.35 - 2.1))
-        }
-        phiC <- function(t, A, L1, L2, L3) {
-            return(exp(0.5*(2*A-1)*L1+L1+0.15 + censoring.alpha))#7 + L3*0.35 - 2.1))
-        }
-        phiC <- function(t, A, L1, L2, L3) {
-            return(exp(1.2*L1-0.35 + censoring.alpha))#7 + L3*0.35 - 2.1))
-        }
-        phiC <- function(t, A, L1, L2, L3) {
-            return(exp(-L3*1.2+0.8*L1 + 0.9 + censoring.alpha))#7 + L3*0.35 - 2.1))
-        }
-        phiC <- function(t, A, L1, L2, L3) {
             return(exp(-L3*0.8+1.2*L1*A + 1.1 + censoring.alpha))#7 + L3*0.35 - 2.1))
         }
-        #phiC <- function(t, A, L1, L2, L3) {
-        #    return(exp(-1.2*L1+1.3+ censoring.alpha))#7 + L3*0.35 - 2.1))
-        #}
     }
     
     lambdaC <- function(t, A, L1, L2, L3, eta, nu) {

@@ -79,13 +79,13 @@ interaction.AL <- FALSE#TRUE
 misspecify.Y <- TRUE
 interaction.Atime <- TRUE#TRUE#TRUE
 randomize.A <- TRUE
-censoring.informative <- FALSE#TRUE#TRUE#FALSE
+censoring.informative <- TRUE#TRUE#TRUE#FALSE
 censoring.high <- FALSE
 fit.km <- TRUE
 centered <- TRUE
 
 #--  which effect estimated? 
-a <- 1
+a <- 0
 
 if (interaction.Atime) betaA <- -0.75
 t0 <- 0.9
@@ -181,7 +181,7 @@ true.Lambda <- function(t, A, L, betaA, betaL, nu, eta) {
 #-------------------------------------------------------------------------------------------#
 
 if (system("echo $USER",intern=TRUE)%in%c("jhl781")){ 
-    no_cores <- 10
+    no_cores <- 35
 } else {
     no_cores <- detectCores() - 1
 }
