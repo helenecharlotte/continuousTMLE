@@ -1,8 +1,12 @@
 cox.targeting <- function(dt, m, tau=1, a=1,
                           interaction.AL=FALSE, interaction.Atime=interaction.Atime,
-                          misspecify.Y=FALSE, t0=0.3,
+                          misspecify.Y=FALSE, t0=0.3, test.poisson=FALSE, test.poisson.cens=FALSE,
                           do.targeting=TRUE, maxIter=5, fit.km=FALSE,
-                          verbose=FALSE, browse=FALSE, centered=FALSE) {
+                          use.coxnet=FALSE, 
+                          test.pois=NULL, test.pois.cens=NULL,
+                          covars1=c("L1", "L2", "L3"),
+                          verbose=FALSE, browse=FALSE, browse2=FALSE, browse3=FALSE,
+                          centered=FALSE) {
 
     dt[, idN:=1:.N, by="id"]
     dt[, N:=.N, by="id"]
@@ -24,10 +28,21 @@ cox.targeting <- function(dt, m, tau=1, a=1,
 
     #-- 3 -- initial estimator for hazard of survival/outcome:
 
-    if (!interaction.Atime & interaction.AL & !misspecify.Y) {
+    if (browse3) browser()
+
+    if (use.coxnet) {
         dt[, L1.squared:=L1^2]
-        fit.cox <- coxph(Surv(time, delta==1) ~ L1*L2 + L1.squared*A + A + L1.squared + L2 + L3 +
-                             (abs(L2*L1)), data=dt)
+        X <- with(dt, model.matrix(Surv(time, delta==1) ~ L1*L2 + L1.squared*A +
+                                       A + L1.squared + L2 + L3 + L1*A + A*L2 + A*L3 + 
+                                       (abs(L2*L1))))
+        fit.cox <- glmnet(x=X, lambda=0.01,
+                          y=Surv(dt$time, dt$delta), family="cox", maxit=1000)
+        if (verbose) print(coef(fit.cox))
+        # OBS! cannot get baseline hazard: 
+        #glmnet.basesurv(dt$time, dt$delta, X, times.eval=NULL, centered=centered)
+    } else if (!interaction.Atime & interaction.AL & !misspecify.Y) {
+        dt[, L1.squared:=L1^2]
+        fit.cox <- coxph(Surv(time, delta==1) ~ L1*L2 + L1.squared*A + A + L1.squared + L2 + L3, data=dt)
     } else if (interaction.Atime & !misspecify.Y) {
         dt[, time.indicator:=(time<=t0)]
 
@@ -48,27 +63,22 @@ cox.targeting <- function(dt, m, tau=1, a=1,
         }
         if (browse) browser()
         if (verbose) print(fit.cox)
-
-        hr <- coxph(Surv(time, delta==1) ~ A, data=dt)
-        if (verbose) {
-            print(hr)
-        }
-        hr.pval <- summary(hr)$coefficients["A",5]
-        hr <- coef(hr)["A"]
     } else if (interaction.Atime & misspecify.Y) {
         fit.cox <- coxph(Surv(time, delta==1) ~ A*L3+L1+L2+L3*L1, data=dt)
-        hr <- coxph(Surv(time, delta==1) ~ A, data=dt)
-        if (verbose) {
-            print(hr)
-        }
-        hr.pval <- summary(hr)$coefficients["A",5]
-        hr <- coef(hr)["A"]
     } else if (!misspecify.Y) {
-        print("her?")
         fit.cox <- coxph(Surv(time, delta==1) ~ A+L1+L2, data=dt)
     } else {
-        fit.cox <- coxph(Surv(time, delta==1) ~ L1, data=dt)
+        fit.cox <- coxph(Surv(time, delta==1) ~ A, data=dt)
     }
+
+    #-- HR:
+
+    hr <- coxph(Surv(time, delta==1) ~ A, data=dt)
+    if (verbose) {
+        print(hr)
+    }
+    hr.pval <- summary(hr)$coefficients["A",5]
+    hr <- coef(hr)["A"]
 
     #-- 4 -- initial estimator for target parameter:
 
@@ -164,22 +174,107 @@ cox.targeting <- function(dt, m, tau=1, a=1,
             tmp[, time.obs:=times[i]]
             tmp[, delta.obs:=deltas[i]]
             tmp[, A.obs:=As[i]]
-            tmp[A==a, Ht:=-((A==1) - (A==0)) / # treatment and censoring weights
-                          ((prob.A[i]^A * (1-prob.A[i])^(1-A))*exp(-fit.cens.a[i]*cens.chaz.1))]
-            if (interaction.Atime & !misspecify.Y) {
-                tmp[, period:=(time<=t0)*1+(time>t0)*2]
-                tmp <- merge(tmp, dt3[id==i, c("period", "fit.cox"), with=FALSE], by="period")#[, chaz2:=cumsum(dhaz), by=c("A", "period")]
+            if (test.poisson) {
+                tmpi <- merge(dt[id==i][, -c("id", "tint", "time", "A"), with=FALSE],
+                              test.pois[A==a][, -c("A"), with=FALSE],
+                              by=paste0(covars1, ".categorical"))
+                #tmpi[, c("tint", "time", "fit.lambda", "fit.Lambda", "fit.Surv"), with=FALSE]
+                tgrid <- c(0,test.pois[, unique(time)])
+                tmp[, time2:=tgrid[findInterval(time, tgrid)]]
+                tmp[, tint:=findInterval(time, tgrid)]
+                setnames(tmpi, "time", "time2")
+                fit.names <- grep( "fit.", names(tmpi), value=TRUE)
+                tmp <- merge(tmp, tmpi[, c("time2", fit.names), with=FALSE],
+                             by="time2", all.x=TRUE)
+
+                #--- same for censoring
+                if (test.poisson.cens) {
+                    tmpi.cens <- merge(dt[id==i][, -c("id", "tint", "time", "A"), with=FALSE],
+                                       test.pois.cens[A==a][, -c("A"), with=FALSE],
+                                       by=paste0(covars1, ".categorical"))
+                    tgrid.cens <- c(0,test.pois.cens[, unique(time)])
+                    tmp[, time2:=tgrid.cens[findInterval(time, tgrid.cens)]]
+                    tmp[, tint:=findInterval(time, tgrid.cens)]
+                    setnames(tmpi.cens, "time", "time2")
+                    fit.names.cens <- grep( ".cens", names(tmpi.cens), value=TRUE)
+                    tmp <- merge(tmp, tmpi.cens[, c("time2", fit.names.cens), with=FALSE],
+                                 by="time2", all.x=TRUE)
+                    fit.names <- c(fit.names, fit.names.cens)
+                }
+                
+                for (colname in fit.names)
+                    tmp[is.na(get(colname)), (colname):=0]
+
+                tmp[, tdiff:=c(diff(time),0)]
+
+                #tmp <- merge(tmp, tmpi[, c("time", fit.names), with=FALSE],
+                #             by="time", all.x=TRUE)
+                #              tmp[is.na(get(i)), (i):=0]
+                #tmp[, c("tint", "time", "fit.lambda", "fit.Lambda", "fit.Surv"), with=FALSE]
+                #tmp[, tdiff:=c(diff(time),0)]
+                #tmp[, dhaz:=tdiff*fit.lambda]
+
+                #--test: 
+                #tmp[, period:=(time<=t0)*1+(time>t0)*2]
+                #tmp <- merge(tmp, dt3[id==i, c("period", "fit.cox"), with=FALSE], by="period")#[, chaz2:=cumsum(dhaz), by=c("A", "period")]
+                #tmp[, dhaz2:=dhaz*fit.cox]
+                
+                #tmp[, dhaz:=c(0, diff(fit.Lambda))]
+                if (i==1) print("use poisson lambda")
+                tmp[, dhaz:=tdiff*fit.lambda]
+                tmp[, chaz:=cumsum(dhaz)]
+                tmp[, fit.cox:=1]
+
+
+                if (test.poisson.cens) {
+                    if (i==1) print("use poisson censoring")
+                    tmp[, dhaz.cens:=tdiff*fit.lambda]
+                    tmp[, chaz.cens:=cumsum(dhaz.cens)]
+                    tmp[, chaz.cens.1:=c(0, chaz.cens[-.N])]
+                    tmp[A==a, Ht:=-((A==1) - (A==0)) / # treatment and censoring weights
+                                  ((prob.A[i]^A * (1-prob.A[i])^(1-A))*exp(-chaz.cens.1))]
+                } else {
+                    tmp[A==a, Ht:=-((A==1) - (A==0)) / # treatment and censoring weights
+                                  ((prob.A[i]^A * (1-prob.A[i])^(1-A))*exp(-fit.cens.a[i]*cens.chaz.1))]
+                }
+                #tmp[, surv.tau:=surv.t[.N], by=c("id", "A")]
+                #tmp[, surv.tau2:=surv.t2[.N], by=c("id", "A")]
+
+                #(tmp[A==a, 1-surv.tau[1], by="id"][,2][[1]])
+                #(tmp[A==a, 1-surv.tau2[1], by="id"][,2][[1]])
+
+                #tmp[, chaz2:=cumsum(dhaz2)]
+
+                #tmp[, surv.t:=exp(-chaz), by=c("id")]
+                #tmp[, surv.t2:=exp(-chaz2), by=c("id")]
+                
+                #tmp[, c("time", "dhaz", "dhaz2", "chaz", "chaz2", "surv.t", "surv.t2"), with=FALSE]
+                #tmp[, c("time", "chaz.cens", "cens.chaz"), with=FALSE]
             } else {
-                tmp[A==a, fit.cox:=fit.cox.a[i]]
+                tmp[A==a, Ht:=-((A==1) - (A==0)) / # treatment and censoring weights
+                              ((prob.A[i]^A * (1-prob.A[i])^(1-A))*exp(-fit.cens.a[i]*cens.chaz.1))]
+                if (interaction.Atime & !misspecify.Y) {
+                    tmp[, period:=(time<=t0)*1+(time>t0)*2]
+                    tmp <- merge(tmp, dt3[id==i, c("period", "fit.cox"), with=FALSE], by="period")#[, chaz2:=cumsum(dhaz), by=c("A", "period")]
+                } else {
+                    tmp[A==a, fit.cox:=fit.cox.a[i]]
+                }
             }
             return(tmp)
         }))
+
+        if (browse2) browser()
 
         #-- 6 -- carry out targeting
 
         #-- 6a -- compute clever covariates:
 
-        if (interaction.Atime & !misspecify.Y) {
+        if (test.poisson) {
+            mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id")]
+            mat[, surv.tau:=surv.t[.N], by=c("id")]
+            #mat[, surv.t2:=exp(-cumsum(dhaz2)), by=c("id")]
+            #mat[, surv.tau2:=surv.t2[.N], by=c("id")]
+        } else if (interaction.Atime & !misspecify.Y) {
             #mat[, chaz2:=cumsum(dhaz*fit.cox), by=c("id", "A", "period")]
             mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
             mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
@@ -204,11 +299,10 @@ cox.targeting <- function(dt, m, tau=1, a=1,
         ## mean(1-dt4[, exp(-sum(chaz*fit.cox)), by="id"][,2][[1]])
 
         init.fit <- mean(mat[A==a, 1-surv.tau[1], by="id"][,2][[1]])
-
+        
         eval.ic <- function(mat) {
             out <- mat[, sum( (A==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
                               ( (delta.obs==1 & time==time.obs) -
-                                #exp( Ht * Ht.lambda ) *
                                 dhaz * fit.cox )), by="id"]
             ic.squared <- (out[, 2][[1]] + (mat[A==a, surv.tau[1], by="id"][,2][[1]]) -
                            (1-init.fit))^2
@@ -219,7 +313,7 @@ cox.targeting <- function(dt, m, tau=1, a=1,
         if (interaction.Atime) {
             tmle.list <- list(c(init=init.fit, sd.eic=init.ic, hr=hr, hr.pval=hr.pval, coef=coef(fit.cox)))
         } else {
-            tmle.list <- list(c(init=init.fit, sd.eic=init.ic))
+            tmle.list <- list(c(init=init.fit, sd.eic=init.ic, hr=hr, hr.pval=hr.pval, coef=coef(fit.cox)))
         }
 
         if (fit.km) {
@@ -284,6 +378,7 @@ cox.targeting <- function(dt, m, tau=1, a=1,
             
         }
 
+        print(tmle.list)
         return(tmle.list)#c(tmle.diff=psi1, tmle.A1=psi1.A1, tmle.A0=psi1.A0)))
 
     } else {
