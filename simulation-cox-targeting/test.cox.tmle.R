@@ -1,7 +1,7 @@
 ### run.R --- 
 #----------------------------------------------------------------------
 ## Author: Helene Charlotte Rytgaard
-## Created: May, 2020 
+## Created: June, 2020 
 #----------------------------------------------------------------------
 ## 
 ### Commentary:
@@ -74,7 +74,7 @@ betaL <- 1.1#0.6#1.1
 nu <- 1.7#1.1#0.9#1.2
 eta <- 0.7#1#1.2#1#4/sqrt(2)*(1/8)
 tau <- 1#5
-M <- 1000#1000#410#320#1000#350#1000#250#1000#402#600#250#M <- 600#500#100#250#250
+M <- 1000#1000#1000#410#320#1000#350#1000#250#1000#402#600#250#M <- 600#500#100#250#250
 get.truth <- FALSE
 interaction.AL <- FALSE#FALSE#TRUE
 misspecify.Y <- TRUE
@@ -97,7 +97,7 @@ change.point <- NULL
 if (interaction.Atime) {
     if (misspecify.Y) {
         change.point <- NULL
-        outcome.model <- Surv(time, delta==1) ~ A*L3+L1+L2+L3*L1
+        outcome.model <- Surv(time, delta==1)~A*L3+L1+L2+L3*L1
     } else {
         change.point <- t0
         outcome.model <- Surv(time, delta==1)~A+L1+L2+L3
@@ -134,12 +134,14 @@ out <- foreach(m=1:M, .errorhandling="pass"#, #.combine=list, .multicombine = TR
                                   censoring.high=censoring.high,
                                   interaction.Atime=interaction.Atime,
                                   interaction.AL=interaction.AL)
+
+                   print(paste0("m=", m))
                   
                    list(#-- estimate difference effect:
                        "diff"=cox.tmle(dt, treat.effect="both", change.point=change.point,
                                        outcome.model=outcome.model, mod.period2=mod.period2),
                        #-- estimate effect A=1: 
-                       "A=1"=cox.tmle(dt, change.point=change.point,
+                       "A=1"=cox.tmle(dt, change.point=change.point,browse=FALSE,
                                       outcome.model=outcome.model, mod.period2=mod.period2),
                        #-- estimate effect A=0: 
                        "A=0"=cox.tmle(dt, treat.effect="0", change.point=change.point,
@@ -167,10 +169,11 @@ saveRDS(out,
 
 if (FALSE) {
 
-    M <- 1000
+    M <- 300#1000#300#50#1000
+    misspecify.Y <- FALSE#TRUE
     out <- readRDS(file=paste0("./simulation-cox-targeting/output/",
                                "outlist-cox-tmle-est",
-                               #iRfelse(a==0, "-A=0", "-A=1"),
+                               #ifelse(a==0, "-A=0", "-A=1"),
                                ifelse(interaction.AL, "-interactionAL", ""),
                                ifelse(interaction.Atime, "-interactionAtime", ""),
                                ifelse(randomize.A, "-randomizeA", ""),

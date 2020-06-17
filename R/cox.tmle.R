@@ -4,7 +4,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
                      cens.model=Surv(time, delta==0)~L1+L2+L3+A*L1,
                      treat.model=A~L1+L2+L3,
                      treat.effect=c("1", "0", "both"), 
-                     output.km=FALSE, output.hr=FALSE,
+                     output.km=FALSE, output.hr=FALSE, centered=TRUE, 
                      maxIter=5, verbose=TRUE, browse=FALSE) {
 
     #-- 0 -- some initializations:
@@ -49,7 +49,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
         dt2 <- rbind(dt, dt)[order(id)]
         dt2[, period:=1:.N, by="id"]
 
-        dt2 <- dt2[!time.indicator | period==1]
+        #dt2 <- dt2[!time.indicator | period==1]
         dt2[period==1, `:=`(tstart=0, tstop=(time<=t0)*time+(time>t0)*t0)]
         dt2[period==2, `:=`(tstart=t0, tstop=time)]
         dt2[period==1 & !time.indicator, delta:=0]
@@ -62,9 +62,10 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
                                                              " + I((period==2)&(", A.name, "==1))", mod.period2, " + ",
                                                              mod1[3]))))
 
-        fit.cox <- coxph(formula(mod2), data=dt2)
+        fit.cox <- coxph(formula(mod2), data=dt2[!time.indicator | period==1])
     } else { #-- if there is no change-point:
-        fit.cox <- coxph(outcome.model, data=dt)
+        fit.cox <- coxph(outcome.model, #outcome.model,
+                         data=dt)
     }
     if (verbose) print(fit.cox)
 
@@ -107,7 +108,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
     setnames(bhaz.cox, "hazard", "cens.chaz")
     bhaz.cox[, cens.dhaz:=c(0, diff(cens.chaz))]
 
-    if (FALSE) {#(length(change.point)>0) { # CHECK: MAY NOT NEED THIS.
+    if (length(change.point)>0) { # CHECK: MAY NOT NEED THIS.
         bhaz.cox <- rbind(bhaz.cox,
                           data.table(time=change.point, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0),
                           data.table(time=tau, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0))[order(time)]
@@ -140,6 +141,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
     } else {
         dt.a[, fit.cox:=predict(fit.cox, newdata=dt.a, type="risk")]
     }
+
     dt.a[, fit.cens.a:=predict(cens.cox, newdata=dt.a, type="risk")]
 
     mat <- do.call("rbind", lapply(1:n, function(i) {
@@ -204,8 +206,8 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
                        by="id"]
             return(mean(out[, 2][[1]])) 
         }
-        
-        print(paste0("m=", m, ", iter=", iter, ", estimate eps: ",
+
+        print(paste0("iter=", iter, ", estimate eps: ",
                      round(eps.hat <- nleqslv(0.01, function(eps) eval.equation(mat, eps))$x, 4)))
     
         #-- 12b -- update hazard:
