@@ -4,8 +4,10 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
                      cens.model=Surv(time, delta==0)~L1+L2+L3+A*L1,
                      treat.model=A~L1+L2+L3,
                      treat.effect=c("1", "0", "both"), 
-                     output.km=FALSE, output.hr=FALSE, centered=TRUE, 
-                     maxIter=5, verbose=TRUE, browse=FALSE) {
+                     output.km=FALSE, output.hr=FALSE, centered=TRUE,
+                     one.step=FALSE, deps.size=0.001, no.small.steps=100,
+                     estimate.curve=FALSE, ## <-- only testing this now. 
+                     maxIter=5, verbose=TRUE, browse=FALSE, browse2=FALSE) {
 
     #-- 0 -- some initializations:
 
@@ -64,7 +66,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
         fit.cox <- coxph(formula(mod2), data=dt2[!time.indicator | period==1])
     } else { #-- if there is no change-point:
-        fit.cox <- coxph(outcome.model, #outcome.model,
+        fit.cox <- coxph(as.formula(deparse(outcome.model)), #outcome.model,
                          data=dt)
     }
     if (verbose) print(fit.cox)
@@ -108,7 +110,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
     setnames(bhaz.cox, "hazard", "cens.chaz")
     bhaz.cox[, cens.dhaz:=c(0, diff(cens.chaz))]
 
-    if (length(change.point)>0) { # CHECK: MAY NOT NEED THIS.
+    if (length(change.point)>0) {
         bhaz.cox <- rbind(bhaz.cox,
                           data.table(time=change.point, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0),
                           data.table(time=tau, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0))[order(time)]
@@ -123,10 +125,14 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
     #-- 7 -- dublicate bhaz.cox; for each treatment option:
 
-    mat.cox <- do.call("rbind", lapply(a, function(aa) data.table(A=aa, bhaz.cox)[time<=tau]))
+    if (estimate.curve) {
+        mat.cox <- do.call("rbind", lapply(a, function(aa) data.table(A=aa, bhaz.cox)))
+    } else {
+        mat.cox <- do.call("rbind", lapply(a, function(aa) data.table(A=aa, bhaz.cox)[time<=tau]))
+    }
 
     #-- 8 -- add subject-specific information:
-    if (browse) browser()
+
     dt.a <- do.call("rbind", lapply(a, function(aa) {
         dt.tmp <- copy(dt)
         dt.tmp[, A:=aa]
@@ -162,8 +168,140 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
     }))
 
     #-- 9 -- compute clever covariates:
-    
+
     mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
+
+    if (browse) browser()
+    
+    if (estimate.curve) {
+
+        mat[, k:=0:(.N-1), by="id"]
+
+        surv.mat <- dcast(mat[time>0], id ~ k, value.var="surv.t")
+
+        mat.big <- merge(mat[time>0, c("id", "time", "k", "dhaz", "fit.cox", "surv.t", "Ht",
+                                       A.name, "A.obs", "time.obs", "delta.obs"), with=FALSE],
+                         surv.mat, by="id")
+
+        mat.big.melt <- melt(mat.big, id.vars=c("id", "time", "k", "dhaz", "fit.cox", "surv.t", "Ht",
+                                                A.name, "A.obs", "time.obs", "delta.obs"),
+                             #variable.factor=FALSE,
+                             variable.name="tau",
+                             value.name="surv.tau")#[k<=as.numeric(tau)]
+
+        mat.big.melt[, tau:=as.numeric(as.character(tau))]
+        mat.big.melt <- mat.big.melt[k<=tau]
+
+        mat.big.melt[, dhaz.fit:=dhaz*fit.cox]
+        mat.big.melt[, surv.t.check:=exp(-cumsum(dhaz.fit)), by=c("id", "tau")]        
+        mat.big.melt[, surv.tau.check:=surv.t[.N], by=c("id", "tau")]
+        
+        mat.big.melt[id==1 & tau==10]
+
+        mat.big.melt[, Ht.lambda:=surv.tau/surv.t]
+
+        #-- evaluate survival curve? 
+        mat.surv.curve <- mat.big.melt[, 1-surv.tau[1], by=c("tau", "id")][, mean(V1), by="tau"]
+        par(mfrow=c(1,6))
+        plot(mat.surv.curve[, tau], mat.surv.curve[, V1])
+
+        tau2 <- max((1:length(unique.times))[unique.times<=tau])
+        mat.surv.curve[tau==tau2]        
+
+        eic.mat <- mat.big.melt[, unique(tau)]
+
+        if (verbose) print.steps <- round(seq(1, no.small.steps, length=round(no.small.steps/min(no.small.steps, 10))))
+
+        if (browse2) browser()
+        
+        for (iter in 1:no.small.steps) {
+
+            if (verbose & (iter %in% print.steps))
+                print(paste0(round(iter/no.small.steps*100), "% finished ....."))
+
+            eic <- mat.big.melt[(get(A.name)==A.obs), sum((time<=time.obs)*Ht*Ht.lambda*(
+                1*(delta.obs==1 & time==time.obs) - dhaz.fit
+            )), by=c("tau", "id")][, mean(V1), by="tau"][, 2][[1]]
+
+            eic.mat <- cbind(eic.mat, eic)
+
+            if (verbose & (iter %in% print.steps))
+                print(paste0("eic norm = ", eic.norm <- sqrt(sum(eic^2))))
+            
+            delta.dt <- data.table(tau=mat.big.melt[, unique(tau)],
+                                   delta=eic / eic.norm)
+
+            #-- update hazard:
+            mat.big.melt <- merge(mat.big.melt, delta.dt, by="tau")
+            mat.big.melt[, dhaz.fit:=dhaz.fit*exp(delta*deps.size*Ht.lambda*Ht)]
+
+            #-- update survival: 
+            mat.big.melt[, surv.t:=exp(-cumsum(dhaz.fit)), by=c("id", "tau")]        
+            mat.big.melt[, surv.tau:=surv.t[.N], by=c("id", "tau")]
+
+            #-- update clever covariate: 
+            mat.big.melt[, Ht.lambda:=surv.tau/surv.t]
+
+            #-- evaluate survival curve? 
+            mat.surv.curve <- mat.big.melt[, 1-surv.tau[1], by=c("tau", "id")][, mean(V1), by="tau"]
+            plot(mat.surv.curve[, tau], mat.surv.curve[, V1])
+
+            mat.big.melt[, delta:=NULL]
+
+            if (eic.norm<1/(nrow(dt))) {
+                break
+            }
+        }
+
+        #-- evaluate survival curve? 
+        #mat.surv.curve <- mat.big.melt[, 1-surv.tau[1], by=c("tau", "id")][, mean(V1), by="tau"]
+
+        #-- test that it is even increasing :-)
+        #mat.surv.curve[, V1.1:=c(0, diff(V1))]
+        #mat.surv.curve[, table(V1.1>=0)]
+        #mat.surv.curve[V1.1<0]
+        #plot(mat.surv.curve[V1.1<0, tau], mat.surv.curve[V1.1<0, V1], col="blue")
+        #lines(mat.surv.curve[, tau], mat.surv.curve[, V1])
+        #mat.surv.curve[, V1.1:=NULL]
+        #mat.surv.curve[tau2]
+
+        #-- solves the time-point specific equation?? 
+        #mat2 <- mat.big.melt[tau==max((1:length(unique.times))[unique.times<=1.2])]
+
+        #eval.equation <- function(mat, eps) {
+        #    out <- mat[get(A.name)==A.obs, sum( (time<=time.obs) * Ht * Ht.lambda *
+        #                                        ( (delta.obs==1 & time==time.obs) -
+        #                                          exp( eps * Ht * Ht.lambda ) * dhaz.fit )),
+        #               by="id"]
+        #    return(mean(out[, 2][[1]])) 
+        #} 
+
+        #eval.equation(mat2, 0)
+        # yes! 
+
+        #-- finally:
+        eic1 <- mat.big.melt[, sum((get(A.name)==A.obs)*(time<=time.obs)*Ht*Ht.lambda*(
+            1*(delta.obs==1 & time==time.obs) - dhaz.fit
+        )), by=c("tau", "id")]#[, mean(V1), by="tau"][, 2][[1]]
+
+        eic2 <- merge(merge(eic1,
+                            mat.big.melt[get(A.name)==a, surv.tau[1], by=c("tau", "id")],
+                            by=c("tau", "id")),
+                      mat.big.melt[, surv.tau[1], by=c("tau", "id")][, mean(V1), by="tau"],
+                      by="tau")
+
+        eic3 <- eic2[, sqrt(mean((V1.x+V1.y-V1)^2)/n), by="tau"]#[tau2]
+
+        names(mat.surv.curve)[2] <- "tmle.fit"
+        names(eic3)[2] <- "sd.eic"
+
+        out1 <- merge(mat.surv.curve, eic3, by="tau")
+        out1[, tau:=unique.times[tau]]
+        
+        return(out1[1:nrow(out1)])
+
+    }
+
     mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
     mat[, Ht.lambda:=surv.tau / surv.t]
 
@@ -196,9 +334,8 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
     #-- 12 -- tmle:
 
-    for (iter in 1:maxIter) {
+    if (one.step) {
 
-        #-- 12a -- estimate eps:
         eval.equation <- function(mat, eps) {
             out <- mat[get(A.name)==A.obs, sum( (time<=time.obs) * Ht * Ht.lambda *
                                                 ( (delta.obs==1 & time==time.obs) -
@@ -207,24 +344,41 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
             return(mean(out[, 2][[1]])) 
         }
 
-        print(paste0("iter=", iter, ", estimate eps: ",
-                     round(eps.hat <- nleqslv(0.01, function(eps) eval.equation(mat, eps))$x, 4)))
-    
-        #-- 12b -- update hazard:
-        mat[, fit.cox:=fit.cox*exp(eps.hat*Ht.lambda*Ht)]
-        mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
-        mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
+        #--- decide on direction of small eps increments: 
+        if (abs(eval.equation(mat, -0.01))<abs(eval.equation(mat, 0.01))) {
+            deps <- -deps.size
+        } else {
+            deps <- deps.size
+        }
 
-        #-- 12c -- evaluate target parameter:x
-        #tmle.fit <- mean(mat[get(A.name)==a, 1-surv.tau[1], by="id"][,2][[1]])
+        #--- initial sign of eic equation: 
+        sign.eic <- sign(eval.equation(mat, -0.01))
+
+        #--- one-step: track eic equation with small step deps: 
+        for (step in 1:no.small.steps) {
+
+            mat[, fit.cox:=fit.cox*exp(deps*Ht.lambda*Ht)]
+            mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
+            mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
+
+            print(eic.value <- eval.equation(mat, deps))
+
+            if  (sign.eic*eic.value<=0) {
+                break
+            }            
+        }
+
+        eval.equation(mat, 0)
+
+        #-- 12a -- evaluate target parameter:x
         tmle.fit <- mean(rowSums(sapply(a, function(aa)
         (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
 
-        #-- 12d -- update clever covariate:
+        #-- 12b -- update clever covariate:
         mat[surv.t>0, Ht.lambda:=surv.tau/surv.t]
         mat[surv.t==0, Ht.lambda:=0]
 
-        #-- 12e -- compute sd:
+        #-- 12c -- compute sd:
         eval.ic <- function(mat) {
             out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
                               ( (delta.obs==1 & time==time.obs) -
@@ -238,12 +392,99 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
             return(sqrt(mean(ic.squared)/n))
         }
 
-        tmle.list[[iter+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
+        tmle.list[[length(tmle.list)+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
             
-        if  (abs(eval.equation(mat, 0))<=eval.ic(mat)/(sqrt(n)*log(n))) {
-            break
+    }
+
+    if (!one.step) {
+        
+        for (iter in 1:maxIter) {
+
+            #-- 12a -- estimate eps:
+            eval.equation <- function(mat, eps) {
+                out <- mat[get(A.name)==A.obs, sum( (time<=time.obs) * Ht * Ht.lambda *
+                                                    ( (delta.obs==1 & time==time.obs) -
+                                                      exp( eps * Ht * Ht.lambda ) * dhaz * fit.cox )),
+                           by="id"]
+                return(mean(out[, 2][[1]])) 
+            }
+
+            print(paste0("iter=", iter, ", estimate eps: ",
+                         round(eps.hat <- nleqslv(0.01, function(eps) eval.equation(mat, eps))$x, 4)))
+    
+            #-- 12b -- update hazard:
+            mat[, fit.cox:=fit.cox*exp(eps.hat*Ht.lambda*Ht)]
+            mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
+            mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
+
+            #-- 12c -- evaluate target parameter:x
+            #tmle.fit <- mean(mat[get(A.name)==a, 1-surv.tau[1], by="id"][,2][[1]])
+            tmle.fit <- mean(rowSums(sapply(a, function(aa)
+            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
+
+            #-- 12d -- update clever covariate:
+            mat[surv.t>0, Ht.lambda:=surv.tau/surv.t]
+            mat[surv.t==0, Ht.lambda:=0]
+
+            #-- 12e -- compute sd:
+            eval.ic <- function(mat) {
+                out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
+                                  ( (delta.obs==1 & time==time.obs) -
+                                    dhaz * fit.cox )), by="id"]
+                ic.squared <- (out[, 2][[1]] +
+                               #(mat[A==a, surv.tau[1], by="id"][,2][[1]]) -
+                               rowSums(sapply(a, function(aa)
+                               (2*(aa==a[1])-1)*(mat[get(A.name)==aa, surv.tau[1], by="id"][,2][[1]]))) -
+                               (length(a)==2)*tmle.fit-
+                               (length(a)==1)*(1-tmle.fit))^2
+                return(sqrt(mean(ic.squared)/n))
+            }
+
+            tmle.list[[iter+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
+            
+            if  (abs(eval.equation(mat, 0))<=eval.ic(mat)/(sqrt(n)*log(n))) {
+                break
+            }
         }
     }
 
     return(tmle.list)    
 }
+
+
+
+
+
+
+
+
+
+
+
+
+if (FALSE) {
+    mat.big.melt[, Ht.2:=Ht.lambda*Ht]
+                
+    test <- dcast(mat.big.melt, id+tau~k, value.var="Ht.2")
+    test2 <- dcast(mat.big.melt, id+tau~k, value.var="dhaz.fit")
+
+    # unique(mat.big.melt[, c("id", "tau", "dhaz.fit"), with=FALSE])
+            
+    for (jj in names(test))
+        test[is.na(get(jj)), (jj):=0]
+    for (jj in names(test2))
+        test2[is.na(get(jj)), (jj):=0]
+                 
+    exp(as.matrix(test[, -c("id", "tau")]) %*% as.matrix(delta, nrow=1))
+    test3 <- merge(test[, c("id", "tau"), with=FALSE][, exp:=drop(exp(as.matrix(test[, -c("id", "tau")]) %*% as.matrix(delta, nrow=1)))],
+                   test2)
+    for (jj in names(test3[, -c("id", "tau", "exp")]))
+        test3[, (jj):=get(jj)*exp]
+
+    test4 <- melt(test3[, -"exp"], id.vars=c("id", "tau"), variable.name="k", value.name="dhaz.fit")
+    test4[, k:=as.numeric(as.character(k))]
+
+    mat.big.melt <- merge(mat.big.melt, test4[k<=tau], by=c("id", "tau", "k"))
+    setnames(mat.big.melt, c("dhaz.fit.x", "dhaz.fit.y"), c("dhaz.fit.old", "dhaz.fit"))
+}
+            
