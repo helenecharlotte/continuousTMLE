@@ -38,7 +38,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
     #-- 1 -- estimate censoring distribution:
 
-    cens.cox <- coxph(cens.model, data=dt)
+    cens.cox <- coxph(as.formula(deparse(cens.model)), data=dt)
 
     #-- 2 -- estimate treatment propensity: 
 
@@ -449,7 +449,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
                 print(paste0(round(iter/no.small.steps*100), "% finished ....."))
 
             if (FALSE) {
-                eic <- mat.big.melt[(get(A.name)==A.obs), sum((time==time.obs)*Ht*Ht.lambda*(
+                eic <- mat.big.melt[, sum((get(A.name)==A.obs)*(time<=time.obs)*Ht*Ht.lambda*(
                     1*(delta.obs==1 & time==time.obs) - dhaz.fit
                 )), by=c("tau", "id")][, mean(V1), by="tau"][, 2][[1]] 
             } else {
@@ -471,17 +471,13 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
             if (FALSE) {
                 mat.big.melt <- merge(mat.big.melt, delta.dt, by="tau")
                 mat.big.melt[, dhaz.fit:=dhaz.fit*exp(delta*deps.size*Ht.lambda*Ht)]
-            } else if (FALSE) {
-                setnames(delta.dt, "tau", "k")
-                mat.big.melt <- merge(mat.big.melt, delta.dt, by="k")
-                mat.big.melt[id==1 & k==2][, unique(dhaz.fit)]            
-                mat.big.melt[, lp.update:=sum(Ht.lambda*Ht*delta*deps.size), by=c("tau", "id")]
-                mat.big.melt[, dhaz.fit:=dhaz.fit*exp(lp.update)]
-                mat.big.melt[id==1 & k==2][, unique(dhaz.fit)]
             } else {
                 mat.big.melt <- merge(mat.big.melt, delta.dt, by="tau")
-                mat.big.melt[id==1 & k==2][, unique(dhaz.fit)]            
-                mat.big.melt[, lp.update:=sum(Ht.lambda*Ht*delta*deps.size), by=c("k", "id")]
+                mat.big.melt[id==1 & k==2][, unique(dhaz.fit)]
+               # mat.big.melt[, lp.update1:=delta*deps.size*Ht.lambda*Ht, by=c("k", "id")]
+                mat.big.melt[, lp.update:=sum(#(get(A.name)==A.obs)*#(time<=time.obs)*
+                                              Ht.lambda*Ht*delta*deps.size), by=c("id", "k")]
+                #mat.big.melt[, c("lp.update", "lp.update1")]
                 mat.big.melt[, dhaz.fit:=dhaz.fit*exp(lp.update)]
                 mat.big.melt[id==1 & k==2][, unique(dhaz.fit)]
             }
@@ -506,6 +502,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
         #plot(eic.mat[tau2, ][-1])
         #plot(eic.mat[102, ][-1])
+        #plot(eic.mat[2, ][-1])
         # cbind( eic.mat[tau2, ],  eic.mat[100, ] )
         
         #-- evaluate survival curve? 
