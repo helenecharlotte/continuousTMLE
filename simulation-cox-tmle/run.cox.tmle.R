@@ -69,7 +69,7 @@ source("./R/poisson.hal.sl.R")
 ## set parameters for simulations
 #-------------------------------------------------------------------------------------------#
 
-M <- 500
+M <- 50
 get.truth <- FALSE
 
 betaA <- -0.15
