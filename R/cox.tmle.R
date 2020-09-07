@@ -1,17 +1,41 @@
-cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.squared+L1*L2+L3, # FIXME: RIGHT NOW MUST BE CALLED "time" AND "delta"
-                     change.point=NULL, mod.period1="", mod.period2="*L3",
+cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.squared+L1*L2+L3, # RIGHT NOW MUST BE CALLED "time" AND "delta"
+                     change.point=NULL, mod.period1="*L3", mod.period2="*L3",
                      tau=c(1.2),
+                     km.cens=FALSE, 
                      cens.model=Surv(time, delta==0)~L1+L2+L3+A*L1,
                      treat.model=A~L1+L2+L3,
                      treat.effect=c("1", "0", "both"), 
                      output.km=FALSE, output.hr=FALSE, centered=TRUE,
-                     one.step=FALSE, deps.size=0.001, no.small.steps=100,
-                     estimate.curve=FALSE, ## <-- only testing this now.
-                     poisson.initial=FALSE, lambda.cv=NULL, cut.covars=5, cut.time=10, cut.time.A=4,## <-- only testing this now.
+                     poisson.initial=FALSE, lambda.cv=NULL,
+                     cut.covars=5, cut.time=10, cut.time.A=4,
                      covars=c("L1", "L2", "L3"),
-                     plot.poisson=TRUE, 
+                     penalize.time=TRUE, adjust.penalization=TRUE,
                      poisson.cens=FALSE, cut.L1.A=5, cut.L.interaction=5, 
-                     maxIter=5, verbose=TRUE, browse=FALSE, browse2=FALSE, browse3=FALSE) {
+                     maxIter=5, verbose=TRUE, browse=FALSE, browse2=FALSE,
+                     browse3=FALSE, browse4=FALSE,
+                     only.cox=FALSE, 
+                     SL=FALSE, SL.cens=FALSE, SL.poisson=FALSE,
+                     SL.outcome.models=list(mod1=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.9),
+                                            mod1a=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.2765),
+                                            mod2=c(Surv(time, delta==1)~A*L1.squared+L1*L2+L3, t0=NULL),
+                                            mod3=c(Surv(time, delta==1)~A+L1.squared, t0=NULL),
+                                            mod4=c(Surv(time, delta==1)~A+L1+L2+L3, t0=1.2),
+                                            mod5=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.3),
+                                            mod6=c(Surv(time, delta==1)~A+L1+L2+L3, t0=NULL),
+                                            mod7=c(Surv(time, delta==1)~A+L3.squared, t0=NULL),
+                                            mod8=c(Surv(time, delta==1)~A+L1+L2, t0=0.9),
+                                            mod8a=c(Surv(time, delta==1)~A+L1+L2, t0=0.2765),
+                                            mod9=c(Surv(time, delta==1)~A, t0=NULL),
+                                            mod10=c(Surv(time, delta==1)~L1+L2+L3+A*L1, t0=NULL),
+                                            mod11=c(Surv(time, delta==1)~1, t0=NULL),
+                                            mod12=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.192018),
+                                            #mod13=c(Surv(time, delta==1)~A+L1+L2+L3+I((period==2)&(L3>=0.5)), t0=0.192018),
+                                            #mod13=c(Surv(time, delta==1)~A+L1+L2+L3+I((period==2)&(L3>=0.5)), t0=0.192018*1.2),
+                                            #mod14=c(Surv(time, delta==1)~A+L1+L2+L3+I((period==2)&(L3>=0.5)), t0=0.9),
+                                            mod15=c(Surv(time, delta==1)~A*L3+L1+L2, t0=0.2765),
+                                            mod16=c(Surv(time, delta==1)~A*L3+L1+L2, t0=0.9),
+                                            mod17=c(Surv(time, delta==1)~A*L3+L1+L2, t0=NULL)
+                                            )) {
 
     #-- 0 -- some initializations:
 
@@ -22,6 +46,25 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
                                           value=TRUE)))
         for (col in names.squared)
             dt[, (paste0(col, ".squared")):=get(col)^2]
+    }
+
+    if (length(grep(".root", as.character(outcome.model)[3]))>0) {
+        names.root <- unique(gsub(".root", "",
+                                     grep(".root", unlist(strsplit(gsub("\\+", " ",
+                                                                           as.character(outcome.model)[3]), " ")),
+                                          value=TRUE)))
+        for (col in names.root)
+            dt[, (paste0(col, ".root")):=sqrt(get(col))]
+    }
+
+    
+    if (length(grep(".sin", as.character(outcome.model)[3]))>0) {
+        names.sin <- unique(gsub(".sin", "",
+                                 grep(".sin", unlist(strsplit(gsub("\\+", " ",
+                                                                   as.character(outcome.model)[3]), " ")),
+                                      value=TRUE)))
+        for (col in names.sin)
+            dt[, (paste0(col, ".sin")):=sin(get(col)*8)]
     }
 
     #-- get number of subjects:
@@ -38,14 +81,73 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
     #-- 1 -- estimate censoring distribution:
 
+    if (km.cens) {
+        km.mod <- paste0(gsub("Surv", "Hist", as.character(cens.model)[2]), "~1")
+        km.fit <- summary(fit.km <- prodlim(formula(km.mod), data=dt),
+                          times=unique.times, asMatrix=TRUE)$table
+        cens.km <- data.table(km.fit[, c("time", "surv")])
+    }
+
+    if (SL.cens) { #-- cox-SL
+
+        print("use SL for censoring")
+
+        SL.cens.outcome.models <- lapply(SL.outcome.models, function(mod) {
+            mod1 <- as.character(mod[[1]])
+            return(c(as.formula(paste0(gsub("1", "0", mod1[2]), mod1[1], mod1[3])), t0=mod[2][[1]]))
+        })
+
+        dtcens <- copy(dt)
+        dtcens[, delta:=1-delta]
+
+        SL.pick <- cox.sl(dtcens, tau=tau, A.name=A.name,
+                          outcome.models=SL.cens.outcome.models)
+
+        SL.model <- SL.cens.outcome.models[[SL.pick]]
+
+        cens.model <- SL.model[[1]]
+
+        print(paste0("model picked for censoring: ", cens.model))
+
+        if (length(grep(".squared", as.character(cens.model)[3]))>0) {
+            names.squared <- unique(gsub(".squared", "",
+                                         grep(".squared", unlist(strsplit(gsub("\\+", " ",
+                                                                               as.character(cens.model)[3]), " ")),
+                                              value=TRUE)))
+            for (col in names.squared)
+                dt[, (paste0(col, ".squared")):=get(col)^2]
+        }
+
+
+    }
+    
     cens.cox <- coxph(as.formula(deparse(cens.model)), data=dt)
 
     #-- 2 -- estimate treatment propensity: 
 
     prob.A <- predict(glm(treat.model, data=dt), type="response")
 
-    #-- 3 -- estimate outcome distribution:    
+    #-- 3 -- estimate outcome distribution:
 
+    if (SL) { #-- cox-SL
+
+        print("use SL")
+        
+        SL.pick <- cox.sl(dt, tau=tau, A.name=A.name,
+                          outcome.models=SL.outcome.models)
+        SL.model <- SL.outcome.models[[SL.pick]]
+        
+        if (length(SL.model)>1) {
+            print(paste0("model picked: ", outcome.model <- SL.model[[1]]))
+            print(paste0("model picked: ", change.point <- SL.model[[2]]))
+        } else {
+            print(paste0("model picked: ", outcome.model <- SL.model[[1]]))
+        }
+
+    }
+
+    #-- Apply either specified model or the one picked by SL
+    
     if (length(change.point)>0) { #-- if there is a change-point:
 
         print("estimate time-varying hazard")
@@ -73,8 +175,11 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
         fit.cox <- coxph(as.formula(deparse(outcome.model)), #outcome.model,
                          data=dt)
     }
+    
     if (verbose) print(fit.cox)
 
+    if (only.cox) return()
+    
     #-- 4 -- use kaplan-meier for estimation:
 
     if (output.km) {
@@ -82,8 +187,15 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
                          "~", A.name)
         km.fit <- summary(fit.km <- prodlim(formula(km.mod), data=dt),
                           times=tau, asMatrix=TRUE)$table
-        km.est <- 1-as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", a),]["surv"])
-        km.se <- as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", a),]["se.surv"])
+        if (length(a)==1) {
+            km.est <- 1-as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", a),]["surv"])
+            km.se <- as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", a),]["se.surv"])
+        } else {
+            km.est <- 1-as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", "1"),]["surv"])-
+                (1-as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", "0"),]["surv"]))
+            km.se <- sqrt((as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", "1"),]["se.surv"]))^2+
+                          (as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", "0"),]["se.surv"]))^2)
+        }
     }
 
     #-- 5 -- estimate crude HR:
@@ -91,7 +203,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
     if (output.hr) {
         hr.mod <- paste0(as.character(outcome.model)[2],
                          "~", A.name)
-        hr <- coxph(formula(hr.mod), data=dt)
+        hr <- coxph(formula(hr.mod), data=dt[time<=tau])
         if (verbose) print(hr)
         hr.pval <- summary(hr)$coefficients[A.name, 5]
         hr <- coef(hr)[A.name]
@@ -129,7 +241,7 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
     #-- 7 -- dublicate bhaz.cox; for each treatment option:
 
-    if (estimate.curve) {
+    if (poisson.initial) {
         mat.cox <- do.call("rbind", lapply(a, function(aa) data.table(A=aa, bhaz.cox)))
     } else {
         mat.cox <- do.call("rbind", lapply(a, function(aa) data.table(A=aa, bhaz.cox)[time<=tau]))
@@ -154,16 +266,31 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
     dt.a[, fit.cens.a:=predict(cens.cox, newdata=dt.a, type="risk")]
 
+    if (km.cens) {
+        setnames(cens.km, "surv", "surv.cens")
+        dt.a <- merge(dt.a, cens.km)
+    }
+
     mat <- do.call("rbind", lapply(1:n, function(i) {
         tmp <- cbind(id=i, mat.cox)
         tmp[, time.obs:=dt[id==i, time]]
         tmp[, delta.obs:=dt[id==i, delta]]
         tmp[, A.obs:=dt[id==i, get(A.name)]]
+        if (km.cens) {
+            tmp <- merge(tmp, dt.a[, c("surv.cens", "time", A.name), with=FALSE], by=c("time", A.name))
+            tmp[, surv.km.C1:=c(1, surv.cens[-.N])]
+        }  
         tmp <- merge(tmp, dt.a[id==i, c(A.name, "fit.cens.a"), with=FALSE], by=A.name)
         tmp[, surv.C1:=exp(-fit.cens.a*cens.chaz.1)]
-        tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
-                  ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))*
-                   exp(-fit.cens.a*cens.chaz.1))]
+        if (km.cens) {
+            tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
+                      ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))*
+                       surv.km.C1)]
+        } else {
+            tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
+                      ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))*
+                       exp(-fit.cens.a*cens.chaz.1))]
+        }
         if (length(change.point)>0) {
             tmp[, period:=(time<=change.point)*1+(time>change.point)*2]
             tmp <- merge(tmp, dt2.a[id==i, c("period", A.name, "fit.cox"), with=FALSE], by=c("period", A.name))
@@ -175,389 +302,42 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
     #-- 9 -- compute clever covariates:
 
     mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
+    mat[, surv.tau:=surv.t[time==max(time[time<=tau])], by=c("id", "A")]
     
     if (browse) browser()
 
+    #-- 10 -- poisson used for initial:
+
     if (poisson.initial) {
+        mat <- poisson.hal(mat=mat, dt=dt, X=NULL, delta.outcome=1, verbose=verbose,
+                           cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
+                           cut.time.A=cut.time.A,
+                           cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
+                           covars=covars,
+                           poisson.cens=poisson.cens,
+                           SL.poisson=SL.poisson, 
+                           lambda.cv=lambda.cv, 
+                           penalize.time=penalize.time, adjust.penalization=adjust.penalization)
 
-        #-- merge covariate information to mat:
-        mat.pois <- merge(mat, dt[, c("id", c(covars)), with=FALSE], by="id")
-        mat.pois[, tdiff:=c(diff(time),0), by="id"]
-        mat.pois[, event:=1*(time==time.obs & delta.obs==1)]
-
-        indicator.fun <- function(xvar, xcut) {
-            xgrid <- round(seq(mat.pois[, min(get(xvar))],
-                               mat.pois[, max(get(xvar))],
-                               length=xcut)[-c(1,xcut)], 2)
-            #return(paste0(paste0("(", xvar, ">=", xgrid, collapse=")+"), ")+"))
-            return(paste0("(", xvar, ">=", xgrid, ")"))
-        }
-
-        X <- model.matrix(formula(paste0(
-            "event~",
-            paste0("-1+A.obs+",
-                   paste0(indicator.fun("time", cut.time), collapse="+"), "+", 
-                   paste0(paste0("A.obs:", indicator.fun("time", cut.time.A)), collapse="+"), "+",
-                   paste0(paste0("A.obs:", indicator.fun("L1", cut.L1.A)), collapse="+"), "+",
-                   #paste0(paste0(indicator.fun("L1", cut.L.interaction), ":",
-                   #              indicator.fun("L2", cut.L.interaction)), collapse="+"), "+",
-                   paste0(apply(expand.grid(indicator.fun("L1", cut.L.interaction),
-                                            indicator.fun("L2", cut.L.interaction)), 1,
-                                function(x) paste0(x, collapse=":")), collapse="+"), "+", 
-                   paste0(sapply(covars, function(covar) paste0(indicator.fun(covar, cut.covars), collapse="+")),
-                          collapse="+")
-                   ))), 
-            data=mat.pois)
-
-        tst0 <- data.table(tdiff=mat.pois[, tdiff], time=mat.pois[, time],
-                           event=mat.pois[, event], X)
-
-        cols <- names(tst0)[-(1:3)]
-        tst0[, RT:=sum(tdiff), by=cols]
-        tst0[, D:=sum(event), by=cols]
-        tst <- tst0[mat$time<=mat$time.obs]
-
-        tst2 <- unique(tst[, c("RT", "D", cols), with=FALSE])
-        X <- as.matrix(tst2[RT>0, cols, with=FALSE])
-        Y <- tst2[RT>0, D]
-        offset <- tst2[RT>0, log(RT)]
-
-        if (length(lambda.cv)>0) {
-            fit <- glmnet(x=X, y=Y, lambda=lambda.cv,
-                          family="poisson",
-                          offset=offset,
-                          maxit=1000)
-        } else {
-            print("CV for penalization")
-            fit <- cv.glmnet(x=X, y=Y, 
-                             family="poisson",
-                             offset=offset,
-                             maxit=1000)
-        }
-     
-        if (verbose) print(coef(fit))
-
-        X1 <- model.matrix(formula(paste0(
-            "event~",
-            paste0("-1+A+",
-                   paste0(indicator.fun("time", cut.time), collapse="+"), "+", 
-                   paste0(paste0("A:", indicator.fun("time", cut.time.A)), collapse="+"), "+",
-                   paste0(paste0("A:", indicator.fun("L1", cut.L1.A)), collapse="+"), "+",
-                   #paste0(paste0(indicator.fun("L1", cut.L.interaction), ":",
-                   #              indicator.fun("L2", cut.L.interaction)), collapse="+"), "+",
-                   paste0(apply(expand.grid(indicator.fun("L1", cut.L.interaction),
-                                            indicator.fun("L2", cut.L.interaction)), 1,
-                                function(x) paste0(x, collapse=":")), collapse="+"), "+", 
-                   paste0(sapply(covars, function(covar) paste0(indicator.fun(covar, cut.covars), collapse="+")),
-                          collapse="+")
-                   ))), 
-            data=mat.pois)
-
-        tst1 <- data.table(tdiff=mat.pois[, tdiff], time=mat.pois[, time],
-                           event=mat.pois[, event], X1)
-        
-        names(tst1) <- gsub("FA\\.obs", "FA", gsub("A", "A.obs", names(tst1)))
-
-        X1 <- as.matrix(tst1[, cols, with=FALSE])
-
-        tst0[RT>0, 
-             fit.lambda:=exp(predict(fit, X1,
-                                     newoffset=tst0[RT>0, log(RT)]))/RT]
-        tst0[is.na(fit.lambda), fit.lambda:=0]
-
-        mat.pois[, fit.lambda:=tst0$fit.lambda]
-
-        mat.pois[, fit.pois.dLambda:=fit.lambda*tdiff]
-        mat.pois[, fit.cox.dLambda:=dhaz*fit.cox]
-
-        mat.pois[, c("fit.pois.dLambda", "fit.cox.dLambda")]
-
-        mat.pois[, surv.t.pois:=exp(-cumsum(fit.pois.dLambda)), by=c("id", "A")]
-        mat.pois[, surv.tau:=surv.t[.N], by=c("id", "A")]
-        mat.pois[, surv.tau.pois:=surv.t.pois[.N], by=c("id", "A")]
-        mat.pois[, Ht.lambda:=surv.tau / surv.t]
-        mat.pois[, Ht.lambda.pois:=surv.tau.pois / surv.t.pois]
-
-        if (browse2) browser()
-        
-        if (plot.poisson) {
-            par(mfrow=c(2,3))
-
-            mat.pois[, mean.surv.t.pois:=mean(surv.t.pois), by=c("A", "time")]
-            mat.pois[, mean.surv.t:=mean(surv.t), by=c("A", "time")]
-            plot(mat.pois[id==1, time], mat.pois[id==1, fit.lambda])
-            plot(mat.pois[id==1, time], mat.pois[id==1, mean.surv.t.pois], type="l")
-            lines(mat.pois[id==1, time], mat.pois[id==1, mean.surv.t], col="blue")
-            plot(mat.pois[id==1, time], mat.pois[id==1, surv.t.pois], type="l")
-            lines(mat.pois[id==1, time], mat.pois[id==1, surv.t], col="blue")
-        }
-        
-        mat.pois[, dhaz:=fit.pois.dLambda]
-        mat.pois[, fit.cox:=1]
-
-        mat.pois[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
-        mat <- copy(mat.pois)
+        #-- 10a -- poisson used for censoring distribution:
 
         if (poisson.cens) {
-
-            #-- merge covariate information to mat:
-            mat.pois[, event:=1*(time==time.obs & delta.obs==0)]
-
-            X <- model.matrix(formula(paste0(
-                "event~",
-                paste0("-1+A.obs+",
-                       paste0(indicator.fun("time", cut.time), collapse="+"), "+", 
-                       #paste0(paste0("A.obs:", indicator.fun("time", cut.time.A)), collapse="+"), "+",
-                       paste0(paste0("A.obs:", indicator.fun("L1", cut.L1.A)), collapse="+"), "+",
-                       #paste0(paste0(indicator.fun("L1", cut.L.interaction), ":",
-                       #              indicator.fun("L2", cut.L.interaction)), collapse="+"), "+",
-                       paste0(sapply(covars, function(covar) paste0(indicator.fun(covar, cut.covars), collapse="+")),
-                              collapse="+")
-                       ))), 
-                data=mat.pois)
-
-
-            tst0 <- data.table(tdiff=mat.pois[, tdiff], time=mat.pois[, time],
-                               event=mat.pois[, event], X)
-           
-            cols <- names(tst0)[-(1:3)]
-            tst0[, RT:=sum(tdiff), by=cols]
-            tst0[, D:=sum(event), by=cols]
-            tst <- tst0[mat$time<=mat$time.obs]
-
-            tst2 <- unique(tst[, c("RT", "D", cols), with=FALSE])
-            X <- as.matrix(tst2[RT>0, cols, with=FALSE])
-            Y <- tst2[RT>0, D]
-            offset <- tst2[RT>0, log(RT)]
-
-            if (length(lambda.cv)>0) {
-                fit <- glmnet(x=X, y=Y, lambda=lambda.cv,
-                              family="poisson",
-                              offset=offset,
-                              maxit=1000)
-            } else {
-                print("CV for penalization: Censoring")
-                fit <- cv.glmnet(x=X, y=Y, 
-                                 family="poisson",
-                                 offset=offset,
-                                 maxit=1000)
-            }
-     
-            if (verbose) print(coef(fit))
-
-            X1 <- model.matrix(formula(paste0(
-                "event~",
-                paste0("-1+A+",
-                       paste0(indicator.fun("time", cut.time), collapse="+"), "+", 
-                       #paste0(paste0("A.obs:", indicator.fun("time", cut.time.A)), collapse="+"), "+",
-                       paste0(paste0("A:", indicator.fun("L1", cut.L1.A)), collapse="+"), "+",
-                       #paste0(paste0(indicator.fun("L1", cut.L.interaction), ":",
-                       #              indicator.fun("L2", cut.L.interaction)), collapse="+"), "+",
-                       paste0(sapply(covars, function(covar) paste0(indicator.fun(covar, cut.covars), collapse="+")),
-                              collapse="+")
-                       ))), 
-                data=mat.pois)
-            
-            tst1 <- data.table(tdiff=mat.pois[, tdiff], time=mat.pois[, time],
-                               event=mat.pois[, event], X1)
-        
-            names(tst1) <- gsub("FA\\.obs", "FA", gsub("A", "A.obs", names(tst1)))
-
-            X1 <- as.matrix(tst1[, cols, with=FALSE])
-
-            tst0[RT>0, 
-                 fit.lambda.cens:=exp(predict(fit, X1,
-                                              newoffset=tst0[RT>0, log(RT)]))/RT]
-            tst0[is.na(fit.lambda.cens), fit.lambda.cens:=0]
-
-            mat.pois[, fit.lambda.cens:=tst0$fit.lambda.cens]
-
-            mat.pois[, fit.pois.dLambda.cens:=fit.lambda.cens*tdiff]
-
-            mat.pois[, c("fit.pois.dLambda", "fit.cox.dLambda")]
-
-            mat.pois[, surv.cens.t.pois:=exp(-cumsum(fit.pois.dLambda.cens)), by=c("id", "A")]
-            mat.pois[, surv.cens.t1.pois:=c(1, surv.cens.t.pois[-.N]), by=c("id", "A")] 
-
-            mat.pois[, c("surv.cens.t1.pois", "surv.C1")]
-            
-            mat.pois[, Ht.pois:=Ht*surv.C1/surv.cens.t1.pois]
-            
-            mat.pois[, c("Ht.pois", "Ht")]
-
-            mat.pois[, Ht:=Ht.pois]
-           
-            if (plot.poisson) {
-                plot(mat.pois[id==1, time], mat.pois[id==1, fit.lambda.cens])
-                plot(mat.pois[id==1, time], mat.pois[id==1, surv.cens.t1.pois], type="l")
-                lines(mat.pois[id==1, time], mat.pois[id==1, surv.C1], col="blue")
-                plot(mat.pois[id==10, time], mat.pois[id==10, surv.cens.t1.pois], type="l")
-                lines(mat.pois[id==10, time], mat.pois[id==10, surv.C1], col="blue")
-            }
-
-            if (browse3) browser()
-            
-            mat <- copy(mat.pois)
+            mat <- poisson.hal(mat=mat[["mat"]], dt=dt, X=mat[["X"]], delta.outcome=0, verbose=verbose,
+                               cut.covars=cut.covars, cut.time=cut.time,
+                               cut.time.A=cut.time.A, browse=FALSE,
+                               cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
+                               covars=covars,
+                               poisson.cens=poisson.cens,
+                               SL.poisson=SL.poisson, 
+                               lambda.cv=lambda.cv,
+                               penalize.time=penalize.time, adjust.penalization=adjust.penalization)
         }
+    }
     
-    }
+    mat[surv.t>0, Ht.lambda:=surv.tau / surv.t]
+    mat[surv.t==0, Ht.lambda:=1]
 
-    if (estimate.curve) {
-
-        mat[, k:=0:(.N-1), by="id"]
-
-        surv.mat <- dcast(mat[time>0], id ~ k, value.var="surv.t")
-
-        mat.big <- merge(mat[time>0, c("id", "time", "k", "dhaz", "fit.cox", "surv.t", "Ht",
-                                       A.name, "A.obs", "time.obs", "delta.obs"), with=FALSE],
-                         surv.mat, by="id")
-
-        mat.big.melt <- melt(mat.big, id.vars=c("id", "time", "k", "dhaz", "fit.cox", "surv.t", "Ht",
-                                                A.name, "A.obs", "time.obs", "delta.obs"),
-                             #variable.factor=FALSE,
-                             variable.name="tau",
-                             value.name="surv.tau")#[k<=as.numeric(tau)]
-
-        mat.big.melt[, tau:=as.numeric(as.character(tau))]
-        mat.big.melt <- mat.big.melt[k<=tau]
-
-        mat.big.melt[, dhaz.fit:=dhaz*fit.cox]
-        mat.big.melt[, surv.t.check:=exp(-cumsum(dhaz.fit)), by=c("id", "tau")]        
-        mat.big.melt[, surv.tau.check:=surv.t[.N], by=c("id", "tau")]
-        
-        mat.big.melt[id==1 & tau==10]
-
-        mat.big.melt[, Ht.lambda:=surv.tau/surv.t]
-
-        #-- evaluate survival curve? 
-        mat.surv.curve <- mat.big.melt[, 1-surv.tau[1], by=c("tau", "id")][, mean(V1), by="tau"]
-        par(mfrow=c(1,6))
-        plot(mat.surv.curve[, tau], mat.surv.curve[, V1])
-
-        tau2 <- max((1:length(unique.times))[unique.times<=tau])
-        mat.surv.curve[tau==tau2]        
-
-        eic.mat <- mat.big.melt[, unique(tau)]
-
-        if (verbose) print.steps <- round(seq(1, no.small.steps, length=round(no.small.steps/min(no.small.steps, 10))))
-
-        if (browse2) browser()
-        
-        for (iter in 1:no.small.steps) {
-
-            if (verbose & (iter %in% print.steps))
-                print(paste0(round(iter/no.small.steps*100), "% finished ....."))
-
-            if (FALSE) {
-                eic <- mat.big.melt[, sum((get(A.name)==A.obs)*(time<=time.obs)*Ht*Ht.lambda*(
-                    1*(delta.obs==1 & time==time.obs) - dhaz.fit
-                )), by=c("tau", "id")][, mean(V1), by="tau"][, 2][[1]] 
-            } else {
-                eic <- mat.big.melt[(get(A.name)==A.obs), sum((time<=time.obs)*Ht*Ht.lambda*(
-                    1*(delta.obs==1 & time==time.obs) - dhaz.fit
-                )), by=c("tau", "id")][, mean(V1), by="tau"][, 2][[1]]
-            }
-
-            eic.mat <- cbind(eic.mat, eic)
-            eic.norm <- sqrt(sum(eic^2))
-            
-            if (verbose & (iter %in% print.steps))
-                print(paste0("eic norm = ", eic.norm))
-            
-            delta.dt <- data.table(tau=mat.big.melt[, unique(tau)],
-                                   delta=eic / eic.norm)
-
-            #-- update hazard:
-            if (FALSE) {
-                mat.big.melt <- merge(mat.big.melt, delta.dt, by="tau")
-                mat.big.melt[, dhaz.fit:=dhaz.fit*exp(delta*deps.size*Ht.lambda*Ht)]
-            } else {
-                mat.big.melt <- merge(mat.big.melt, delta.dt, by="tau")
-                mat.big.melt[id==1 & k==2][, unique(dhaz.fit)]
-               # mat.big.melt[, lp.update1:=delta*deps.size*Ht.lambda*Ht, by=c("k", "id")]
-                mat.big.melt[, lp.update:=sum(#(get(A.name)==A.obs)*#(time<=time.obs)*
-                                              Ht.lambda*Ht*delta*deps.size), by=c("id", "k")]
-                #mat.big.melt[, c("lp.update", "lp.update1")]
-                mat.big.melt[, dhaz.fit:=dhaz.fit*exp(lp.update)]
-                mat.big.melt[id==1 & k==2][, unique(dhaz.fit)]
-            }
-
-            #-- update survival: 
-            mat.big.melt[, surv.t:=exp(-cumsum(dhaz.fit)), by=c("id", "tau")]        
-            mat.big.melt[, surv.tau:=surv.t[.N], by=c("id", "tau")]
-
-            #-- update clever covariate: 
-            mat.big.melt[, Ht.lambda:=surv.tau/surv.t]
-
-            #-- evaluate survival curve? 
-            mat.surv.curve <- mat.big.melt[, 1-surv.tau[1], by=c("tau", "id")][, mean(V1), by="tau"]
-            plot(mat.surv.curve[, tau], mat.surv.curve[, V1])
-
-            mat.big.melt[, delta:=NULL]
-
-            if (eic.norm<1/(nrow(dt))) {
-                break
-            }
-        }
-
-        #plot(eic.mat[tau2, ][-1])
-        #plot(eic.mat[102, ][-1])
-        #plot(eic.mat[2, ][-1])
-        # cbind( eic.mat[tau2, ],  eic.mat[100, ] )
-        
-        #-- evaluate survival curve? 
-        #mat.surv.curve <- mat.big.melt[, 1-surv.tau[1], by=c("tau", "id")][, mean(V1), by="tau"]
-
-        #-- test that it is even increasing :-)
-        #mat.surv.curve[, V1.1:=c(0, diff(V1))]
-        #mat.surv.curve[, table(V1.1>=0)]
-        #mat.surv.curve[V1.1<0]
-        #plot(mat.surv.curve[V1.1<0, tau], mat.surv.curve[V1.1<0, V1], col="blue")
-        #lines(mat.surv.curve[, tau], mat.surv.curve[, V1])
-        #mat.surv.curve[, V1.1:=NULL]
-        #mat.surv.curve[tau2]
-
-        #-- solves the time-point specific equation?? 
-        #mat2 <- mat.big.melt[tau==max((1:length(unique.times))[unique.times<=1.2])]
-
-        #eval.equation <- function(mat, eps) {
-        #    out <- mat[get(A.name)==A.obs, sum( (time<=time.obs) * Ht * Ht.lambda *
-        #                                        ( (delta.obs==1 & time==time.obs) -
-        #                                          exp( eps * Ht * Ht.lambda ) * dhaz.fit )),
-        #               by="id"]
-        #    return(mean(out[, 2][[1]])) 
-        #} 
-
-        #eval.equation(mat2, 0)
-        # yes! 
-
-        #-- finally:
-        eic1 <- mat.big.melt[, sum((get(A.name)==A.obs)*(time<=time.obs)*Ht*Ht.lambda*(
-            1*(delta.obs==1 & time==time.obs) - dhaz.fit
-        )), by=c("tau", "id")]#[, mean(V1), by="tau"][, 2][[1]]
-
-        eic2 <- merge(merge(eic1,
-                            mat.big.melt[get(A.name)==a, surv.tau[1], by=c("tau", "id")],
-                            by=c("tau", "id")),
-                      mat.big.melt[, surv.tau[1], by=c("tau", "id")][, mean(V1), by="tau"],
-                      by="tau")
-
-        eic3 <- eic2[, sqrt(mean((V1.x+V1.y-V1)^2)/n), by="tau"]#[tau2]
-
-        names(mat.surv.curve)[2] <- "tmle.fit"
-        names(eic3)[2] <- "sd.eic"
-
-        out1 <- merge(mat.surv.curve, eic3, by="tau")
-        out1[, tau:=unique.times[tau]]
-        
-        return(out1[1:nrow(out1)])
-
-    }
-
-    mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
-    mat[, Ht.lambda:=surv.tau / surv.t]
-
-    #-- 10 -- initial fit:
+    #-- 11 -- initial fit:
     
     #init.fit <- mean(mat[get(A.name)==a, 1-surv.tau[1], by="id"][,2][[1]])
     init.fit <- mean(rowSums(sapply(a, function(aa)
@@ -579,15 +359,16 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
     init.ic <- eval.ic(mat)
 
-    #-- 10a -- add to list to be outputted:
+    #-- 11a -- add to list to be outputted:
     tmle.list <- list(c(init=init.fit, sd.eic=init.ic))
     if (output.km) tmle.list[[1]] <- c(tmle.list[[1]], km.est=km.est, km.se=km.se)
     if (output.hr) tmle.list[[1]] <- c(tmle.list[[1]], hr=hr, hr.pval=hr.pval)
 
     #-- 12 -- tmle:
+        
+    for (iter in 1:maxIter) {
 
-    if (one.step) {
-
+        #-- 12a -- estimate eps:
         eval.equation <- function(mat, eps) {
             out <- mat[get(A.name)==A.obs, sum( (time<=time.obs) * Ht * Ht.lambda *
                                                 ( (delta.obs==1 & time==time.obs) -
@@ -596,41 +377,25 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
             return(mean(out[, 2][[1]])) 
         }
 
-        #--- decide on direction of small eps increments: 
-        if (abs(eval.equation(mat, -0.01))<abs(eval.equation(mat, 0.01))) {
-            deps <- -deps.size
-        } else {
-            deps <- deps.size
-        }
+        print(paste0("iter=", iter, ", estimate eps: ",
+                     round(eps.hat <- nleqslv(0.01, function(eps) eval.equation(mat, eps))$x, 4)))
+    
+        #-- 12b -- update hazard:
+        mat[, fit.cox:=fit.cox*exp(eps.hat*Ht.lambda*Ht)]
+        mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
+        mat[fit.cox==Inf, surv.t:=0]
+        mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
 
-        #--- initial sign of eic equation: 
-        sign.eic <- sign(eval.equation(mat, -0.01))
-
-        #--- one-step: track eic equation with small step deps: 
-        for (step in 1:no.small.steps) {
-
-            mat[, fit.cox:=fit.cox*exp(deps*Ht.lambda*Ht)]
-            mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
-            mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
-
-            print(eic.value <- eval.equation(mat, deps))
-
-            if  (sign.eic*eic.value<=0) {
-                break
-            }            
-        }
-
-        eval.equation(mat, 0)
-
-        #-- 12a -- evaluate target parameter:x
+        #-- 12c -- evaluate target parameter:x
+        #tmle.fit <- mean(mat[get(A.name)==a, 1-surv.tau[1], by="id"][,2][[1]])
         tmle.fit <- mean(rowSums(sapply(a, function(aa)
         (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
 
-        #-- 12b -- update clever covariate:
+        #-- 12d -- update clever covariate:
         mat[surv.t>0, Ht.lambda:=surv.tau/surv.t]
-        mat[surv.t==0, Ht.lambda:=0]
+        mat[surv.t==0, Ht.lambda:=1]
 
-        #-- 12c -- compute sd:
+        #-- 12e -- compute sd:
         eval.ic <- function(mat) {
             out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
                               ( (delta.obs==1 & time==time.obs) -
@@ -644,59 +409,10 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
             return(sqrt(mean(ic.squared)/n))
         }
 
-        tmle.list[[length(tmle.list)+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
+        tmle.list[[iter+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
             
-    }
-
-    if (!one.step) {
-        
-        for (iter in 1:maxIter) {
-
-            #-- 12a -- estimate eps:
-            eval.equation <- function(mat, eps) {
-                out <- mat[get(A.name)==A.obs, sum( (time<=time.obs) * Ht * Ht.lambda *
-                                                    ( (delta.obs==1 & time==time.obs) -
-                                                      exp( eps * Ht * Ht.lambda ) * dhaz * fit.cox )),
-                           by="id"]
-                return(mean(out[, 2][[1]])) 
-            }
-
-            print(paste0("iter=", iter, ", estimate eps: ",
-                         round(eps.hat <- nleqslv(0.01, function(eps) eval.equation(mat, eps))$x, 4)))
-    
-            #-- 12b -- update hazard:
-            mat[, fit.cox:=fit.cox*exp(eps.hat*Ht.lambda*Ht)]
-            mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
-            mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
-
-            #-- 12c -- evaluate target parameter:x
-            #tmle.fit <- mean(mat[get(A.name)==a, 1-surv.tau[1], by="id"][,2][[1]])
-            tmle.fit <- mean(rowSums(sapply(a, function(aa)
-            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
-
-            #-- 12d -- update clever covariate:
-            mat[surv.t>0, Ht.lambda:=surv.tau/surv.t]
-            mat[surv.t==0, Ht.lambda:=0]
-
-            #-- 12e -- compute sd:
-            eval.ic <- function(mat) {
-                out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
-                                  ( (delta.obs==1 & time==time.obs) -
-                                    dhaz * fit.cox )), by="id"]
-                ic.squared <- (out[, 2][[1]] +
-                               #(mat[A==a, surv.tau[1], by="id"][,2][[1]]) -
-                               rowSums(sapply(a, function(aa)
-                               (2*(aa==a[1])-1)*(mat[get(A.name)==aa, surv.tau[1], by="id"][,2][[1]]))) -
-                               (length(a)==2)*tmle.fit-
-                               (length(a)==1)*(1-tmle.fit))^2
-                return(sqrt(mean(ic.squared)/n))
-            }
-
-            tmle.list[[iter+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
-            
-            if  (abs(eval.equation(mat, 0))<=eval.ic(mat)/(sqrt(n)*log(n))) {
-                break
-            }
+        if  (abs(eval.equation(mat, 0))<=eval.ic(mat)/(sqrt(n)*log(n))) {
+            break
         }
     }
 
