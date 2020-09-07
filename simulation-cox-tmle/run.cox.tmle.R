@@ -69,7 +69,7 @@ source("./R/poisson.hal.sl.R")
 ## set parameters for simulations
 #-------------------------------------------------------------------------------------------#
 
-M <- 50
+M <- 500
 get.truth <- FALSE
 
 betaA <- -0.15
@@ -87,7 +87,7 @@ interaction.Atime <- FALSE
 randomize.A <- TRUE
 censoring.informative <- TRUE
 
-misspecify.Y <- FALSE
+misspecify.Y <- TRUE
 fit.km <- TRUE
 output.hr <- TRUE
 SL <- FALSE
