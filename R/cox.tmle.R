@@ -1,7 +1,7 @@
 cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.squared+L1*L2+L3, # RIGHT NOW MUST BE CALLED "time" AND "delta"
                      change.point=NULL, mod.period1="*L3", mod.period2="*L3",
                      tau=c(1.2),
-                     km.cens=FALSE, 
+                     km.cens=FALSE, SL.method=2,
                      cens.model=Surv(time, delta==0)~L1+L2+L3+A*L1,
                      treat.model=A~L1+L2+L3,
                      treat.effect=c("1", "0", "both"), 
@@ -9,17 +9,18 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
                      poisson.initial=FALSE, lambda.cv=NULL,
                      cut.covars=5, cut.time=10, cut.time.A=4,
                      covars=c("L1", "L2", "L3"),
+                     one.step=FALSE, deps.size=0.001, no.small.steps=100, # FIXME: test again!
                      penalize.time=TRUE, adjust.penalization=TRUE,
                      poisson.cens=FALSE, cut.L1.A=5, cut.L.interaction=5, 
                      maxIter=5, verbose=TRUE, browse=FALSE, browse2=FALSE,
                      browse3=FALSE, browse4=FALSE,
-                     only.cox=FALSE, 
+                     only.cox=FALSE, only.cox.sl=FALSE,
                      SL=FALSE, SL.cens=FALSE, SL.poisson=FALSE,
                      SL.outcome.models=list(mod1=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.9),
                                             mod1a=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.2765),
                                             mod2=c(Surv(time, delta==1)~A*L1.squared+L1*L2+L3, t0=NULL),
                                             mod3=c(Surv(time, delta==1)~A+L1.squared, t0=NULL),
-                                            mod4=c(Surv(time, delta==1)~A+L1+L2+L3, t0=1.2),
+                                            #mod4=c(Surv(time, delta==1)~A+L1+L2+L3, t0=1.2),
                                             mod5=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.3),
                                             mod6=c(Surv(time, delta==1)~A+L1+L2+L3, t0=NULL),
                                             mod7=c(Surv(time, delta==1)~A+L3.squared, t0=NULL),
@@ -120,23 +121,29 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
 
     }
-    
-    cens.cox <- coxph(as.formula(deparse(cens.model)), data=dt)
+
+    if (length(cens.model)>0) {
+        cens.cox <- coxph(as.formula(deparse(cens.model)), data=dt)
+    }
 
     #-- 2 -- estimate treatment propensity: 
 
-    prob.A <- predict(glm(treat.model, data=dt), type="response")
+    prob.A <- predict(glm(as.formula(deparse(treat.model)), data=dt), type="response")
 
     #-- 3 -- estimate outcome distribution:
 
     if (SL) { #-- cox-SL
 
         print("use SL")
-        
-        SL.pick <- cox.sl(dt, tau=tau, A.name=A.name,
+
+        if (only.cox.sl) SL.method <- c(1,2)
+        SL.pick <- cox.sl(dt, tau=tau, A.name=A.name, only.cox.sl=only.cox.sl,
+                          method=SL.method, covars=covars,
                           outcome.models=SL.outcome.models)
-        SL.model <- SL.outcome.models[[SL.pick]]
+        if (only.cox.sl) return(SL.pick)
         
+        SL.model <- SL.outcome.models[[SL.pick]]
+
         if (length(SL.model)>1) {
             print(paste0("model picked: ", outcome.model <- SL.model[[1]]))
             print(paste0("model picked: ", change.point <- SL.model[[2]]))
@@ -220,25 +227,26 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
 
     #-- 6b -- add censoring baseline hazard:
 
-    bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
-                                      setDT(basehaz(cens.cox, centered=centered))),
-                      by="time", all.x=TRUE)
-    setnames(bhaz.cox, "hazard", "cens.chaz")
-    bhaz.cox[, cens.dhaz:=c(0, diff(cens.chaz))]
+    if (length(cens.model)>0) {
+        bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
+                                          setDT(basehaz(cens.cox, centered=centered))),
+                          by="time", all.x=TRUE)
+        setnames(bhaz.cox, "hazard", "cens.chaz")
+        bhaz.cox[, cens.dhaz:=c(0, diff(cens.chaz))]
 
-    if (length(change.point)>0) {
-        bhaz.cox <- rbind(bhaz.cox,
-                          data.table(time=change.point, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0),
-                          data.table(time=tau, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0))[order(time)]
-        bhaz.cox[, period:=(time<=change.point)*1+(time>change.point)*2]
-        bhaz.cox[, chaz:=cumsum(dhaz), by="period"]
-        bhaz.cox[, cens.chaz:=cumsum(cens.dhaz)]
+        if (length(change.point)>0) {
+            bhaz.cox <- rbind(bhaz.cox,
+                              data.table(time=change.point, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0),
+                              data.table(time=tau, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0))[order(time)]
+            bhaz.cox[, period:=(time<=change.point)*1+(time>change.point)*2]
+            bhaz.cox[, chaz:=cumsum(dhaz), by="period"]
+            bhaz.cox[, cens.chaz:=cumsum(cens.dhaz)]
+        }
+
+        #-- 6c -- get censoring survival one time-point back: 
+
+        bhaz.cox[, cens.chaz.1:=c(0, cens.chaz[-.N])]
     }
-
-    #-- 6c -- get censoring survival one time-point back: 
-
-    bhaz.cox[, cens.chaz.1:=c(0, cens.chaz[-.N])]
-
     #-- 7 -- dublicate bhaz.cox; for each treatment option:
 
     if (poisson.initial) {
@@ -264,8 +272,10 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
         dt.a[, fit.cox:=predict(fit.cox, newdata=dt.a, type="risk")]
     }
 
-    dt.a[, fit.cens.a:=predict(cens.cox, newdata=dt.a, type="risk")]
-
+    if (length(cens.model)>0) {
+        dt.a[, fit.cens.a:=predict(cens.cox, newdata=dt.a, type="risk")]
+    }
+    
     if (km.cens) {
         setnames(cens.km, "surv", "surv.cens")
         dt.a <- merge(dt.a, cens.km)
@@ -276,21 +286,28 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
         tmp[, time.obs:=dt[id==i, time]]
         tmp[, delta.obs:=dt[id==i, delta]]
         tmp[, A.obs:=dt[id==i, get(A.name)]]
-        if (km.cens) {
-            tmp <- merge(tmp, dt.a[, c("surv.cens", "time", A.name), with=FALSE], by=c("time", A.name))
-            tmp[, surv.km.C1:=c(1, surv.cens[-.N])]
-        }  
-        tmp <- merge(tmp, dt.a[id==i, c(A.name, "fit.cens.a"), with=FALSE], by=A.name)
-        tmp[, surv.C1:=exp(-fit.cens.a*cens.chaz.1)]
-        if (km.cens) {
-            tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
-                      ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))*
-                       surv.km.C1)]
+        if (length(cens.model)>0) {
+            if (km.cens) {
+                tmp <- merge(tmp, dt.a[, c("surv.cens", "time", A.name), with=FALSE],
+                             by=c("time", A.name))
+                tmp[, surv.km.C1:=c(1, surv.cens[-.N])]
+            }  
+            tmp <- merge(tmp, dt.a[id==i, c(A.name, "fit.cens.a"), with=FALSE], by=A.name)
+            tmp[, surv.C1:=exp(-fit.cens.a*cens.chaz.1)]
+            if (km.cens) {
+                tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
+                          ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))*
+                           surv.km.C1)]
+            } else {
+                tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
+                          ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))*
+                           exp(-fit.cens.a*cens.chaz.1))]
+            }
         } else {
             tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
-                      ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))*
-                       exp(-fit.cens.a*cens.chaz.1))]
+                      ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name))))]
         }
+        
         if (length(change.point)>0) {
             tmp[, period:=(time<=change.point)*1+(time>change.point)*2]
             tmp <- merge(tmp, dt2.a[id==i, c("period", A.name, "fit.cox"), with=FALSE], by=c("period", A.name))
@@ -365,10 +382,9 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
     if (output.hr) tmle.list[[1]] <- c(tmle.list[[1]], hr=hr, hr.pval=hr.pval)
 
     #-- 12 -- tmle:
-        
-    for (iter in 1:maxIter) {
 
-        #-- 12a -- estimate eps:
+    if (one.step) { # simple one-step! 
+
         eval.equation <- function(mat, eps) {
             out <- mat[get(A.name)==A.obs, sum( (time<=time.obs) * Ht * Ht.lambda *
                                                 ( (delta.obs==1 & time==time.obs) -
@@ -377,25 +393,41 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
             return(mean(out[, 2][[1]])) 
         }
 
-        print(paste0("iter=", iter, ", estimate eps: ",
-                     round(eps.hat <- nleqslv(0.01, function(eps) eval.equation(mat, eps))$x, 4)))
-    
-        #-- 12b -- update hazard:
-        mat[, fit.cox:=fit.cox*exp(eps.hat*Ht.lambda*Ht)]
-        mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
-        mat[fit.cox==Inf, surv.t:=0]
-        mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
+        #--- decide on direction of small eps increments: 
+        if (abs(eval.equation(mat, -0.01))<abs(eval.equation(mat, 0.01))) {
+            deps <- -deps.size
+        } else {
+            deps <- deps.size
+        }
 
-        #-- 12c -- evaluate target parameter:x
-        #tmle.fit <- mean(mat[get(A.name)==a, 1-surv.tau[1], by="id"][,2][[1]])
+        #--- initial sign of eic equation: 
+        sign.eic <- sign(eval.equation(mat, -0.01))
+
+        #--- one-step: track eic equation with small step deps: 
+        for (step in 1:no.small.steps) {
+
+            mat[, fit.cox:=fit.cox*exp(deps*Ht.lambda*Ht)]
+            mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
+            mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
+
+            print(eic.value <- eval.equation(mat, deps))
+
+            if  (sign.eic*eic.value<=0) {
+                break
+            }            
+        }
+
+        eval.equation(mat, 0)
+
+        #-- 12a -- evaluate target parameter:x
         tmle.fit <- mean(rowSums(sapply(a, function(aa)
         (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
 
-        #-- 12d -- update clever covariate:
+        #-- 12b -- update clever covariate:
         mat[surv.t>0, Ht.lambda:=surv.tau/surv.t]
         mat[surv.t==0, Ht.lambda:=1]
 
-        #-- 12e -- compute sd:
+        #-- 12c -- compute sd:
         eval.ic <- function(mat) {
             out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
                               ( (delta.obs==1 & time==time.obs) -
@@ -409,10 +441,60 @@ cox.tmle <- function(dt, outcome.model=Surv(time, delta==1)~A*L1.squared+A+L1.sq
             return(sqrt(mean(ic.squared)/n))
         }
 
-        tmle.list[[iter+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
+        tmle.list[[length(tmle.list)+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
             
-        if  (abs(eval.equation(mat, 0))<=eval.ic(mat)/(sqrt(n)*log(n))) {
-            break
+    }
+
+    if (!one.step) { # iterative tmle 
+    
+        for (iter in 1:maxIter) {
+
+            #-- 12a -- estimate eps:
+            eval.equation <- function(mat, eps) {
+                out <- mat[get(A.name)==A.obs, sum( (time<=time.obs) * Ht * Ht.lambda *
+                                                    ( (delta.obs==1 & time==time.obs) -
+                                                      exp( eps * Ht * Ht.lambda ) * dhaz * fit.cox )),
+                           by="id"]
+                return(mean(out[, 2][[1]])) 
+            }
+
+            print(paste0("iter=", iter, ", estimate eps: ",
+                         round(eps.hat <- nleqslv(0.01, function(eps) eval.equation(mat, eps))$x, 4)))
+    
+            #-- 12b -- update hazard:
+            mat[, fit.cox:=fit.cox*exp(eps.hat*Ht.lambda*Ht)]
+            mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
+            mat[fit.cox==Inf, surv.t:=0]
+            mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
+
+            #-- 12c -- evaluate target parameter:x
+            #tmle.fit <- mean(mat[get(A.name)==a, 1-surv.tau[1], by="id"][,2][[1]])
+            tmle.fit <- mean(rowSums(sapply(a, function(aa)
+            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
+
+            #-- 12d -- update clever covariate:
+            mat[surv.t>0, Ht.lambda:=surv.tau/surv.t]
+            mat[surv.t==0, Ht.lambda:=1]
+
+            #-- 12e -- compute sd:
+            eval.ic <- function(mat) {
+                out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
+                                  ( (delta.obs==1 & time==time.obs) -
+                                    dhaz * fit.cox )), by="id"]
+                ic.squared <- (out[, 2][[1]] +
+                               #(mat[A==a, surv.tau[1], by="id"][,2][[1]]) -
+                               rowSums(sapply(a, function(aa)
+                               (2*(aa==a[1])-1)*(mat[get(A.name)==aa, surv.tau[1], by="id"][,2][[1]]))) -
+                               (length(a)==2)*tmle.fit-
+                               (length(a)==1)*(1-tmle.fit))^2
+                return(sqrt(mean(ic.squared)/n))
+            }
+
+            tmle.list[[iter+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
+            
+            if  (abs(eval.equation(mat, 0))<=eval.ic(mat)/(sqrt(n)*log(n))) {
+                break
+            }
         }
     }
 
