@@ -1,10 +1,11 @@
-poisson.hal <- function(mat, dt, X=NULL, delta.outcome=1,
+poisson.hal <- function(mat, dt, outcome.model, change.point, X=NULL, delta.outcome=1,
                         cut.covars=5, cut.time=10, cut.time.A=4,
                         cut.L1.A=5, cut.L.interaction=5,
                         covars=c("L1", "L2", "L3"),
                         poisson.cens=FALSE, 
                         SL.poisson=FALSE, lambda.cv=NULL,
                         penalize.time=TRUE, adjust.penalization=TRUE, browse=FALSE,
+                        lambda.cvs=seq(0, 0.0015, length=21)[-1],
                         verbose=TRUE
                         ) {
 
@@ -56,18 +57,23 @@ poisson.hal <- function(mat, dt, X=NULL, delta.outcome=1,
     if (!SL.poisson) {
         cv.pick <- TRUE
     } else if (SL.poisson) {
-        cv.pick <- poisson.hal.sl(mat=mat, dt=dt, X=X, delta.outcome=delta.outcome, cols.obs=cols.obs,
+        cv.pick <- poisson.hal.sl(mat=mat, dt=dt, X=X, outcome.model=outcome.model,
+                                  change.point=change.point, delta.outcome=delta.outcome, cols.obs=cols.obs,
                                   cut.covars=cut.covars, cut.time=cut.time,
                                   cut.time.A=cut.time.A,
                                   cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
                                   covars=covars,
                                   poisson.cens=poisson.cens, lambda.cv=lambda.cv,
-                                  penalize.time=penalize.time, adjust.penalization=adjust.penalization,
+                                  lambda.cvs=lambda.cvs,
+                                  penalize.time=penalize.time,
+                                  adjust.penalization=adjust.penalization,
                                   V=10)
+        lambda.cv <- cv.pick
     }
 
-    if (cv.pick) {
-        if (SL.poisson) print("CV: Pick POISSON rather than cox")
+    if (TRUE) {#cv.pick) {
+        #if (SL.poisson) print("CV: Pick POISSON rather than cox")
+        if (SL.poisson) print(paste0("Pick penalization parameter (CV): ", lambda.cv))
 
         mat[, RT:=sum(tdiff*(time<=time.obs)), by=c("x", "A")]
         mat[, D:=sum(event*(time<=time.obs)), by=c("x", "A")]

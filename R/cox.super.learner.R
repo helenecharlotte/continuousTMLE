@@ -22,37 +22,14 @@ cox.sl <- function(dt, tau=1.2, V=5, A.name="A", method=2, only.cox.sl=FALSE,
     if (any(method==1)) {
 
         outlist1 <- list()
-        
-        #-- use nelson-aalen for baseline hazard;
-        fit.baseline <- coxph(Surv(time, delta == 1)~1,
-                              data=dt)
-        bhaz.cox <- rbind(data.table(time=0, hazard=0),
-                          data.table(time=tau, hazard=0),
-                          merge(data.table(time=unique.times),
-                                setDT(basehaz(fit.baseline, centered=TRUE)),
-                                by="time", all.x=TRUE))
-        bhaz.cox[, "dhaz0":=c(0, diff(hazard))]
-        bhaz.cox[is.na(dhaz0), "dhaz0":=0]
-        setnames(bhaz.cox, "hazard", "chaz0")
-        bhaz.cox[, "chaz0":=cumsum(dhaz0)]
-        setorder(bhaz.cox, time)
-        bhaz.cox[, chaz0:=cumsum(dhaz0)]
-        
-        dev.loss.fun <- function(delta, Lambda) {
-            M <- delta - Lambda
-            #return(M^2)
-            d <- sign(M)*sqrt(- 2*(M+delta*log(delta - M)))
-            return(sum(na.omit(d)^2))
-        }
-
-        L2.loss.fun <- function(dN, dLambda) {
-            print("use L2 loss")
-            return(sum((dN - dLambda)^2))
+             
+        log.like.loss.fun <- function(dN, dLambda, Lambda) {
+            return(-sum(log(dLambda)*dN - exp(-Lambda)))
         }
 
         for (vv in 1:V) {
     
-            test.set <- cv.split[,vv]#sample(1:n, floor(n/10))
+            test.set <- cv.split[,vv]
             train.set <- dt[, id][!dt[, id] %in% test.set]
 
             dt.train <- dt[id %in% train.set]
@@ -61,8 +38,6 @@ cox.sl <- function(dt, tau=1.2, V=5, A.name="A", method=2, only.cox.sl=FALSE,
             outlist1[[vv]] <- lapply(outcome.models, function(outcome.model) {
                 if (length(outcome.model)>1) { #-- if there is a change-point:
 
-                    #print("estimate time-varying hazard")
-
                     t0 <- outcome.model[[2]]
 
                     dt.train[, time.indicator:=(time<=t0)]
@@ -70,7 +45,6 @@ cox.sl <- function(dt, tau=1.2, V=5, A.name="A", method=2, only.cox.sl=FALSE,
                     dt.train2 <- rbind(dt.train, dt.train)[order(id)]
                     dt.train2[, period:=1:.N, by="id"]
 
-                    #dt.train2 <- dt.train2[!time.indicator | period==1]
                     dt.train2[period==1, `:=`(tstart=0, tstop=(time<=t0)*time+(time>t0)*t0)]
                     dt.train2[period==2, `:=`(tstart=t0, tstop=time)]
                     dt.train2[period==1 & !time.indicator, delta:=0]
@@ -86,9 +60,6 @@ cox.sl <- function(dt, tau=1.2, V=5, A.name="A", method=2, only.cox.sl=FALSE,
 
 
                     fit.cox.vv <- coxph(formula(mod2), data=dt.train2[!time.indicator | period==1])
-                    #if (t0==0.9 & vv==10)
-                   # print(t0)
-                   # print(fit.cox.vv)
 
                     dt.test[, time.indicator:=(time<=t0)]
                     
@@ -101,140 +72,63 @@ cox.sl <- function(dt, tau=1.2, V=5, A.name="A", method=2, only.cox.sl=FALSE,
 
                     dt.test2 <- dt.test2[!(period==2 & time<=t0)]
                     dt.test2[period==1, time:=(time<=t0)*time+(time>t0)*t0]
-                    #dt.test2[period==2, time:=(time<=tau)*time+(time>tau)*tau]
                     dt.test2[period==1 & time==t0, delta:=0]
-                    #dt.test2[period==2 & time==tau, delta:=0]
                 
                     dt.test2[, fit.lambda.cox.vv:=predict(fit.cox.vv, newdata=dt.test2,
                                                           type="risk")]
                     
-                   # browser()
-
-                    unique.times.vv <- data.table(time=dt.test[delta==1, unique(time)])
-
-                    mat.vv <- do.call("rbind", lapply(1:nrow(dt.test), function(i) {
-                        tmp <- cbind(id=dt.test[i, id], unique.times.vv)
-                        tmp[, time.obs:=dt.test[id==dt.test[i, id], time]]
-                        tmp[, delta.obs:=dt.test[id==dt.test[i, id], delta]]
-                        tmp[, period:=(time<=t0)*1+(time>t0)*2]
-                        tmp <- merge(tmp, dt.test[id==dt.test[i, id], -c("time", "delta"), with=FALSE],
-                                     by="id")
-                        return(tmp[time<=time.obs])
-                    }))
-
-                    mat.vv[, fit.lambda.cox.vv:=predict(fit.cox.vv, newdata=mat.vv,
-                                                        type="risk")]
-
-
-                    dt.test2[, fit.lambda.cox.vv:=predict(fit.cox.vv, newdata=dt.test2,
-                                                          type="risk")]
-
                     dt.test22 <- dt.test2[rev(order(time))]
                     dt.test22[, denom:=cumsum(fit.lambda.cox.vv), by="period"]
-                    dt.test22[, dHaz:=delta/denom]
-                    
-                    mat.vv <- merge(mat.vv, dt.test22[time!=t0 & delta>0, c("time", "dHaz"), with=FALSE],
-                                    by="time")
+                    dt.test22[, dHaz:=delta/c(1, denom[-.N])]
 
-                    mat.vv[, dN:=delta.obs*(time==time.obs)]
-                    mat.vv[, dLambda:=dHaz*fit.lambda.cox.vv]
+                    setorder(dt.test22, time)
+                    dt.test22[, chaz:=cumsum(dHaz)]
                     
-                    return(L2.loss.fun(dN=mat.vv$dN, dLambda=mat.vv$dLambda))
+                    dt.test2 <- merge(dt.test2, dt.test22[, c("id", "time", "chaz", "dHaz"),
+                                                          with=FALSE], by=c("id", "time"))
 
+                    dt.test2[, Lambda:=(chaz*fit.lambda.cox.vv), by=c("id")]
+                    dt.test2[, dLambda:=dHaz*fit.lambda.cox.vv, by=c("id")]
+                    dt.test2[, dN:=delta]
+                    dt.test2[dN==0, dLambda:=1]
                     
-                    bhaz.cox <- unique(rbind(bhaz.cox,
-                                             data.table(time=t0, chaz0=0, dhaz0=0))[order(time)],
-                                       by="time")
-                    bhaz.cox[, chaz0:=cumsum(dhaz0)]
-                    
-                    dt.test2 <- merge(dt.test2, bhaz.cox[, c("time", "dhaz0", "chaz0"), with=FALSE],
-                                      by="time")[order(id)]
-
-                    dt.test2[, chaz0.inc:=chaz0-c(0,chaz0[-.N]), by=c("id")]
-
-                    dt.test2[, Lambda.cox.vv:=cumsum(chaz0.inc*fit.lambda.cox.vv), by=c("id")]
-                    dt.test2[, Lambda.cox.vv:=predict(fit.cox.vv, newdata=dt.test2,
-                                                      type="expected")]
-
-                    dt.test22 <- dt.test2[rev(order(time))]
-                    dt.test22[, denom:=cumsum(fit.lambda.cox.vv), by="period"]
-                    dt.test22[, dHaz:=delta/denom]
-                    dHaz.dt <- unique(dt.test22[, c("time", "dHaz", "period"), with=FALSE][order(time)])
-                    dHaz.dt[, cHaz:=cumsum(dHaz), by="period"]
-                    dt.test2 <-  merge(dt.test2, dHaz.dt[, -c("dHaz", "period")], by="time")
-                    
-                    dt.test2[, Lambda.cox.vv:=cumsum(cHaz*fit.lambda.cox.vv), by=c("id")]
-                    
+                    dt.test2[, idN:=1:.N, by="id"]
                     dt.test2[, N:=.N, by="id"]
-                    
-                    dt.test2 <- dt.test2[period==N][, -"N", with=FALSE]
 
-                   # if ((dev.loss.fun(delta=dt.test2$delta, Lambda=dt.test2$Lambda.cox.vv))==Inf) browser()
-                    
-                    return(dev.loss.fun(delta=dt.test2$delta, Lambda=dt.test2$Lambda.cox.vv))
-                    
+                    return(log.like.loss.fun(dN=dt.test2[idN==N]$dN,
+                                             dLambda=dt.test2[idN==N]$dLambda,
+                                             Lambda=dt.test2[idN==N]$Lambda))                    
                 } else { #-- if there is no change-point:
-                    fit.cox.vv <- coxph(as.formula(deparse(outcome.model[[1]])), #outcome.model,
+                    fit.cox.vv <- coxph(as.formula(deparse(outcome.model[[1]])),
                                         data=dt.train)
-                    #print(outcome.model)
-                 #   print(fit.cox.vv)
-                    dt.test[, fit.lambda.cox.vv:=predict(fit.cox.vv, newdata=dt.test,
-                                                         type="risk")]
-                    #dt.test[, time:=(time<=tau)*time+(time>tau)*tau]
-                    #dt.test[time==tau, delta:=0]
-
- unique.times.vv <- data.table(time=dt.test[delta==1, unique(time)])
-
-                    mat.vv <- do.call("rbind", lapply(1:nrow(dt.test), function(i) {
-                        tmp <- cbind(id=dt.test[i, id], unique.times.vv)
-                        tmp[, time.obs:=dt.test[id==dt.test[i, id], time]]
-                        tmp[, delta.obs:=dt.test[id==dt.test[i, id], delta]]
-                        tmp[, period:=(time<=t0)*1+(time>t0)*2]
-                        tmp <- merge(tmp, dt.test[id==dt.test[i, id], -c("time", "delta"), with=FALSE],
-                                     by="id")
-                        return(tmp[time<=time.obs])
-                    }))
-
-                    mat.vv[, fit.lambda.cox.vv:=predict(fit.cox.vv, newdata=mat.vv,
-                                                        type="risk")]
-
                     dt.test[, fit.lambda.cox.vv:=predict(fit.cox.vv, newdata=dt.test,
                                                          type="risk")]
 
                     dt.test2 <- dt.test[rev(order(time))]
                     dt.test2[, denom:=cumsum(fit.lambda.cox.vv)]
-                    dt.test2[, dHaz:=delta/denom]
+                    dt.test2[, dHaz:=delta/c(1, denom[-.N])]#[, dHaz:=delta/denom]
+
+                    setorder(dt.test2, time)
+                    dt.test2[, chaz:=cumsum(dHaz)]
                     
-                    mat.vv <- merge(mat.vv, dt.test2[time!=t0 & delta>0, c("time", "dHaz"), with=FALSE],
-                                    by="time")
-
-                    mat.vv[, dN:=delta.obs*(time==time.obs)]
-                    mat.vv[, dLambda:=dHaz*fit.lambda.cox.vv]
+                    dt.test <- merge(dt.test, dt.test2[, c("id", "time", "chaz", "dHaz"),
+                                                          with=FALSE], by=c("id", "time"))
                     
-                    return(L2.loss.fun(dN=mat.vv$dN, dLambda=mat.vv$dLambda))
-
-
+                    dt.test[, Lambda:=(chaz*fit.lambda.cox.vv), by=c("id")]
+                    dt.test[, dLambda:=dHaz*fit.lambda.cox.vv, by=c("id")]
+                    dt.test[, dN:=delta]
+                    dt.test[dN==0, dLambda:=1]
                     
-                    dt.test <- merge(dt.test, bhaz.cox[, c("time", "dhaz0", "chaz0"), with=FALSE],
-                                     by="time")
+                    dt.test[, idN:=1:.N, by="id"]
+                    dt.test[, N:=.N, by="id"]
 
-                    dt.test[, Lambda.cox.vv:=chaz0*fit.lambda.cox.vv]
+                    return(log.like.loss.fun(dN=dt.test[idN==N]$dN,
+                                             dLambda=dt.test[idN==N]$dLambda,
+                                             Lambda=dt.test[idN==N]$Lambda))
 
-                    dt.test <- dt.test[rev(order(time))]
-                    dt.test[, denom:=cumsum(fit.lambda.cox.vv)]
-                    dt.test[, dHaz:=delta/denom]
-                    dHaz.dt <- unique(dt.test[, c("time", "dHaz"), with=FALSE][order(time)])
-                    dHaz.dt[, cHaz:=cumsum(dHaz)]
-                    dt.test <-  merge(dt.test, dHaz.dt[, -c("dHaz")], by="time")
-                    
-                    dt.test[, Lambda.cox.vv:=cumsum(cHaz*fit.lambda.cox.vv), by=c("id")]
-                
-                    return(dev.loss.fun(delta=dt.test$delta, Lambda=dt.test$Lambda.cox.vv))
                 }
             
             })
-
-            #print(outlist1[[vv]])
         }
     }
 
@@ -295,7 +189,6 @@ cox.sl <- function(dt, tau=1.2, V=5, A.name="A", method=2, only.cox.sl=FALSE,
                                                                              mod1[3]))))
 
                         train.fit <- coxph(formula(mod2), data=dt2[!time.indicator | period==1])
-                        #if (t0==0.9 & vv==10) print(train.fit)
                         return(partial.loss.fun(train.fit, 1:n, t0=outcome.model[[2]])-
                                partial.loss.fun(train.fit, train.set, t0= outcome.model[[2]]))
                     }

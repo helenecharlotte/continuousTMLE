@@ -6,9 +6,11 @@ cox.tmle <- function(dt,
                      km.cens=FALSE, SL.method=2,
                      cens.model=Surv(time, delta==0)~L1+L2+L3+A*L1,
                      treat.model=A~L1+L2+L3,
-                     treat.effect=c("1", "0", "both"), 
+                     treat.effect=c("1", "0", "both", "stochastic"),
+                     pi.star.fun=function(A, L) 0.2, 
                      output.km=FALSE, output.hr=FALSE, centered=TRUE,
                      poisson.initial=FALSE, lambda.cv=NULL,
+                     lambda.cvs=seq(0, 0.008, length=51)[-1], 
                      cut.covars=5, cut.time=10, cut.time.A=4,
                      covars=c("L1", "L2", "L3"),
                      one.step=FALSE, deps.size=0.001, no.small.steps=100, # FIXME: test again!
@@ -42,7 +44,8 @@ cox.tmle <- function(dt,
     
     #-- 0 -- some initializations:
 
-    if (length(dt[, unique(delta)])>2 & length(competing.risk)==0) competing.risk <- TRUE 
+    if (length(dt[, unique(delta)])>2 & length(competing.risk)==0) competing.risk <- TRUE
+    if (length(competing.risk)==0) competing.risk <- FALSE 
 
     if (length(grep(".squared", as.character(outcome.model)[3]))>0) {
         names.squared <- unique(gsub(".squared", "",
@@ -308,6 +311,16 @@ cox.tmle <- function(dt,
         tmp[, time.obs:=dt[id==i, time]]
         tmp[, delta.obs:=dt[id==i, delta]]
         tmp[, A.obs:=dt[id==i, get(A.name)]]
+        if (treat.effect[1]=="stochastic") {
+            tmp <- merge(tmp, dt[, c("id", covars), with=FALSE], by="id")
+            tmp[, pi.star:=pi.star.fun(get(A.name), cbind(L1,L2,L3))]
+            tmp[, pi.star:=pi.star*get(A.name)+(1-pi.star)*(1-get(A.name))]
+            tmp[, Ht:=-(pi.star / # treatment and censoring weights
+                      ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))))]
+        } else {
+            tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
+                      ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name))))]
+        }
         if (length(cens.model)>0) {
             if (km.cens) {
                 tmp <- merge(tmp, dt.a[, c("surv.cens", "time", A.name), with=FALSE],
@@ -317,19 +330,11 @@ cox.tmle <- function(dt,
             tmp <- merge(tmp, dt.a[id==i, c(A.name, "fit.cens.a"), with=FALSE], by=A.name)
             tmp[, surv.C1:=exp(-fit.cens.a*cens.chaz.1)]
             if (km.cens) {
-                tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
-                          ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))*
-                           surv.km.C1)]
+                tmp[, Ht:=Ht/surv.km.C1]
             } else {
-                tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
-                          ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))*
-                           exp(-fit.cens.a*cens.chaz.1))]
+                tmp[, Ht:=Ht/exp(-fit.cens.a*cens.chaz.1)]
             }
-        } else {
-            tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
-                      ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name))))]
-        }
-        
+        } 
         if (length(change.point)>0) {
             tmp[, period:=(time<=change.point)*1+(time>change.point)*2]
             if (competing.risk) {
@@ -345,7 +350,7 @@ cox.tmle <- function(dt,
             }
         }
     }))
-
+    
     #-- 9 -- compute clever covariates:
 
     if (competing.risk) {
@@ -364,33 +369,35 @@ cox.tmle <- function(dt,
     #-- 10 -- poisson used for initial:
 
     if (poisson.initial) {
-        mat <- poisson.hal(mat=mat, dt=dt, X=NULL, delta.outcome=1, verbose=verbose,
+        mat <- poisson.hal(mat=mat, dt=dt, outcome.model=outcome.model,
+                           change.point=change.point, X=NULL, delta.outcome=1, verbose=verbose,
                            cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
                            cut.time.A=cut.time.A,
                            cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
                            covars=covars,
                            poisson.cens=poisson.cens,
                            SL.poisson=SL.poisson, 
-                           lambda.cv=lambda.cv, 
+                           lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
                            penalize.time=penalize.time, adjust.penalization=adjust.penalization)
 
         #-- 10a -- poisson used for censoring distribution:
 
         if (poisson.cens) {
-            mat <- poisson.hal(mat=mat[["mat"]], dt=dt, X=mat[["X"]], delta.outcome=0, verbose=verbose,
+            mat <- poisson.hal(mat=mat[["mat"]], dt=dt, outcome.model=outcome.model,
+                               change.point=change.point, X=mat[["X"]], delta.outcome=0, verbose=verbose,
                                cut.covars=cut.covars, cut.time=cut.time,
                                cut.time.A=cut.time.A, browse=FALSE,
                                cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
                                covars=covars,
                                poisson.cens=poisson.cens,
                                SL.poisson=SL.poisson, 
-                               lambda.cv=lambda.cv,
+                               lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
                                penalize.time=penalize.time, adjust.penalization=adjust.penalization)
         }
     }
 
     if (competing.risk) {
-        mat[surv.t>0, Ht.lambda:=1-(F1.tau - F1.t) / surv.t]
+        mat[surv.t>0, Ht.lambda:=1 - (F1.tau - F1.t) / surv.t]
         mat[surv.t==0, Ht.lambda:=1]
         mat[surv.t>0, Ht.lambda2:=-(F1.tau - F1.t) / surv.t]
         mat[surv.t==0, Ht.lambda2:=1]
@@ -403,40 +410,81 @@ cox.tmle <- function(dt,
     
     #init.fit <- mean(mat[get(A.name)==a, 1-surv.tau[1], by="id"][,2][[1]])
 
-    if (competing.risk) {
-        init.fit <- mean(rowSums(sapply(a, function(aa)
-        (2*(aa==a[1])-1)*(mat[get(A.name)==aa, F1.tau[1], by="id"][,2][[1]]))))
-    } else {
-        init.fit <- mean(rowSums(sapply(a, function(aa)
-        (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
-    }
-
-    if (competing.risk) {
-        eval.ic <- function(mat) {
-            out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
-                              ( (delta.obs==1 & time==time.obs) -
-                                dhaz * fit.cox ) +
-                              (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda2 *
-                              ( (delta.obs==2 & time==time.obs) -
-                                cr.dhaz * fit.cr.cox )), by="id"]
-            ic.squared <- (out[, 2][[1]] +
-                           rowSums(sapply(a, function(aa)
-                           (2*(aa==a[1])-1)*(mat[get(A.name)==aa, F1.tau[1], by="id"][,2][[1]]))) -
-                           (length(a)==2)*init.fit-
-                           (length(a)==1)*(1-init.fit))^2
-            return(sqrt(mean(ic.squared)/n))
+    if (treat.effect[1]=="stochastic") {
+        if (competing.risk) {
+            init.fit <- mean(rowSums(sapply(a, function(aa)
+            (mat[get(A.name)==aa, pi.star*F1.tau[1], by="id"][,2][[1]]))))
+        } else {
+            init.fit <- mean(rowSums(sapply(a, function(aa)
+            (mat[get(A.name)==aa, pi.star*(1-surv.tau[1]), by="id"][,2][[1]]))))
         }
     } else {
-        eval.ic <- function(mat) {
-            out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
-                              ( (delta.obs==1 & time==time.obs) -
-                                dhaz * fit.cox )), by="id"]
-            ic.squared <- (out[, 2][[1]] +
-                           rowSums(sapply(a, function(aa)
-                           (2*(aa==a[1])-1)*(mat[get(A.name)==aa, surv.tau[1], by="id"][,2][[1]]))) -
-                           (length(a)==2)*init.fit-
-                           (length(a)==1)*(1-init.fit))^2
-            return(sqrt(mean(ic.squared)/n))
+        if (competing.risk) {
+            init.fit <- mean(rowSums(sapply(a, function(aa)
+            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, F1.tau[1], by="id"][,2][[1]]))))
+        } else {
+            init.fit <- mean(rowSums(sapply(a, function(aa)
+            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
+        }
+    }
+
+    if (treat.effect[1]=="stochastic") {
+        if (competing.risk) {
+            eval.ic <- function(mat) {
+                out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
+                                  ( (delta.obs==1 & time==time.obs) -
+                                    dhaz * fit.cox ) +
+                                  (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda2 *
+                                  ( (delta.obs==2 & time==time.obs) -
+                                    cr.dhaz * fit.cr.cox )), by="id"]
+                ic.squared <- (out[, 2][[1]] +
+                               rowSums(sapply(a, function(aa)
+                               (mat[get(A.name)==aa, pi.star[1]*F1.tau[1], by="id"][,2][[1]]))) -
+                               (length(a)==2 & !(treat.effect[1]=="stochastic"))*init.fit-
+                               (length(a)==1 | (treat.effect[1]=="stochastic"))*(1-init.fit))^2
+                return(sqrt(mean(ic.squared)/n))
+            }
+        } else {
+            eval.ic <- function(mat) {
+                out <- mat[, sum( pi.star * (time<=time.obs) * Ht * Ht.lambda *
+                                  ( (delta.obs==1 & time==time.obs) -
+                                    dhaz * fit.cox )), by="id"]
+                ic.squared <- (out[, 2][[1]] +
+                               rowSums(sapply(a, function(aa)
+                               (mat[get(A.name)==aa, pi.star[1]*(1-surv.tau[1]), by="id"][,2][[1]]))) -
+                               (length(a)==2 & !(treat.effect[1]=="stochastic"))*init.fit-
+                               (length(a)==1 | (treat.effect[1]=="stochastic"))*(1-init.fit))^2
+                return(sqrt(mean(ic.squared)/n))
+            }
+        }
+    } else {
+        if (competing.risk) {
+            eval.ic <- function(mat) {
+                out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
+                                  ( (delta.obs==1 & time==time.obs) -
+                                    dhaz * fit.cox ) +
+                                  (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda2 *
+                                  ( (delta.obs==2 & time==time.obs) -
+                                    cr.dhaz * fit.cr.cox )), by="id"]
+                ic.squared <- (out[, 2][[1]] +
+                               rowSums(sapply(a, function(aa)
+                               (2*(aa==a[1])-1)*(mat[get(A.name)==aa, F1.tau[1], by="id"][,2][[1]]))) -
+                               (length(a)==2)*init.fit-
+                               (length(a)==1)*(1-init.fit))^2
+                return(sqrt(mean(ic.squared)/n))
+            }
+        } else {
+            eval.ic <- function(mat) {
+                out <- mat[, sum( (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda *
+                                  ( (delta.obs==1 & time==time.obs) -
+                                    dhaz * fit.cox )), by="id"]
+                ic.squared <- (out[, 2][[1]] +
+                               rowSums(sapply(a, function(aa)
+                               (2*(aa==a[1])-1)*(mat[get(A.name)==aa, surv.tau[1], by="id"][,2][[1]]))) -
+                               (length(a)==2)*init.fit-
+                               (length(a)==1)*(1-init.fit))^2
+                return(sqrt(mean(ic.squared)/n))
+            }
         }
     }
 
@@ -465,6 +513,7 @@ cox.tmle <- function(dt,
             }
             return(mean(out[, 2][[1]])) 
         }
+
         
         #--- decide on direction of small eps increments:
         if (competing.risk) {
@@ -515,12 +564,22 @@ cox.tmle <- function(dt,
         eval.equation(mat, 0)
 
         #-- 12a -- evaluate target parameter:
-        if (competing.risk) {
-            tmle.fit <- mean(rowSums(sapply(a, function(aa)
-            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, F1.tau[1], by="id"][,2][[1]]))))
+        if (treat.effect[1]=="stochastic") {
+            if (competing.risk) {
+                tmle.fit <- mean(rowSums(sapply(a, function(aa)
+                (mat[get(A.name)==aa, pi.star*F1.tau[1], by="id"][,2][[1]]))))
+            } else {
+                tmle.fit <- mean(rowSums(sapply(a, function(aa)
+                (mat[get(A.name)==aa, pi.star*(1-surv.tau[1]), by="id"][,2][[1]]))))
+            }        
         } else {
-            tmle.fit <- mean(rowSums(sapply(a, function(aa)
-            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
+            if (competing.risk) {
+                tmle.fit <- mean(rowSums(sapply(a, function(aa)
+                (2*(aa==a[1])-1)*(mat[get(A.name)==aa, F1.tau[1], by="id"][,2][[1]]))))
+            } else {
+                tmle.fit <- mean(rowSums(sapply(a, function(aa)
+                (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
+            }
         }
         
         #-- 12b -- update clever covariate:
@@ -599,12 +658,22 @@ cox.tmle <- function(dt,
             }
 
             #-- 12c -- evaluate target parameter:
-            if (competing.risk) {
-                tmle.fit <- mean(rowSums(sapply(a, function(aa)
-                (2*(aa==a[1])-1)*(mat[get(A.name)==aa, F1.tau[1], by="id"][,2][[1]]))))
+            if (treat.effect[1]=="stochastic") {
+                if (competing.risk) {
+                    tmle.fit <- mean(rowSums(sapply(a, function(aa)
+                    (mat[get(A.name)==aa, pi.star*F1.tau[1], by="id"][,2][[1]]))))
+                } else {
+                    tmle.fit <- mean(rowSums(sapply(a, function(aa)
+                    (mat[get(A.name)==aa, pi.star*(1-surv.tau[1]), by="id"][,2][[1]]))))
+                }        
             } else {
-                tmle.fit <- mean(rowSums(sapply(a, function(aa)
-                (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
+                if (competing.risk) {
+                    tmle.fit <- mean(rowSums(sapply(a, function(aa)
+                    (2*(aa==a[1])-1)*(mat[get(A.name)==aa, F1.tau[1], by="id"][,2][[1]]))))
+                } else {
+                    tmle.fit <- mean(rowSums(sapply(a, function(aa)
+                    (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
+                }
             }
         
             #-- 12b -- update clever covariate:
@@ -633,7 +702,11 @@ cox.tmle <- function(dt,
                 }
             }
 
-            tmle.list[[iter+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
+            #if (treat.effect[1]=="stochastic") {
+            #    tmle.list[[iter+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
+            #} else {
+                tmle.list[[iter+1]] <- c(tmle.fit=tmle.fit, sd.eic=eval.ic(mat))
+            #}
 
             if (competing.risk) {
                 eval.iter <- abs(eval.equation(mat, 0)+eval.equation(mat, 0, j=2))
