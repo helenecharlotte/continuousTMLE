@@ -132,7 +132,7 @@ cox.sl <- function(dt, tau=1.2, V=5, A.name="A", method=2, only.cox.sl=FALSE,
         }
     }
 
-    if (any(method==2)) {
+    if (any(method>=2)) {
     
         partial.loss.fun <- function(cox.fit, risk.set, t0=NULL) {
             risk.dt <- dt[id%in%risk.set][rev(order(time))]
@@ -165,7 +165,11 @@ cox.sl <- function(dt, tau=1.2, V=5, A.name="A", method=2, only.cox.sl=FALSE,
                 tryCatch(
                     if (length(outcome.model)==1) {
                         train.fit <- coxph(outcome.model[[1]], data=dt[id%in%train.set])
-                        return(partial.loss.fun(train.fit, 1:n)-partial.loss.fun(train.fit, train.set))
+                        if (method==2) {
+                            return(partial.loss.fun(train.fit, 1:n)-partial.loss.fun(train.fit, train.set))
+                        } else if (method==3) {
+                            return(partial.loss.fun(train.fit, train.set))
+                        }
                     } else {
 
                         t0 <- outcome.model[[2]]
@@ -189,8 +193,12 @@ cox.sl <- function(dt, tau=1.2, V=5, A.name="A", method=2, only.cox.sl=FALSE,
                                                                              mod1[3]))))
 
                         train.fit <- coxph(formula(mod2), data=dt2[!time.indicator | period==1])
-                        return(partial.loss.fun(train.fit, 1:n, t0=outcome.model[[2]])-
-                               partial.loss.fun(train.fit, train.set, t0= outcome.model[[2]]))
+                        if (method==2) {
+                            return(partial.loss.fun(train.fit, 1:n, t0=outcome.model[[2]])-
+                                   partial.loss.fun(train.fit, train.set, t0=outcome.model[[2]]))
+                        } else if (method==3) {
+                            return(partial.loss.fun(train.fit, train.set, t0=outcome.model[[2]]))
+                        }
                     }
                   , error=function(e) Inf)
             })
@@ -211,12 +219,23 @@ cox.sl <- function(dt, tau=1.2, V=5, A.name="A", method=2, only.cox.sl=FALSE,
         print(paste0("model picked by method2: ", (names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])])))
     }
 
-    if (length(method)==2) {
-        print(cbind(cve1, cve2))
+    
+    if (any(method==3)) {
+        cve2 <- unlist(lapply(1:length(outcome.models), function(mm) {
+            sum(-unlist(lapply(outlist2, function(out) out[[mm]])))
+        }))
+        print(paste0("model picked by method3: ", (names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])])))
     }
 
-    if (only.cox.sl) return(c(method1=(names(outcome.models)[cve1==min(cve1[abs(cve1)<Inf])]),
-                              method2=(names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])])))
+    if (length(method)>=2) {
+        print(cbind(cve1, cve2))
+    } 
+
+    if (only.cox.sl) {
+        print(cbind(cve2))
+        return(c(#method1=(names(outcome.models)[cve1==min(cve1[abs(cve1)<Inf])]),
+            method2=(names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])])))
+    }
 
     if (any(method==1)) {
         return(names(outcome.models)[cve1==min(cve1[abs(cve1)<Inf])])
