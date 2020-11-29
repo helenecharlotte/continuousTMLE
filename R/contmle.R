@@ -365,7 +365,7 @@ contmle <- function(dt,
     #-- 5 -- for checking: KM and crude HR:
     
     if (output.km) {
-        if (competing.risk) {
+        if (cr) {
             km.mod <- paste0(gsub("1", "",
                                   gsub("\\=", "",
                                        gsub("Surv", "Hist", as.character(outcome.model)[2]))),
@@ -506,7 +506,7 @@ contmle <- function(dt,
             bhaz.cox[, period:=(time<=change.point)*1+(time>change.point)*2]
             bhaz.cox[, chaz:=cumsum(dhaz), by=c("period", "A")]
             bhaz.cox[, cens.chaz:=cumsum(cens.dhaz), by="A"]
-            if (competing.risk) {
+            if (cr) {
                 bhaz.cox[, cr.chaz:=cumsum(cr.dhaz), by="A"]
             }
         }
