@@ -141,57 +141,6 @@ contmle <- function(dt,
         }
     }
 
-    #-- 1 -- estimate censoring distribution:
-
-    if (fit.cens[1]=="sl") { #-- cox-sl
-
-        print("use sl for censoring")
-
-        ## sl.models.cens <- lapply(sl.models, function(mod) {
-        ##     mod1 <- as.character(mod[[1]])
-        ##     return(c(as.formula(paste0(gsub("1", "0", mod1[2]), mod1[1], mod1[3])), t0=mod[2][[1]]))
-        ## })
-
-        dtcens <- copy(dt)
-        dtcens[, delta:=(delta==0)]
-
-        sl.pick.cr <- cox.sl(dtcens, A.name=A.name, V=V,
-                             only.cox.sl=only.cox.sl,
-                             outcome.models=lapply(sl.models, function(x) x[1]))[1]
-
-        rm(dtcens)
-
-        sl.model <- lapply(sl.models, function(x) x[1])[[sl.pick.cr]]
-
-        cens.model <- as.character(sl.model[[1]])
-        cens.model <- as.formula(paste0(gsub("1", "0", cens.model[2]), cens.model[1], cens.model[3]))
-
-        print(paste0("model picked for censoring: ", cens.model))
-
-        if (length(grep(".squared", as.character(cens.model)[3]))>0) {
-            names.squared <- unique(gsub(".squared", "",
-                                         grep(".squared", unlist(strsplit(gsub("\\+", " ",
-                                                                               as.character(cens.model)[3]), " ")),
-                                              value=TRUE)))
-            for (col in names.squared)
-                dt[, (paste0(col, ".squared")):=get(col)^2]
-        }
-
-
-    }
-    
-    if (fit.cens[1] %in% c("km", "hal")) {
-        tmp.model <- as.character(cens.model)
-        if (fit.cens[1]=="km") tmp.model[3] <- "strata(A)" else tmp.model[3] <- "1"
-        cens.model <- formula(paste0( tmp.model[2], tmp.model[1], tmp.model[3]))
-    }
-
-    if (fit.cens[1] %in% c("cox", "sl", "km", "hal")) {
-        cens.cox <- coxph(as.formula(deparse(cens.model)), data=dt)
-        if (verbose) print("censoring model:")
-        if (verbose) print(cens.cox)
-    }
-
     #-- 2 -- estimate treatment propensity: 
 
     prob.A <- predict(glm(as.formula(deparse(treat.model)), data=dt), type="response")
@@ -205,6 +154,7 @@ contmle <- function(dt,
         dtoutcome <- copy(dt)
         dtoutcome[, delta:=(delta==1)]
 
+        set.seed(1)
         sl.pick.outcome <- cox.sl(dtoutcome, A.name=A.name,
                                   only.cox.sl=only.cox.sl,
                                   method=sl.method, covars=covars, V=V,
@@ -223,7 +173,7 @@ contmle <- function(dt,
                     if (verbose) print(paste0("model picked: ", change.point))
                 }  else {
                     penalty.outcome <- sl.model[[2]]
-                    print(paste0("model picked - penalty: ", penalty.outcome))
+                    if (verbose) print(paste0("model picked - penalty: ", penalty.outcome))
                 }
             #}
         } else {
@@ -245,48 +195,84 @@ contmle <- function(dt,
         outcome.model <- formula(paste0(tmp.model[2], tmp.model[1], tmp.model[3]))
         change.point <- NULL
     }
-
-    #-- Apply either specified model or the one picked by sl
-
-    if (fit.outcome[1] %in% c("cox", "sl", "km", "hal")) {
     
+    fit.cox.fun <- function(mod, change.point, fit, dt, dt2, dd=1, sl.pick="") {
         if (length(change.point)>0) { #-- if there is a change-point:
-
-            print("estimate time-varying hazard")
-
+            delta1 <- dd-1
             t0 <- change.point
-
-            dt[, time.indicator:=(time<=t0)]
-
-            dt2 <- rbind(dt, dt)[order(id)]
-            dt2[, period:=1:.N, by="id"]
-
-            dt2[period==1, `:=`(tstart=0, tstop=(time<=t0)*time+(time>t0)*t0)]
-            dt2[period==2, `:=`(tstart=t0, tstop=time)]
-            dt2[period==1 & !time.indicator, delta:=0]
-
-            mod1 <- as.character(outcome.model)
+            dt2[, time.indicator:=(time<=t0)]
+            dt2[, (paste0("period", dd)):=1:.N, by="id"]
+            dt2[get(paste0("period", dd))==1, `:=`(tstart=0, tstop=(time<=t0)*time+(time>t0)*t0)]
+            dt2[get(paste0("period", dd))==2, `:=`(tstart=t0, tstop=time)]
+            dt2[get(paste0("period", dd))==1 & !time.indicator, delta:=delta1]
+            mod1 <- as.character(mod)
             mod2 <- paste0(gsub(substr(mod1[2], which(strsplit(mod1[2], "")[[1]]=="(")+1,
                                        which(strsplit(mod1[2], "")[[1]]==",")-1), "tstart, tstop", mod1[2]),
                            "~", 
-                           gsub("\\+A", "", gsub(" ", "", paste0("I((period==1)&(", A.name, "==1))", mod.period1,
-                                                                 " + I((period==2)&(", A.name, "==1))", mod.period2, " + ",
+                           gsub("\\+A", "", gsub(" ", "", paste0("I((period", dd,"==1)&(", A.name, "==1))",
+                                                                 " + I((period", dd, "==2)&(", A.name, "==1))", " + ",
                                                                  mod1[3]))))
-
-            fit.cox <- coxph(formula(mod2), data=dt2[!time.indicator | period==1])
-        } else { #-- if there is no change-point:
-            if (fit.outcome[1]=="sl" & length(grep("coxnet", sl.pick.outcome))>0) {
-                X <- model.matrix(as.formula(deparse(outcome.model)), data=dt)
-                y <- dt[, Surv(time, delta==1)]
+            fit.cox <- coxph(formula(mod2), data=dt2[!time.indicator | get(paste0("period", dd))==1])
+        } else { #-- if there is not a change-point:
+            if (fit[1]=="sl" & length(grep("coxnet", sl.pick))>0) {
+                X <- model.matrix(as.formula(deparse(mod)), data=dt)
+                y <- dt[, Surv(time, delta==dd)]
                 fit.cox <- glmnet(x=X, y=y, family="cox", maxit=1000,
                                   lambda=c(0.001))
             } else {
-                fit.cox <- coxph(as.formula(deparse(outcome.model)), data=dt)
+                fit.cox <- coxph(as.formula(deparse(mod)), data=dt)
             }
         }
+        return(list(fit.cox=fit.cox, dt2=dt2))
+    }
+
+    #-- any with changepoint? 
+
+    if (any(length(change.point)>0)) {
+        dt2 <- rbind(dt, dt)[order(id)]
+    } else {
+        dt2 <- NULL
+    }
+
+    #-- Apply either specified model or the one picked by sl
+    
+    if (fit.outcome[1] %in% c("cox", "sl", "km", "hal")) {
+        fit.cox <- fit.cox.fun(outcome.model, change.point, fit.outcome, dt, dt2, sl.pick=sl.pick.outcome)
+        dt2 <- fit.cox[["dt2"]]
+        fit.cox <- fit.cox[["fit.cox"]]
+        tmp <- suppressWarnings(setDT(basehaz(fit.cox, centered=TRUE)))
     }
 
     if (verbose) print(fit.cox)
+
+    #-- 6 -- get baseline hazard for outcome:
+    
+    if (fit.outcome[1]=="km") {
+        setnames(tmp, "strata", "A")
+        tmp[, A:=as.numeric(gsub("A=", "", A))]
+        bhaz.cox <- rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
+                          merge(do.call("rbind", lapply(a, function(aa) data.table(time=unique.times, A=aa))),
+                                tmp, by=c("time", "A"), all.x=TRUE))[order(A)]
+        bhaz.cox[, hazard:=na.locf(hazard), by="A"]
+        bhaz.cox[, dhaz:=c(0, diff(hazard)), by="A"]
+        setnames(bhaz.cox, "hazard", "chaz")
+    } else {
+        if (fit.outcome[1]=="sl" & length(grep("coxnet", sl.pick.outcome))>0) { 
+            basehaz <- glmnet_basesurv(dt$time, dt$delta==1, X, centered=TRUE)
+            bhaz.cox <- rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
+                              merge(do.call("rbind", lapply(a, function(aa) data.table(time=unique.times, A=aa))),
+                                    data.table(time=basehaz$time, hazard=basehaz$cumulative_base_hazard),
+                                    by="time", all.x=TRUE))
+        } else {
+            bhaz.cox <- rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
+                              merge(do.call("rbind", lapply(a, function(aa) data.table(time=unique.times, A=aa))),
+                                    suppressWarnings(setDT(basehaz(fit.cox, centered=TRUE))),
+                                    by="time", all.x=TRUE))
+        }
+        bhaz.cox[, dhaz:=c(0, diff(hazard)), by="A"]
+        setnames(bhaz.cox, "hazard", "chaz")
+    }
+
 
     #-- 4 -- competing risks fitted the same way:
 
@@ -298,23 +284,30 @@ contmle <- function(dt,
             dtcr <- copy(dt)
             dtcr[, delta:=(delta==2)]
 
+            set.seed(1)
             sl.pick.cr <- cox.sl(dtcr, A.name=A.name,
                                  method=sl.method, covars=covars, V=V,
-                                 outcome.models=lapply(sl.models, function(x) x[1]))[1]
+                                 outcome.models=sl.models)[1]
 
             rm(dtcr)
             
-            sl.model <- lapply(sl.models, function(x) x[1])[[sl.pick.cr]]
+            sl.model <- sl.models[[sl.pick.cr]]
 
             cr.model <- as.character(sl.model[[1]])
             cr.model <- as.formula(paste0(gsub("1", "2", cr.model[2]), cr.model[1], cr.model[3]))
-
-            print(paste0("model picked for cr: ", cr.model))
+            if (verbose) print(paste0("model picked for cr: ", cr.model))
             
-            if (verbose) {
-                print(paste0("model picked: ", cr.model))
-            }
-
+            if (length(sl.model)>1) {
+                if (names(sl.model)[2]=="t0") {
+                    change.point.cr <- sl.model[[2]]
+                    if (verbose) print(paste0("change point picked for cr: ", change.point.cr))
+                }  else {
+                    penalty.cr <- sl.model[[2]]
+                    if (verbose) print(paste0("model picked for cr - penalty: ", penalty.cr))
+                }
+            } 
+        } else {
+            sl.pick.cr <- ""
         }
         
         if (fit.cr[1] %in% c("km", "hal")) {
@@ -322,46 +315,172 @@ contmle <- function(dt,
             if (fit.cr[1]=="km") tmp.model[3] <- "strata(A)" else tmp.model[3] <- "1"
             cr.model <- formula(paste0(tmp.model[2], tmp.model[1], tmp.model[3]))
             change.point.cr <- NULL
-        } else if (fit.cr[1] %in% c("cox")) {
-            change.point.cr <- NULL
         } 
 
         #-- Apply either specified model or the one picked by sl
 
         if (fit.cr[1] %in% c("cox", "sl", "km", "hal")) {
+
+            #-- Apply either specified model or the one picked by sl
     
-            if (length(change.point.cr)>0) { #-- if there is a change-point:
+            if (fit.cr[1] %in% c("cox", "sl", "km", "hal")) {
+                fit.cr.cox <- fit.cox.fun(mod=cr.model, change.point=change.point.cr,
+                                          fit=fit.cr, dt=dt, dt2=dt2, dd=2,
+                                          sl.pick=sl.pick.cr)
+                dt2 <- fit.cr.cox[["dt2"]]
+                fit.cr.cox <- fit.cr.cox[["fit.cox"]]
+                tmp <- suppressWarnings(setDT(basehaz(fit.cr.cox, centered=TRUE)))
+            }
+            
+            if (verbose) print(fit.cr.cox)
+        }
+    }
 
-                print("estimate time-varying hazard")
+    change.points <- c(change.point, change.point.cr)
 
-                t0 <- change.point.cr
-        
-                dt[, time.indicator:=(time<=t0)]
+    #-- 6 -- get baseline hazard for cr:
 
-                dt2 <- rbind(dt, dt)[order(id)]
-                dt2[, period:=1:.N, by="id"]
+    if (cr) {
+        if (fit.cr[1]=="km") {
+            setnames(tmp, "strata", "A")
+            tmp[, A:=as.numeric(gsub("A=", "", A))]
+            bhaz.cox <- merge(bhaz.cox, rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
+                                              tmp),
+                              by=c("time", "A"), all.x=TRUE)[order(A)]
+            bhaz.cox[, hazard:=na.locf(hazard), by="A"]
+            setnames(bhaz.cox, "hazard", "cr.chaz")
+            bhaz.cox[, cr.dhaz:=c(0, diff(cr.chaz)), by="A"]
+        } else {            
+            bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
+                                              suppressWarnings(setDT(basehaz(fit.cr.cox, centered=TRUE)))),
+                              by="time", all.x=TRUE)
+            setnames(bhaz.cox, "hazard", "cr.chaz")
+            bhaz.cox[, cr.dhaz:=c(0, diff(cr.chaz)), by="A"]
+        }
+    }
 
-                dt2[period==1, `:=`(tstart=0, tstop=(time<=t0)*time+(time>t0)*t0)]
-                dt2[period==2, `:=`(tstart=t0, tstop=time)]
-                dt2[period==1 & !time.indicator, delta:=0]
 
-                mod1 <- as.character(cr.model)
-                mod2 <- paste0(gsub(substr(mod1[2], which(strsplit(mod1[2], "")[[1]]=="(")+1,
-                                           which(strsplit(mod1[2], "")[[1]]==",")-1), "tstart, tstop", mod1[2]),
-                               "~", 
-                               gsub("\\+A", "", gsub(" ", "", paste0("I((period==1)&(", A.name, "==1))", mod.period1,
-                                                                     " + I((period==2)&(", A.name, "==1))", mod.period2, " + ",
-                                                                     mod1[3]))))
+    #-- 1 -- estimate censoring distribution:
 
-                fit.cr.cox <- coxph(formula(mod2), data=dt2[!time.indicator | period==1])
-            } else { #-- if there is no change-point:
-                fit.cr.cox <- coxph(as.formula(deparse(cr.model)), data=dt)
+    if (fit.cens[1]=="sl") { #-- cox-sl
+
+        if (verbose) print("use sl for censoring")
+
+        ## sl.models.cens <- lapply(sl.models, function(mod) {
+        ##     mod1 <- as.character(mod[[1]])
+        ##     return(c(as.formula(paste0(gsub("1", "0", mod1[2]), mod1[1], mod1[3])), t0=mod[2][[1]]))
+        ## })
+
+        dtcens <- copy(dt)
+        dtcens[, delta:=(delta==0)]
+
+        sl.pick.cr <- cox.sl(dtcens, A.name=A.name, V=V,
+                             only.cox.sl=only.cox.sl,
+                             outcome.models=lapply(sl.models, function(x) x[1]))[1]
+
+        rm(dtcens)
+
+        sl.model <- lapply(sl.models, function(x) x[1])[[sl.pick.cr]]
+
+        cens.model <- as.character(sl.model[[1]])
+        cens.model <- as.formula(paste0(gsub("1", "0", cens.model[2]), cens.model[1], cens.model[3]))
+
+        if (verbose) print(paste0("model picked for censoring: ", cens.model))
+
+        if (length(grep(".squared", as.character(cens.model)[3]))>0) {
+            names.squared <- unique(gsub(".squared", "",
+                                         grep(".squared", unlist(strsplit(gsub("\\+", " ",
+                                                                               as.character(cens.model)[3]), " ")),
+                                              value=TRUE)))
+            for (col in names.squared)
+                dt[, (paste0(col, ".squared")):=get(col)^2]
+        }
+
+
+    }
+    
+    if (fit.cens[1] %in% c("km", "hal")) {
+        tmp.model <- as.character(cens.model)
+        if (fit.cens[1]=="km") tmp.model[3] <- "strata(A)" else tmp.model[3] <- "1"
+        cens.model <- formula(paste0( tmp.model[2], tmp.model[1], tmp.model[3]))
+    }
+
+    if (fit.cens[1] %in% c("cox", "sl", "km", "hal")) {
+        cens.cox <- coxph(as.formula(deparse(cens.model)), data=dt)
+        tmp <- suppressWarnings(setDT(basehaz(cens.cox, centered=TRUE)))
+        if (verbose) print("censoring model:")
+        if (verbose) print(cens.cox)
+    }
+
+    #-- 6b -- add censoring baseline hazard:
+
+    if (length(cens.model)>0) {
+        if (fit.cens[1]=="km") {
+            setnames(tmp, "strata", "A")
+            tmp[, A:=as.numeric(gsub("A=", "", A))]
+            bhaz.cox <- merge(bhaz.cox, rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
+                                              tmp),
+                              by=c("time", "A"), all.x=TRUE)[order(A)]
+            bhaz.cox[, hazard:=na.locf(hazard), by="A"]
+            setnames(bhaz.cox, "hazard", "cens.chaz")
+            bhaz.cox[, cens.dhaz:=c(0, diff(cens.chaz)), by="A"]
+        } else {
+            bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
+                                              suppressWarnings(setDT(basehaz(cens.cox, centered=TRUE)))),
+                              by="time", all.x=TRUE)
+            setnames(bhaz.cox, "hazard", "cens.chaz")
+            bhaz.cox[, cens.dhaz:=c(0, diff(cens.chaz)), by="A"]
+        }
+
+        if (length(change.points)>0) {
+            if (cr) {
+                bhaz.cox <- rbind(bhaz.cox,
+                                  do.call("rbind", lapply(change.points, function(change.point) {
+                                      do.call("rbind", lapply(a, function(aa) data.table(
+                                                                                  time=change.point,
+                                                                                  dhaz=0, chaz=0,
+                                                                                  cr.dhaz=0, cr.chaz=0,
+                                                                                  cens.dhaz=0, cens.chaz=0,
+                                                                                  A=aa)))})),
+                                  do.call("rbind", lapply(a, function(aa) data.table(time=tau,
+                                                                                     dhaz=0, chaz=0,
+                                                                                     cr.dhaz=0, cr.chaz=0,
+                                                                                     cens.dhaz=0, cens.chaz=0,
+                                                                                     A=aa))))[order(time)]
+            } else {
+                bhaz.cox <- rbind(bhaz.cox,
+                                  do.call("rbind", lapply(change.points, function(change.point) {
+                                      do.call("rbind", lapply(a, function(aa) data.table(time=change.point,
+                                                                                         dhaz=0, chaz=0,
+                                                                                         cens.dhaz=0, cens.chaz=0,
+                                                                                         A=aa)))})),
+                                  do.call("rbind", lapply(a, function(aa) data.table(time=tau,
+                                                                                     dhaz=0, chaz=0,
+                                                                                     cens.dhaz=0, cens.chaz=0,
+                                                                                     A=aa))))[order(time)]
+            }
+            periods <- c(NULL)
+            if (length(change.point)>0) {
+                bhaz.cox[, period1:=(time<=change.point)*1+(time>change.point)*2]
+                periods <- c(periods, "period1")
+            }
+            if (length(change.point.cr)>0) {
+                bhaz.cox[, period2:=(time<=change.point.cr)*1+(time>change.point.cr)*2]
+                periods <- c(periods, "period2")
+            }            
+            bhaz.cox[, chaz:=cumsum(dhaz), by=c(periods, "A")]
+            bhaz.cox[, cens.chaz:=cumsum(cens.dhaz), by="A"]
+            if (cr) {
+                bhaz.cox[, cr.chaz:=cumsum(cr.dhaz), by="A"]
             }
         }
 
-        if (verbose) print(fit.cr.cox)
+        #-- 6c -- get censoring survival one time-point back: 
+
+        bhaz.cox[, cens.chaz.1:=c(0, cens.chaz[-.N])]
     }
 
+    
     #-- 5 -- for checking: KM and crude HR:
     
     if (output.km) {
@@ -409,112 +528,6 @@ contmle <- function(dt,
         hr <- coef(hr)[A.name]
     }
 
-    #-- 6 -- get baseline hazard:
-
-    if (fit.outcome[1]=="km") {
-        tmp <- suppressWarnings(setDT(basehaz(fit.cox, centered=TRUE)))
-        setnames(tmp, "strata", "A")
-        tmp[, A:=as.numeric(gsub("A=", "", A))]
-        bhaz.cox <- rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
-                          merge(do.call("rbind", lapply(a, function(aa) data.table(time=unique.times, A=aa))),
-                                tmp, by=c("time", "A"), all.x=TRUE))[order(A)]
-        bhaz.cox[, hazard:=na.locf(hazard), by="A"]
-        bhaz.cox[, dhaz:=c(0, diff(hazard)), by="A"]
-        setnames(bhaz.cox, "hazard", "chaz")
-    } else {
-        if (fit.outcome[1]=="sl" & length(grep("coxnet", sl.pick.outcome))>0) { 
-            basehaz <- glmnet_basesurv(dt$time, dt$delta==1, X, centered=TRUE)
-            bhaz.cox <- rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
-                              merge(do.call("rbind", lapply(a, function(aa) data.table(time=unique.times, A=aa))),
-                                    data.table(time=basehaz$time, hazard=basehaz$cumulative_base_hazard),
-                                    by="time", all.x=TRUE))
-        } else {
-            bhaz.cox <- rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
-                              merge(do.call("rbind", lapply(a, function(aa) data.table(time=unique.times, A=aa))),
-                                    suppressWarnings(setDT(basehaz(fit.cox, centered=TRUE))),
-                                    by="time", all.x=TRUE))
-        }
-        bhaz.cox[, dhaz:=c(0, diff(hazard)), by="A"]
-        setnames(bhaz.cox, "hazard", "chaz")
-    }
-
-    if (cr) {
-        if (fit.cr[1]=="km") {
-            tmp <- suppressWarnings(setDT(basehaz(fit.cr.cox, centered=TRUE)))
-            setnames(tmp, "strata", "A")
-            tmp[, A:=as.numeric(gsub("A=", "", A))]
-            bhaz.cox <- merge(bhaz.cox, rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
-                                              tmp),
-                              by=c("time", "A"), all.x=TRUE)[order(A)]
-            bhaz.cox[, hazard:=na.locf(hazard), by="A"]
-            setnames(bhaz.cox, "hazard", "cr.chaz")
-            bhaz.cox[, cr.dhaz:=c(0, diff(cr.chaz)), by="A"]
-        } else {            
-            bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
-                                              suppressWarnings(setDT(basehaz(fit.cr.cox, centered=TRUE)))),
-                              by="time", all.x=TRUE)
-            setnames(bhaz.cox, "hazard", "cr.chaz")
-            bhaz.cox[, cr.dhaz:=c(0, diff(cr.chaz)), by="A"]
-        }
-    }
-
-    #-- 6b -- add censoring baseline hazard:
-
-    if (length(cens.model)>0) {
-        if (fit.cens[1]=="km") {
-            tmp <- suppressWarnings(setDT(basehaz(cens.cox, centered=TRUE)))
-            setnames(tmp, "strata", "A")
-            tmp[, A:=as.numeric(gsub("A=", "", A))]
-            bhaz.cox <- merge(bhaz.cox, rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
-                                              tmp),
-                              by=c("time", "A"), all.x=TRUE)[order(A)]
-            bhaz.cox[, hazard:=na.locf(hazard), by="A"]
-            setnames(bhaz.cox, "hazard", "cens.chaz")
-            bhaz.cox[, cens.dhaz:=c(0, diff(cens.chaz)), by="A"]
-        } else {
-            bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
-                                              suppressWarnings(setDT(basehaz(cens.cox, centered=TRUE)))),
-                              by="time", all.x=TRUE)
-            setnames(bhaz.cox, "hazard", "cens.chaz")
-            bhaz.cox[, cens.dhaz:=c(0, diff(cens.chaz)), by="A"]
-        }
-
-        if (length(change.point)>0) {
-            if (cr) {
-                bhaz.cox <- rbind(bhaz.cox,
-                                  do.call("rbind", lapply(a, function(aa) data.table(time=change.point,
-                                                                                     dhaz=0, chaz=0,
-                                                                                     cr.dhaz=0, cr.chaz=0,
-                                                                                     cens.dhaz=0, cens.chaz=0,
-                                                                                     A=aa))),
-                                  do.call("rbind", lapply(a, function(aa) data.table(time=tau,
-                                                                                     dhaz=0, chaz=0,
-                                                                                     cr.dhaz=0, cr.chaz=0,
-                                                                                     cens.dhaz=0, cens.chaz=0,
-                                                                                     A=aa))))[order(time)]
-            } else {
-                bhaz.cox <- rbind(bhaz.cox,
-                                  do.call("rbind", lapply(a, function(aa) data.table(time=change.point,
-                                                                                     dhaz=0, chaz=0,
-                                                                                     cens.dhaz=0, cens.chaz=0,
-                                                                                     A=aa))),
-                                  do.call("rbind", lapply(a, function(aa) data.table(time=tau,
-                                                                                     dhaz=0, chaz=0,
-                                                                                     cens.dhaz=0, cens.chaz=0,
-                                                                                     A=aa))))[order(time)]
-            }
-            bhaz.cox[, period:=(time<=change.point)*1+(time>change.point)*2]
-            bhaz.cox[, chaz:=cumsum(dhaz), by=c("period", "A")]
-            bhaz.cox[, cens.chaz:=cumsum(cens.dhaz), by="A"]
-            if (cr) {
-                bhaz.cox[, cr.chaz:=cumsum(cr.dhaz), by="A"]
-            }
-        }
-
-        #-- 6c -- get censoring survival one time-point back: 
-
-        bhaz.cox[, cens.chaz.1:=c(0, cens.chaz[-.N])]
-    }
 
     #-- 7 -- dublicate bhaz.cox; one for each treatment option specified:
 
@@ -531,7 +544,7 @@ contmle <- function(dt,
         dt.tmp[, A:=aa]
     }))
 
-    if (length(change.point)>0) {
+    if (length(change.points)>0) {
         dt2.a <- do.call("rbind", lapply(a, function(aa) {
             dt.tmp <- copy(dt2)
             dt.tmp[, A:=aa]
@@ -579,12 +592,20 @@ contmle <- function(dt,
             tmp[, surv.C1:=exp(-fit.cens.a*cens.chaz.1)]
             tmp[, Ht:=Ht/exp(-fit.cens.a*cens.chaz.1)]
         } 
-        if (length(change.point)>0) {
-            tmp[, period:=(time<=change.point)*1+(time>change.point)*2]
+        if (length(change.points)>0) {
+            periods <- c(NULL)
+            if (length(change.point)>0) {
+                tmp[, period1:=(time<=change.point)*1+(time>change.point)*2]
+                periods <- c(periods, "period1")
+            }
+            if (length(change.point.cr)>0) {
+                tmp[, period2:=(time<=change.point.cr)*1+(time>change.point.cr)*2]
+                periods <- c(periods, "period2")
+            }      
             if (cr) {
-                tmp <- merge(tmp, dt2.a[id==i, c("period", A.name, "fit.cox", "fit.cr.cox"), with=FALSE], by=c("period", A.name))
+                tmp <- merge(tmp, dt2.a[id==i, c(periods, A.name, "fit.cox", "fit.cr.cox"), with=FALSE], by=c(periods, A.name))
             } else {
-                tmp <- merge(tmp, dt2.a[id==i, c("period", A.name, "fit.cox"), with=FALSE], by=c("period", A.name))
+                tmp <- merge(tmp, dt2.a[id==i, c(periods, A.name, "fit.cox"), with=FALSE], by=c(periods, A.name))
             }
         } else {
             if (cr) {
@@ -795,7 +816,7 @@ contmle <- function(dt,
                                   get(paste0("Ht", j2, ".lambda2", ifelse(length(tau)>1, paste0(".", kk), ""))) *
                                   ( (delta.obs==2 & time==time.obs) -
                                     cr.dhaz * fit.cr.cox )), by="id"]
-                print(mean(out[, 2][[1]]))
+                if (verbose) print(mean(out[, 2][[1]]))
                 ic.squared <- (out[, 2][[1]] +
                                rowSums(sapply(a, function(aa)
                                (2*(aa==a[1])-1)*(mat[get(A.name)==aa, get(paste0("F", ifelse(j2=="", 1, j2), ".tau", ifelse(length(tau)>1, kk, "")))[1], by="id"][,2][[1]])))-
@@ -836,7 +857,7 @@ contmle <- function(dt,
                 F2=eval.ic(mat, j2=2))
             eval.ic(mat)
         }
-        print(init.ic)
+        if (verbose) print(init.ic)
     } else {
         if (length(tau)>1) {
             init.ic <- sapply(1:length(tau), function(kk) eval.ic(mat, kk=kk))
@@ -910,8 +931,8 @@ contmle <- function(dt,
             return(mean(out[, 2][[1]])) 
         }
 
-        print(init.fit)
-        print(init.ic)
+        if (verbose) print(init.fit)
+        if (verbose) print(init.ic)
 
         if (weighted.norm) {
             if (cr) {
@@ -992,15 +1013,16 @@ contmle <- function(dt,
                 }
             }
         }
-        
-        print(Pn.eic <- Pn.eic.fun(mat))
+
+        Pn.eic <- Pn.eic.fun(mat)
+        if (verbose) print(Pn.eic)
        
         Pn.eic.norm.fun <- function(x) {
             sqrt(sum(c(x)^2))
         }
            
         Pn.eic.norm.prev <- Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic)#sqrt(sum(c(Pn.eic)^2))
-        print(Pn.eic.norm)
+        if (verbose) print(Pn.eic.norm)
        
         for (step in 1:no.small.steps) {
 
@@ -1119,17 +1141,20 @@ contmle <- function(dt,
                 }
             }
 
-            print(Pn.eic <- Pn.eic.fun(mat))
+            Pn.eic <- Pn.eic.fun(mat)
+            if (verbose) print(Pn.eic)
             
             Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic)#sqrt(sum(Pn.eic^2))
-            print(Pn.eic.norm)
+            if (verbose) print(Pn.eic.norm)
 
             #if (step==8 | step==100) deps.size <- 0.1*deps.size
 
             if (Pn.eic.norm.prev<=Pn.eic.norm) {
-                print("----")
-                print(step)
-                print("----")
+                if (verbose) {
+                    print("----")
+                    print(step)
+                    print("----")
+                }
                 #browser()
                 if (cr) {
                     mat[, fit.cox:=fit.cox.tmp]
@@ -1153,7 +1178,8 @@ contmle <- function(dt,
                     }
                 }
 
-                print(Pn.eic <- Pn.eic.fun(mat))
+                Pn.eic <- Pn.eic.fun(mat)
+                if (verbose) print(Pn.eic)
             
                 Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic)#sqrt(sum(Pn.eic^2))
                 deps.size <- 0.5*deps.size#0.1*deps.size
@@ -1161,30 +1187,30 @@ contmle <- function(dt,
             } else {
 
                 if (cr) {
-                    print(tmle.fit <- c(
-                              F1=sapply(1:length(tau), function(kk) {
-                                  mean(rowSums(sapply(a, function(aa)
-                                  (2*(aa==a[1])-1)*(mat[get(A.name)==aa, get(paste0("F1.tau", kk))[1], by="id"][,2][[1]]))))
-                              }),
-                              F2=sapply(1:length(tau), function(kk) {
-                                  mean(rowSums(sapply(a, function(aa)
-                                  (2*(aa==a[1])-1)*(mat[get(A.name)==aa, get(paste0("F2.tau", kk))[1], by="id"][,2][[1]]))))
-                              })))
+                    tmle.fit <- c(
+                        F1=sapply(1:length(tau), function(kk) {
+                            mean(rowSums(sapply(a, function(aa)
+                            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, get(paste0("F1.tau", kk))[1], by="id"][,2][[1]]))))
+                        }),
+                        F2=sapply(1:length(tau), function(kk) {
+                            mean(rowSums(sapply(a, function(aa)
+                            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, get(paste0("F2.tau", kk))[1], by="id"][,2][[1]]))))
+                        }))
                 } else {
-                    print(tmle.fit <- sapply(1:length(tau), function(kk) {
+                    tmle.fit <- sapply(1:length(tau), function(kk) {
                         mean(rowSums(sapply(a, function(aa)
                         (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
-                    }))
+                    })
                 }
 
                 Pn.eic.norm.prev <- Pn.eic.norm
             }
 
-            print(max(init.ic)/(sqrt(n)*log(n)))
-            print(Pn.eic.norm)
+            if (verbose) print(max(init.ic)/(sqrt(n)*log(n)))
+            if (verbose) print(Pn.eic.norm)
             
             if (Pn.eic.norm<=max(init.ic)/(sqrt(n)*log(n))) {
-                print(paste0("converged", " at ", step, "th step"))
+                if (verbose) print(paste0("converged", " at ", step, "th step"))
                 break
             }
 
@@ -1290,7 +1316,8 @@ contmle <- function(dt,
                 mat[, surv.tau:=surv.t[.N], by=c("id", "A")]
             }
 
-            print(eic.value <- eval.equation(mat, deps, tau))
+            eic.value <- eval.equation(mat, deps, tau)
+            if (verbose) print(eic.value)
 
             if (cr) {
                 eval.iter <- abs(eval.equation(mat, 0, tau)+eval.equation(mat, 0, tau, j=2))
@@ -1300,10 +1327,10 @@ contmle <- function(dt,
 
             if  (sign.eic*eic.value<=0) {
                 if (eval.iter<=eval.ic(mat)/(sqrt(n)*log(n))) {
-                    print(paste0("converged", " at ", step, "th step"))
+                    if (verbose) print(paste0("converged", " at ", step, "th step"))
                     break
                 } else {
-                    print("did not converge yet")
+                    if (verbose) print("did not converge yet")
                     deps <- -deps/10
                     sign.eic <- -sign.eic
                 }
@@ -1370,12 +1397,15 @@ contmle <- function(dt,
                 return(mean(out[, 2][[1]])) 
             }
 
-            print(paste0("iter=", iter, ", estimate eps: ",
-                         round(eps.hat <- nleqslv(0.01, function(eps) eval.equation(mat, eps, tau))$x, 4)))
+            eps.hat <- nleqslv(0.01, function(eps) eval.equation(mat, eps, tau))$x
+            
+            if (verbose) print(paste0("iter=", iter, ", estimate eps: ",
+                                      round(eps.hat, 4)))
 
             if (cr) {
-                print(paste0("cr: ", "estimate eps: ",
-                             round(eps.hat2 <- nleqslv(0.01, function(eps) eval.equation(mat, eps, tau, j=2))$x, 4)))
+                eps.hat2 <- nleqslv(0.01, function(eps) eval.equation(mat, eps, tau, j=2))$x
+                if (verbose) print(paste0("cr: ", "estimate eps: ",
+                                          round(eps.hat2, 4)))
             }
             
             #-- 12b -- update hazard(s):

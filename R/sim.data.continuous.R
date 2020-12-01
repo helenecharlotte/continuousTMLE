@@ -3,7 +3,7 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
                      nu=0.5, eta=4/sqrt(2)*(1/8),
                      firstevent=TRUE,
                      censoring=TRUE,
-                     competing.risk=FALSE, 
+                     competing.risk=FALSE, cr.both=FALSE, 
                      seed=sample(4034244, 1),
                      interaction.AL=FALSE,
                      interaction.Atime=FALSE, t0=0.3,
@@ -72,7 +72,7 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
 
     if (length(intervention.A)>0 & is.numeric(intervention.A)) A <- intervention.A else if (length(intervention.A)>0 & is.function(intervention.A)) A <- rbinom(n, 1, intervention.A(cbind(L1,L2,L3)))
 
-    print(mean(A))
+    #if (verbose) print(mean(A))
 
     #-- true density's dependence on covariates/treatment:
     if (interaction.AL & !interaction.Atime) {
@@ -101,8 +101,8 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
                     + 0.1 ))
                 }
             }
-            print(paste0("time-varying HR, t0=", t0, ", betaA=", betaA, ", period2=", betaA*-0.45))
-           # print(paste0("L2^2"))
+            if (verbose) print(paste0("time-varying HR, t0=", t0, ", betaA=", betaA, ", period2=", betaA*-0.45))
+            # print(paste0("L2^2"))
         } else if (interaction.AL) {
             phiT <- function(t, A, L1, L2, L3, betaA, betaL) {
                 return(exp(#-0.45+#0.55*A*(t<=tau/3)-0.65*A*(t>=tau/3)+
@@ -135,24 +135,23 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
                 L1*betaL-1.2*L2+0.8*L3+#-0.3*L3*L1+#0.8*L3
                 + 0.1 ))
             }
-            print(paste0("time-varying HR, t0=", t0, ", betaA=", betaA, ", period2=", betaA*-0.45))
+            if (verbose) print(paste0("time-varying HR, t0=", t0, ", betaA=", betaA, ", period2=", betaA*-0.45))
         }
     } else if (square.effect | square.effect2) {
         phiT <- function(t, A, L1, L2, L3, betaA, betaL) {
             #return(exp(A*betaA + L1*betaL))
             return(exp(A*betaA+L1^2*1.2))
         }
-        print("1.2*L2^2")
+        if (verbose) print("1.2*L1^2")
     } else {
         phiT <- function(t, A, L1, L2, L3, betaA, betaL) {
             #return(exp(A*betaA + L1*betaL))
             return(exp(A*betaA+L1^2*betaL+0.75*sqrt(L2)*L1-1.2*sin(L3*6)))
         }
-        print("sin(L3)")
+        if (verbose) print("sin(L3)")
     }
 
-    print(phiT)
-    
+   
     lambdaT <- function(t, A, L1, L2, L3, betaA, betaL, eta, nu) {
         return(phiT(t, A, L1, L2, L3, betaA, betaL)*eta*nu*t^{nu-1})
     }
@@ -163,7 +162,7 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
             return(exp(-0.1+censoring.alpha))
         }
     } else {
-        print("informative censoring")
+        if (verbose) print("informative censoring")
         if (interaction.Atime & (interaction.AL)) {
             phiC <- function(t, A, L1, L2, L3) {
                 return(exp(-L3*0.1+2.6*L3 + 0.1 + censoring.alpha))
@@ -196,9 +195,7 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
             }
         }
     }
-
-    print(phiC)
-
+   
     lambdaC <- function(t, A, L1, L2, L3, eta, nu) {
         return(phiC(t, A, L1, L2, L3)*eta*nu*t^{nu-1})
     }
@@ -219,7 +216,7 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
             return(exp(-1.4+0.7*L1-0.4*A))
         }
     }
-
+    
     lambdaT2 <- function(t, A, L1, L2, L3, eta, nu) {
         return(phiT2(t, A, L1, L2, L3)*eta*nu*t^{nu-1})
     }
@@ -321,7 +318,7 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
         }
     }
 
-
+    
     #-- intialize monitoring times: 
     Tlist <- list(cbind(time=rep(0, n), delta=rep(0, n), id=1:n))
 
@@ -404,5 +401,13 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
         dt[, hist(time)]
     }
 
-    if (length(intervention.A)>0) return(mean(dt[, time<=tau & delta==1])) else return(dt)
+    if (length(intervention.A)>0 & cr.both==TRUE) {
+        return(do.call("rbind", lapply(tau, function(tau.kk) {
+            c(tau=tau.kk, F1=mean(dt[, time<=tau.kk & delta==1]), F2=mean(dt[, time<=tau.kk & delta==2]))
+        })))
+    } else if (length(intervention.A)>0) {
+        return(do.call("rbind", lapply(tau, function(tau.kk) {
+            mean(tau=tau.kk, dt[, time<=tau.kk & delta==1])
+        })))
+    } else return(dt)
 }
