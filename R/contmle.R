@@ -200,6 +200,7 @@ contmle <- function(dt,
         if (length(change.point)>0) { #-- if there is a change-point:
             delta1 <- dd-1
             t0 <- change.point
+            if (length(dt2)==0) dt2 <- rbind(dt, dt)[order(id)]
             dt2[, time.indicator:=(time<=t0)]
             dt2[, (paste0("period", dd)):=1:.N, by="id"]
             dt2[get(paste0("period", dd))==1, `:=`(tstart=0, tstop=(time<=t0)*time+(time>t0)*t0)]
@@ -322,7 +323,7 @@ contmle <- function(dt,
         if (fit.cr[1] %in% c("cox", "sl", "km", "hal")) {
 
             #-- Apply either specified model or the one picked by sl
-    
+            
             if (fit.cr[1] %in% c("cox", "sl", "km", "hal")) {
                 fit.cr.cox <- fit.cox.fun(mod=cr.model, change.point=change.point.cr,
                                           fit=fit.cr, dt=dt, dt2=dt2, dd=2,
