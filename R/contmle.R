@@ -13,7 +13,7 @@ contmle <- function(dt,
                     #-- when there are competing risks, what is the target?
                     target=1, 
                     #-- use iterative or one-step tmle; (for competing risks, one-step is default)
-                    one.step=FALSE, deps.size=0.001, no.small.steps=500,
+                    one.step=FALSE, deps.size=0.1, no.small.steps=500,
                     iterative=FALSE,
                     #-- treatment model;
                     treat.model=A~L1+L2+L3,
@@ -43,7 +43,7 @@ contmle <- function(dt,
                     cut.L1.A=8, cut.L.interaction=3,
                     #-- maximum number of iterations in iterative tmle; 
                     maxIter=10,
-                    verbose=TRUE,
+                    verbose=FALSE,
                     #-- for comparison; output kaplan-meier and hr; 
                     output.km=FALSE, only.km=FALSE, only.cox.sl=FALSE,
                     #-- models incorporated in super learner; 
@@ -80,11 +80,18 @@ contmle <- function(dt,
         x[[length(x)+1]] <- event
         names(x)[length(x)] <- "event"
         if (!(event %in% dt[, unique(get(delta.var))]))
-            message(paste0("model specified for event type=", event,
-                           ", but there were no observations for that type")) else return(x)
+            message(paste0("model specified for ", delta.var, "=", event,
+                           ", but there were no observations")) else return(x)
     })
 
     estimation <- estimation[sapply(estimation, function(each) length(each)>0)]
+
+    #-- is model specified multiple times for one event type?
+    events <- unlist(lapply(estimation, function(each) each[["event"]]))
+    if (any(table(events)>1)) {
+        stop(paste0("multiple models specified for ", delta.var, "=",
+                    paste0(names(table(events))[table(events)>1], collapse=",")))
+    }
 
     #-- a missing model for one of the deltas?
     delta.missing <- dt[, unique(get(delta.var))][!(dt[, unique(get(delta.var))] %in% unlist(lapply(estimation, function(each) each[["event"]])))]
@@ -177,7 +184,8 @@ contmle <- function(dt,
 
         fit <- estimation[[each]][["fit"]][1]
         fit.model <- estimation[[each]][["model"]]
-        fit.changepoint <- estimation[[each]][["changepoint"]]
+        if (any(names(estimation[[each]])=="changepoint"))
+            fit.changepoint <- estimation[[each]][["changepoint"]] else fit.changepoint <- NULL
         fit.delta <- estimation[[each]][["event"]]
         fit.name <- names(estimation)[each]
 
