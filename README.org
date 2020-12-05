@@ -89,7 +89,7 @@ source("./simulation-contmle/load.R")
 
 ** Examples of applying the code to simulated data
 
-*** Target time-specific survival probabilities
+*** Targeting the time-specific survival probability
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -122,7 +122,7 @@ source("./simulation-contmle/load.R")
 
 
 
-*** Target survival probabilities simultaneously across multiple time-points
+*** Targeting survival probabilities simultaneously across multiple time-points
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -157,7 +157,7 @@ source("./simulation-contmle/load.R")
 
 
 
-*** Use super learner for initial estimation
+*** Use super learner for initial estimation 
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -269,7 +269,7 @@ source("./simulation-contmle/load.R")
 
 ** Examples of applying the code to simulated data 
 
-*** Target cause-specific cumulative risk
+*** Targeting the cause 1 specific cumulative risk
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -306,7 +306,7 @@ tmle.se  0.040002785
 #+end_example
 
 
-*** Target cause-specific cumulative risks separately
+*** Targeting both cause-specific cumulative risks separately
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -356,7 +356,7 @@ tmle.se   0.03692450
 
 
 
-*** Target cause-specific cumulative risks simultaneously 
+*** Targeting the cause-specific cumulative risks simultaneously 
 
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
@@ -406,7 +406,7 @@ tmle.se   0.03692414
 
 
 
-*** Target cause-specific cumulative risks simultaneously across multiple time-points
+*** Targeting the cause-specific cumulative risks simultaneously across multiple time-points
 
 
 
