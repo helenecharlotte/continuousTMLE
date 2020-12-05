@@ -9,6 +9,7 @@
 
  + [[https://github.com/helenecharlotte/continuousTMLE#examples-of-applying-the-code-to-simulated-data][Examples of applying the code to simulated data]]
 
+  + [[https://github.com/helenecharlotte/continuousTMLE#targeting-survival-probabilities-simultaneously-across-multiple-time-points][Targeting survival probabilities simultaneously across multiple time-points]]
 
 - [[https://github.com/helenecharlotte/continuousTMLE#tmle-for-competing-risks-analysis][TMLE for continuous-time competing risks analysis]]
 
@@ -42,7 +43,6 @@ source("./simulation-contmle/load.R")
 (dt1 <- sim.data2(500, setting=1))   
 #+END_SRC
 
-#+RESULTS[<2020-12-05 15:03:14> 576a7ec6735308a272261b1b5632aecc82b1b1e0]:
 #+begin_example
       id      time delta A          L1          L2        L3
   1:   1 0.8100002     1 0  0.94261020  0.27985342 0.1031382
@@ -68,7 +68,6 @@ source("./simulation-contmle/load.R")
 (dt2 <- sim.data2(500, setting=2))   
 #+END_SRC
 
-#+RESULTS[<2020-12-05 15:03:12> 6ccc3e04d4f593be6ea5862fdde32a757cdb9824]:
 #+begin_example
       id      time delta A         L1        L2         L3
   1:   1 0.4132532     1 1  0.7061089 0.1952092 0.05819595
@@ -106,7 +105,6 @@ source("./simulation-contmle/load.R")
                  ))  
 #+END_SRC
 
-#+RESULTS[<2020-12-05 15:03:25> ff42a11dfaa8677b06039bba72bf47344d5cce75]:
 : $init
 :              tau=0.5
 : init.est -0.01347265
@@ -139,7 +137,6 @@ source("./simulation-contmle/load.R")
                  ))  
 #+END_SRC
 
-#+RESULTS[<2020-12-05 15:04:45> 29d7f21bb9c4043cac4c8e4faefb2b45bbf3ed57]:
 : $init
 :               tau=0.3     tau=0.5
 : init.est -0.005064993 -0.01347265
@@ -187,7 +184,6 @@ source("./simulation-contmle/load.R")
                  ))  
 #+END_SRC
 
-#+RESULTS[<2020-12-05 15:05:06> 634a7ec1f294378134a650f0a8c4143f5745936d]:
 #+begin_example
 [1] "model picked by cox super learner: mod34"
 [1] "model picked by cox super learner: mod34"
@@ -224,7 +220,6 @@ source("./simulation-contmle/load.R")
 (dt1 <- sim.data2(500, setting=1, competing.risk=TRUE))  
 #+END_SRC
 
-#+RESULTS[<2020-12-05 14:19:40> a556e7b288b4d8cf40ec83c6ebe3e04787ee9817]:
 #+begin_example
       id      time delta A          L1         L2        L3
   1:   1 0.2874422     1 0  0.30975138 -0.7685858 0.3152207
@@ -250,7 +245,6 @@ source("./simulation-contmle/load.R")
 (dt2 <- sim.data2(500, setting=2, competing.risk=TRUE))  
 #+END_SRC
 
-#+RESULTS[<2020-12-05 14:19:53> 6a70549ab43a0191d9c84d1a23ff8cca8cda6b5f]:
 #+begin_example
       id      time delta A          L1        L2        L3
   1:   1 0.5799401     2 1  0.61881053 0.4555461 0.9244269
@@ -289,7 +283,6 @@ source("./simulation-contmle/load.R")
                  ))  
 #+END_SRC
 
-#+RESULTS[<2020-12-05 14:51:32> 7bab19f583be22de436f92964cb6b7dbad849e5c]:
 #+begin_example
 $init
 $init$F1
@@ -327,7 +320,6 @@ source("./simulation-contmle/load.R")
                  ))  
 #+END_SRC
 
-#+RESULTS[<2020-12-05 14:52:55> dcb3080d93b2881bff3e53de13d0294219f92565]:
 #+begin_example
 $init
 $init$F1
@@ -378,7 +370,6 @@ source("./simulation-contmle/load.R")
                  ))   
 #+END_SRC
 
-#+RESULTS[<2020-12-05 14:54:09> 012a9975f788300b80b8c724cbacaba9891ca294]:
 #+begin_example
 $init
 $init$F1
@@ -429,7 +420,6 @@ source("./simulation-contmle/load.R")
                  ))   
 #+END_SRC
 
-#+RESULTS[<2020-12-05 14:55:44> 32772981c10fa05779cf7bb6b98030273fb435f7]:
 #+begin_example
 $init
 $init$F1
@@ -471,7 +461,6 @@ test1 <- run.fun(M=1, n=1000, competing.risk=TRUE,
                  no_cores=1)    
 #+END_SRC
 
-#+RESULTS[<2020-12-05 14:08:50> 9e5996ce7f558984c7edc4ca5bffcd428c502d2a]:
 #+begin_example
 [1] "m=1"
 $`m=1`
