@@ -17,6 +17,12 @@
 
  + [[https://github.com/helenecharlotte/continuousTMLE#examples-of-applying-the-code-to-simulated-data-1][Examples of applying the code to data]]
 
+  + [[https://github.com/helenecharlotte/continuousTMLE#targeting-the-cause-specific-cumulative-risks-simultaneously][Targeting the cause-specific cumulative risks simultaneously]]
+  + [[https://github.com/helenecharlotte/continuousTMLE#targeting-the-cause-specific-cumulative-risks-simultaneously-across-multiple-time-points][Targeting the cause-specific cumulative risks simultaneously
+    across multiple time-points]]
+
+
+
 ** Overview of code
 
 - [[https://github.com/helenecharlotte/continuousTMLE/blob/master/R/contmle.R][contmle.R]]
