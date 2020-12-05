@@ -9,6 +9,9 @@
 
  + [[https://github.com/helenecharlotte/continuousTMLE#examples-of-applying-the-code-to-simulated-data][Examples of applying the code to simulated data]]
 
+  + [[https://github.com/helenecharlotte/continuousTMLE#targeting-time-specific-and-treatment-specific-survival-probabilities][Targeting time-specific and treatment-specific survival probabilities]]
+  + [[https://github.com/helenecharlotte/continuousTMLE#targeting-the-time-specific-average-treatment-effect-ate-on-survival][Targeting the time-specific average treatment effect (ATE) on
+    survival]]
   + [[https://github.com/helenecharlotte/continuousTMLE#targeting-survival-probabilities-simultaneously-across-multiple-time-points][Targeting survival probabilities simultaneously across multiple time-points]]
 
 - [[https://github.com/helenecharlotte/continuousTMLE#tmle-for-competing-risks-analysis][TMLE for continuous-time competing risks analysis]]
