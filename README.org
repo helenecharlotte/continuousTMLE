@@ -121,7 +121,7 @@ source("./simulation-contmle/load.R")
 (run0 <- contmle(dt1, #-- dataset
                  treat.effect="0", #-- target the ate directly
                  tau=0.5, #-- time-point of interest
-                 estimation=list("cause1"=list(fit="cox", 
+                 estimation=list("survival"=list(fit="cox", 
                                                model=Surv(time, delta==1)~A+L1.squared),
                                  "cens"=list(fit="cox",
                                              model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
@@ -157,7 +157,7 @@ source("./simulation-contmle/load.R")
 (run1 <- contmle(dt1, #-- dataset
                  treat.effect="1", #-- target the ate directly
                  tau=0.5, #-- time-point of interest
-                 estimation=list("cause1"=list(fit="cox", 
+                 estimation=list("survival"=list(fit="cox", 
                                                model=Surv(time, delta==1)~A+L1.squared),
                                  "cens"=list(fit="cox",
                                              model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
@@ -196,7 +196,7 @@ source("./simulation-contmle/load.R")
 (run2 <- contmle(dt1, #-- dataset
                  treat.effect="ate", #-- target the ate directly
                  tau=0.5, #-- time-point of interest
-                 estimation=list("cause1"=list(fit="cox", 
+                 estimation=list("survival"=list(fit="cox", 
                                                model=Surv(time, delta==1)~A+L1.squared),
                                  "cens"=list(fit="cox",
                                              model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
@@ -239,7 +239,7 @@ source("./simulation-contmle/load.R")
 (run3 <- contmle(dt1, #-- dataset
                  treat.effect="ate", #-- target the ate directly
                  tau=c(0.3, 0.5), #-- time-point of interest
-                 estimation=list("cause1"=list(fit="cox",  
+                 estimation=list("survival"=list(fit="cox",  
                                                model=Surv(time, delta==1)~A+L1.squared),
                                  "cens"=list(fit="cox",
                                              model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
