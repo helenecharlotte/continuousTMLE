@@ -3,8 +3,18 @@
 
 ** Overview 
 
+- [[https://github.com/helenecharlotte/continuousTMLE#tmle-for-survival-analysis][TMLE for continuous-time survival analysis]]
+
+ + [[https://github.com/helenecharlotte/continuousTMLE#simulated-data-examples-1][Simulated data examples]]
+
+ + [[https://github.com/helenecharlotte/continuousTMLE#examples-of-applying-the-code-to-simulated-data][Examples of applying the code to simulated data]]
 
 
+- [[https://github.com/helenecharlotte/continuousTMLE#tmle-for-competing-risks-analysis][TMLE for continuous-time competing risks analysis]]
+
+ + [[https://github.com/helenecharlotte/continuousTMLE#simulated-data-examples-1][Simulated data examples]]
+
+ + [[https://github.com/helenecharlotte/continuousTMLE#examples-of-applying-the-code-to-simulated-data-1][Examples of applying the code to data]]
 
 ** Overview of code
 
@@ -79,7 +89,7 @@ source("./simulation-contmle/load.R")
 
 ** Examples of applying the code to simulated data
 
-*** Target  \(S(\tau)\)
+*** Target time-specific survival probabilities
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -112,7 +122,7 @@ source("./simulation-contmle/load.R")
 
 
 
-*** Target  \(S(\tau)\) simultaneously across multiple time-points
+*** Target survival probabilities simultaneously across multiple time-points
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -147,7 +157,7 @@ source("./simulation-contmle/load.R")
 
 
 
-*** Target \(S(\tau)\) and use super learner for initial estimation
+*** Use super learner for initial estimation
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -259,7 +269,7 @@ source("./simulation-contmle/load.R")
 
 ** Examples of applying the code to simulated data 
 
-*** Target \(F_1(\tau) = P(T \le \tau, Delta=1)\)
+*** Target cause-specific cumulative risk
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -296,7 +306,7 @@ tmle.se  0.040002785
 #+end_example
 
 
-*** Target \(F_1(\tau) = P(T \le \tau, Delta=1)\) and \(F_2(\tau) = P(T \le \tau, Delta=2)\) separately
+*** Target cause-specific cumulative risks separately
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -346,7 +356,7 @@ tmle.se   0.03692450
 
 
 
-*** Target \(F_1(\tau) = P(T \le \tau, Delta=1)\) and \(F_2(\tau) = P(T \le \tau, Delta=2)\) simultaneously
+*** Target cause-specific cumulative risks simultaneously 
 
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
@@ -396,7 +406,8 @@ tmle.se   0.03692414
 
 
 
-*** Target \(F_1(\tau) = P(T \le \tau, Delta=1)\) and \(F_2(\tau) = P(T \le \tau, Delta=2)\) simultaneously across multiple time-points
+*** Target cause-specific cumulative risks simultaneously across multiple time-points
+
 
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
@@ -487,646 +498,8 @@ tmle.se   0.02778435
 
 
 
-* 
 
-
-* Overview
-
-- [[https://github.com/helenecharlotte/Web-appendix-continuous-time-TMLE/#running-the-code][Running the code]]
-
-- [[https://github.com/helenecharlotte/Web-appendix-continuous-time-TMLE/tree/main#making-of-tables-1-and-2][Making of Tables 1 and 2]]
-
- + [[https://github.com/helenecharlotte/Web-appendix-continuous-time-TMLE/#table-1][Table 1]]
- + [[https://github.com/helenecharlotte/Web-appendix-continuous-time-TMLE/#table-2][Table 2]]
-
-- [[https://github.com/helenecharlotte/Web-appendix-continuous-time-TMLE#changing-the-sample-size-n][Changing the sample size (n)]] 
-
-- [[https://github.com/helenecharlotte/Web-appendix-continuous-time-TMLE/#the-simulation-scenario][The simulation scenario]]
-
- + [[https://github.com/helenecharlotte/Web-appendix-continuous-time-TMLE#overall-description][Overall description]]
- + [[https://github.com/helenecharlotte/Web-appendix-continuous-time-TMLE#current-setting][Current setting of Tables 1 and 2]]
- + [[https://github.com/helenecharlotte/Web-appendix-continuous-time-TMLE#changing-the-current-setting][Changing the current setting]]
-
-
-
-* Running the code
-
-The following code uses one computing core to calculate the estimates
-of conTMLE (and LTMLE) using a single simulated dataset. The code that
-produces the empirical results of Table 1 and Table 2 of the
-manuscript are shown longer down.
-
-#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
-#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
-# NOTE: you need to set the working directory 
-source("./examples/load.R")
-K5.conTMLE <- runTMLE(K=5, # number of time points
-                      n = 1000, # sample size
-                      misspecify.init = FALSE, # if TRUE, the initial outcome model is misspecified (see manuscript)
-                      seed=23, # control randomness of data simulation
-                      M = 1, # number of simulations
-                      no_cores=1) # number of computing cores
-K5.conTMLE      
-#+END_SRC
-
-: 
-: Estimating psi with TMLE based on observed data:
-:    conTMLE.A0      se.A0  init.A0 conTMLE.A1      se.A1   init.A1
-: 1:  0.5122824 0.02363591 0.512352  0.4153924 0.02281688 0.4048561
-
-
-
-
-Our function =runLTMLE= applies =LTMLE= to data simulated from the
-same data-generating distribution. 
-
-#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
-# NOTE: you need to set the working directory 
-source("./examples/load.R")
-K5.ltmle <- runLTMLE(K=5,
-                     seed=23,
-                     M=1, 
-                     n=1000) 
-K5.ltmle 
-#+END_SRC
-
-: 
-: Estimating psi with LTMLE based on observed data:
-:     ltmle.A0      sd.A0  ltmle.A1      sd.A1
-: 1: 0.5110533 0.02429905 0.4148675 0.02307705
-
-
-
-* Making of tables 1 and 2
-
-** Table 1
-
-We provide code that produces results for =K=5= and =K=30= for LTMLE
-and our new method, conTMLE. The code in files [[examples/table1.R]] and
-[[examples/table2.R]] generate the following results:
-
-
-*** K=5
-#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
-source("./examples/load.R") 
-table1.K5.true <- readRDS(file="./examples/table1-K5-true.rds")
-table1.K5.ltmle <- readRDS(file="./examples/table1-K5-ltmle.rds")
-table1.K5.conTMLE <- readRDS(file="./examples/table1-K5-conTMLE.rds")
-summary(object=table1.K5.ltmle,true=table1.K5.true)   
-summary(object=table1.K5.conTMLE,true=table1.K5.true)   
-#+END_SRC
-
-#+begin_example
-     LTMLE        A0       A1       psi
-1     true  0.560078 0.424340  0.135737
-2     mean  0.559614 0.424824  0.134790
-3     bias -0.000463 0.000484 -0.000947
-4       se  0.024448 0.023424  0.033858
-5 coverage  0.949000 0.952000  0.941000
-6      MSE  0.024488 0.023217  0.033704
-   conTMLE         A0       A1     psi
-1     true  0.5600776  0.42434 0.13574
-2     mean  0.5600330  0.42302 0.13702
-3     bias -0.0000446 -0.00132 0.00128
-4       se  0.0236953  0.02305 0.03305
-5 coverage  0.9400000  0.94500 0.94700
-6      MSE  0.0244799  0.02318 0.03338
-#+end_example
-
-
-*** K=30
-#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
-source("./examples/load.R")
-table1.K30.true <- readRDS(file="./examples/table1-K30-true.rds")
-table1.K30.ltmle <- readRDS(file="./examples/table1-K30-ltmle.rds")
-table1.K30.conTMLE <- readRDS(file="./examples/table1-K30-conTMLE.rds")
-summary(object=table1.K30.ltmle,true=table1.K30.true)  
-summary(object=table1.K30.conTMLE,true=table1.K30.true)   
-#+END_SRC
-
-#+begin_example
-     LTMLE        A0     A1      psi
-1     true 0.6114444 0.4733  0.13811
-2     mean 0.6114690 0.4757  0.13574
-3     bias 0.0000246 0.0024 -0.00238
-4       se 0.0362204 0.0356  0.05076
-5 coverage 0.9730000 0.9650  0.97200
-6      MSE 0.0348085 0.0343  0.04821
-   conTMLE        A0      A1       psi
-1     true  0.611444 0.47333  0.138113
-2     mean  0.610929 0.47372  0.137208
-3     bias -0.000515 0.00039 -0.000905
-4       se  0.024992 0.02465  0.035105
-5 coverage  0.953000 0.94200  0.956000
-6      MSE  0.024627 0.02474  0.034110
-#+end_example
-
-
-
-
-
-*** K=50
-#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
-source("./examples/load.R")
-table1.K50.true <- readRDS(file="./examples/table1-K50-true.rds")
-table1.K50.ltmle <- readRDS(file="./examples/table1-K50-ltmle.rds")
-table1.K50.conTMLE <- readRDS(file="./examples/table1-K50-conTMLE.rds")
-summary(object=table1.K50.ltmle,true=table1.K50.true)   
-summary(object=table1.K50.conTMLE,true=table1.K50.true)     
-#+END_SRC
-
-#+begin_example
-     LTMLE      A0      A1     psi
-1     true 0.67314 0.52494 0.14820
-2     mean 0.67690 0.52741 0.14948
-3     bias 0.00376 0.00247 0.00128
-4       se 0.03690 0.03705 0.05229
-5 coverage 0.98200 0.98600 0.98600
-6      MSE 0.02661 0.02802 0.03934
-   conTMLE        A0       A1      psi
-1     true  0.673141 0.524940  0.14820
-2     mean  0.672635 0.525574  0.14706
-3     bias -0.000506 0.000634 -0.00114
-4       se  0.023630 0.024317  0.03391
-5 coverage  0.944000 0.952000  0.95300
-6      MSE  0.023897 0.024081  0.03464
-#+end_example
-
-
-
-
-** Table 2
-
-
-*** K=30 (correctly specified initial estimator)
-#+BEGIN_SRC R  :results output   :exports both  :session *R* :cache yes  
-source("./examples/load.R") 
-table2.K30.true <- readRDS(file="./examples/table1-K30-true.rds")
-table2.K30 <- readRDS(file="./examples/table1-K30-conTMLE.rds")
-summary(object=table2.K30,true=table2.K30.true,init=TRUE)
-summary(object=table2.K30,true=table2.K30.true)    
-#+END_SRC
-
-#+begin_example
-  Initial estimate       A0        A1       psi
-1             true  0.61144  0.473331  0.138113
-2             mean  0.61059  0.472922  0.137671
-3             bias -0.00085 -0.000409 -0.000442
-   conTMLE        A0      A1       psi
-1     true  0.611444 0.47333  0.138113
-2     mean  0.610929 0.47372  0.137208
-3     bias -0.000515 0.00039 -0.000905
-4       se  0.024992 0.02465  0.035105
-5 coverage  0.953000 0.94200  0.956000
-6      MSE  0.024627 0.02474  0.034110
-#+end_example
-
-
-*** K=30 (misspecified initial estimator)
-
-#+BEGIN_SRC R  :results output   :exports both  :session *R* :cache yes  
-source("./examples/load.R")
-table2.K30.true <- readRDS(file="./examples/table1-K30-true.rds")
-table2.K30.misspecified <- readRDS(file="./examples/table2-K30-conTMLE.rds")
-summary(object=table2.K30.misspecified,true=table2.K30.true,init=TRUE) 
-summary(object=table2.K30.misspecified,true=table2.K30.true)    
-#+END_SRC
-
-#+begin_example
-  Initial estimate      A0      A1     psi
-1             true  0.6114 0.47333  0.1381
-2             mean  0.5935 0.47448  0.1191
-3             bias -0.0179 0.00115 -0.0191
-   conTMLE        A0        A1      psi
-1     true  0.611444 0.4733314  0.13811
-2     mean  0.611025 0.4734016  0.13762
-3     bias -0.000419 0.0000702 -0.00049
-4       se  0.024957 0.0246859  0.03510
-5 coverage  0.944000 0.9580000  0.93600
-6      MSE  0.026123 0.0236517  0.03542
-#+end_example
-
-
-
-
-*** K=50 (correctly specified initial estimator)
-#+BEGIN_SRC R  :results output   :exports both  :session *R* :cache yes  
-source("./examples/load.R")
-table2.K50.true <- readRDS(file="./examples/table1-K50-true.rds")
-table2.K50 <- readRDS(file="./examples/table1-K50-conTMLE.rds")
-summary(object=table2.K50,true=table2.K50.true,init=TRUE)
-summary(object=table2.K50,true=table2.K50.true)      
-#+END_SRC
-
-#+begin_example
-  Initial estimate        A0      A1      psi
-1             true  0.673141 0.52494  0.14820
-2             mean  0.672324 0.52520  0.14712
-3             bias -0.000818 0.00026 -0.00108
-   conTMLE        A0       A1      psi
-1     true  0.673141 0.524940  0.14820
-2     mean  0.672635 0.525574  0.14706
-3     bias -0.000506 0.000634 -0.00114
-4       se  0.023630 0.024317  0.03391
-5 coverage  0.944000 0.952000  0.95300
-6      MSE  0.023897 0.024081  0.03464
-#+end_example
-
-
-*** K=50 (misspecified initial estimator)
-#+BEGIN_SRC R  :results output   :exports both  :session *R* :cache yes  
-source("./examples/load.R")
-table2.K50.true <- readRDS(file="./examples/table1-K50-true.rds")
-table2.K50.misspecified <- readRDS(file="./examples/table2-K50-conTMLE.rds")
-summary(object=table2.K50.misspecified,true=table2.K50.true,init=TRUE)
-summary(object=table2.K50.misspecified,true=table2.K50.true)     
-#+END_SRC
-
-#+begin_example
-  Initial estimate      A0       A1     psi
-1             true  0.6731  0.52494  0.1482
-2             mean  0.6549  0.52002  0.1348
-3             bias -0.0183 -0.00492 -0.0134
-   conTMLE        A0         A1      psi
-1     true  0.673141  0.5249402  0.14820
-2     mean  0.672230  0.5249091  0.14732
-3     bias -0.000911 -0.0000311 -0.00088
-4       se  0.023627  0.0243455  0.03393
-5 coverage  0.952000  0.9490000  0.95500
-6      MSE  0.023576  0.0241819  0.03324
-#+end_example
-
-
-
-
-*** K=100 (correctly speficied initial estimator)
-#+BEGIN_SRC R  :results output   :exports both  :session *R* :cache yes  
-source("./examples/load.R")
-table2.K100.true <- readRDS(file="./examples/table1-K100-true.rds")
-table2.K100 <- readRDS(file="./examples/table1-K100-conTMLE.rds")
-summary(object=table2.K100,true=table2.K100.true,init=TRUE)
-summary(object=table2.K100,true=table2.K100.true)      
-#+END_SRC
-
-
-#+begin_example
-  Initial estimate        A0       A1       psi
-1             true  0.620108 0.490575  0.129533
-2             mean  0.619557 0.490732  0.128824
-3             bias -0.000551 0.000158 -0.000709
-   conTMLE         A0       A1       psi
-1     true  0.6201078 0.490575  0.129533
-2     mean  0.6200236 0.491328  0.128696
-3     bias -0.0000842 0.000753 -0.000837
-4       se  0.0232213 0.024145  0.033499
-5 coverage  0.9420000 0.954000  0.945000
-6      MSE  0.0247149 0.023937  0.034581
-#+end_example
-
-
-
-*** K=100 (misspecified initial estimator)
-#+BEGIN_SRC R  :results output   :exports both  :session *R* :cache yes  
-source("./examples/load.R")
-table2.K100.true <- readRDS(file="./examples/table1-K100-true.rds")
-table2.K100.misspecified <- readRDS(file="./examples/table2-K100-conTMLE.rds")
-summary(object=table2.K100.misspecified,true=table2.K100.true,init=TRUE)
-summary(object=table2.K100.misspecified,true=table2.K100.true)      
-#+END_SRC
-
-#+begin_example
-  Initial estimate      A0       A1      psi
-1             true  0.6201  0.49057  0.12953
-2             mean  0.6108  0.48277  0.12804
-3             bias -0.0093 -0.00781 -0.00149
-   conTMLE       A0        A1       psi
-1     true  0.62011  0.490575  0.129533
-2     mean  0.61895  0.489643  0.129311
-3     bias -0.00115 -0.000931 -0.000222
-4       se  0.02329  0.024209  0.033595
-5 coverage  0.93600  0.946000  0.944000
-6      MSE  0.02404  0.024469  0.033991
-#+end_example
-
-
-
-* Changing the sample size (n)
-
-We here fix =K30= and decrease the sample size =n=. Note that the
-smaller =n= is, the fewer events are observed at each timepoint. 
-
-** n=1000
-
-#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
-source("./examples/load.R") 
-table1.K30.true <- readRDS(file="./examples/table1-K30-true.rds")
-table1.K30.n1000.ltmle <- readRDS(file="./examples/table1-K30-ltmle.rds")
-table1.K30.n1000.conTMLE <- readRDS(file="./examples/table1-K30-conTMLE.rds")
-summary(object=table1.K30.n1000.ltmle,true=table1.K30.true)    
-summary(object=table1.K30.n1000.conTMLE,true=table1.K30.true)    
-#+END_SRC
-
-#+begin_example
-     LTMLE        A0     A1      psi
-1     true 0.6114444 0.4733  0.13811
-2     mean 0.6114690 0.4757  0.13574
-3     bias 0.0000246 0.0024 -0.00238
-4       se 0.0362204 0.0356  0.05076
-5 coverage 0.9730000 0.9650  0.97200
-6      MSE 0.0348085 0.0343  0.04821
-   conTMLE        A0      A1       psi
-1     true  0.611444 0.47333  0.138113
-2     mean  0.610929 0.47372  0.137208
-3     bias -0.000515 0.00039 -0.000905
-4       se  0.024992 0.02465  0.035105
-5 coverage  0.953000 0.94200  0.956000
-6      MSE  0.024627 0.02474  0.034110
-#+end_example
-
-** n=500
-#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
-source("./examples/load.R") 
-table1.K30.true <- readRDS(file="./examples/table1-K30-true.rds")
-table1.K30.n500.ltmle <- readRDS(file="./examples/table1-K30-n500-ltmle.rds")
-table1.K30.n500.conTMLE <- readRDS(file="./examples/table1-K30-n500-conTMLE.rds")
-summary(object=table1.K30.n500.ltmle,true=table1.K30.true)      
-summary(object=table1.K30.n500.conTMLE,true=table1.K30.true)   
-#+END_SRC
-
-#+begin_example
-     LTMLE      A0     A1       psi
-1     true 0.61144 0.4733  0.138113
-2     mean 0.61590 0.4784  0.137468
-3     bias 0.00446 0.0051 -0.000645
-4       se 0.04730 0.0460  0.066001
-5 coverage 0.98700 0.9720  0.984000
-6      MSE 0.03963 0.0415  0.056354
-   conTMLE        A0       A1      psi
-1     true  0.611444  0.47333 0.138113
-2     mean  0.610856  0.47201 0.138850
-3     bias -0.000588 -0.00133 0.000737
-4       se  0.035391  0.03481 0.049639
-5 coverage  0.956000  0.94700 0.951000
-6      MSE  0.034403  0.03445 0.048263
-#+end_example
-
-
-
-
-** n=200
-#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
-source("./examples/load.R") 
-table1.K30.true <- readRDS(file="./examples/table1-K30-true.rds")
-table1.K30.n200.ltmle <- readRDS(file="./examples/table1-K30-n200-ltmle.rds")
-table1.K30.n200.conTMLE <- readRDS(file="./examples/table1-K30-n200-conTMLE.rds")
-summary(object=table1.K30.n200.ltmle,true=table1.K30.true)      
-summary(object=table1.K30.n200.conTMLE,true=table1.K30.true)    
-#+END_SRC
-
-#+begin_example
-     LTMLE     A0     A1      psi
-1     true 0.6114 0.4733  0.13811
-2     mean 0.6216 0.4849  0.13672
-3     bias 0.0101 0.0115 -0.00139
-4       se 0.1298 0.1227  0.17865
-5 coverage 0.9960 0.9930  0.99900
-6      MSE 0.0556 0.0556  0.07982
-   conTMLE     A0       A1      psi
-1     true 0.6114 0.473331 0.138113
-2     mean 0.6128 0.474259 0.138582
-3     bias 0.0014 0.000928 0.000469
-4       se 0.0556 0.055231 0.078336
-5 coverage 0.9490 0.936000 0.940000
-6      MSE 0.0556 0.056995 0.079472
-#+end_example
-
-
-* The simulation scenario
-
-
-** Overall description
- 
-We consider a setting where subjects of a population are followed for
-=K= days of follow-up time. On any given day, any subject may change
-treatment, covariates, may be lost to follow-up (right-censored) or
-may experience the outcome of interest. Both the treatment and the
-censoring mechanisms are subject to time-dependent confounding.  The
-data are simulated such that the number of monitoring times per
-subject are approximately the same across different =K=. Thus, the
-larger =K= is, the less events are observed at single monitoring
-times.
-
-** Current setting
-
-
-The current simulation setting is defined by the function =sim.data=
-(see file [[R/sim-data.R]]). The way we simulate the data is best
-described with the following example. Baseline covariates =L0= and
-treatment =A0= are generated first. Followup values of both processes
-(=Lk=, =Ak=) as well as censoring (=Ck=) and outcome (=Yk=) processes
-are then generated in a loop through the values =1:K=. The value
-=Yk+1= contains the status of the outcome at the end of followup. The
-=sim.data= function outputs the data in wide format; this is the
-format needed for =ltmle=.
-
-#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
-#+BEGIN_SRC R  :results output   :exports both  :session *R* :cache yes  
-sim.data(n=10,K=3,seed=3)      
-#+END_SRC
-
-#+begin_example
-    id        L0 A0 Y1 dN.L1 L1 dN.A1 A1 C1 Y2 dN.L2 L2 dN.A2 A2 C2 Y3 dN.L3 L3 dN.A3 A3 C3 Y4
- 1:  1 0.8333333  0  0     0  0     0  0  0  0     1  0     0  0  0  0     0  0     0  0  0  0
- 2:  2 0.3333333  1  0     0  0     1  1  0  0     0  0     0  1  0  0     0  0     1  1  0  0
- 3:  3 0.6666667  0  0     1  1     0  0  0  0     0  1     0  0  0  0     0  1     0  0  0  0
- 4:  4 0.6666667  0  0     0  0     1  1  0  0     0  0     0  1  0  0     1  0     0  1  0  0
- 5:  5 0.3333333  1  0     0  0     0  1  0  0     1  1     0  1  0  0     1  1     1  0  0  0
- 6:  6 0.5000000  0  0     0  0     1  0  0  1     1  1     1  0  0  1     1  1     0  0  0  1
- 7:  7 0.6666667  1  0     0  0     0  1  0  0     0  0     1  1  0  0     0  0     1  1  0  0
- 8:  8 0.3333333  0  1     0  0     1  0  0  1     0  0     1  0  0  1     1  1     1  0  0  1
- 9:  9 0.8333333  1  0     0  0     0  1  0  0     0  0     1  1  0  0     1  0     0  1  0  0
-10: 10 0.3333333  0  0     0  0     0  0  0  0     0  0     0  0  0  0     0  0     1  0  0  0
-#+end_example
-
-Our estimation function =conTMLE= transform the data to long format
-which is more suitable when =K= is large since we only need a row at
-the monitoring times:
-
-
-#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
-#+BEGIN_SRC R  :results output   :exports both  :session *R* :cache yes  
-print.long.format(sim.data(n=5,K=50,seed=10))         
-#+END_SRC
-
-#+begin_example
-    id  k        L0 A0 A C L Y dN.A dN.L
- 1:  1 12 0.5000000  1 1 0 1 0    0    1
- 2:  1 29 0.5000000  1 1 0 0 0    0    1
- 3:  1 33 0.5000000  1 1 0 0 0    1    0
- 4:  1 38 0.5000000  1 1 0 0 0    1    0
- 5:  1 46 0.5000000  1 1 0 0 0    0    1
- 6:  1 51 0.5000000  1 1 0 0 0    0    0
- 7:  2  5 0.1666667  1 1 0 0 0    1    0
- 8:  2 13 0.1666667  1 1 0 0 0    1    0
- 9:  2 15 0.1666667  1 1 0 1 0    0    1
-10:  2 21 0.1666667  1 1 0 1 0    1    0
-11:  2 22 0.1666667  1 1 0 1 1    0    0
-12:  3 15 0.3333333  0 0 0 1 0    0    1
-13:  3 25 0.3333333  0 0 0 1 0    1    0
-14:  3 36 0.3333333  0 0 0 1 0    1    0
-15:  3 43 0.3333333  0 0 0 1 1    0    0
-16:  4  4 0.6666667  1 1 0 0 0    1    0
-17:  4 11 0.6666667  1 1 0 1 0    1    1
-18:  4 18 0.6666667  1 1 0 1 1    0    0
-19:  5  7 1.0000000  0 0 0 0 1    0    0
-#+end_example
-
-
-In our current setting, all dependencies between the processes are
-limited to the previous values and the baseline values. Note also that
-the specific parameter constellation depends on the value of =K=
-(needed for the number of monitoring times per subject to be
-approximately the same across different =K=).
-
-
-#+BEGIN_SRC R  :results output raw drawer  :exports code  :session *R* :cache yes  
-# Step 1: baseline covariate 
-L0 <- sample(1:6, n, replace=1000)/6
-# Baseline treatment
-form.A0 <- function(L0){
-    cbind(-0.1+0.25*L0)
-}
-# Covariate monitoring process: time of current measurement 
-form.dN.L <- function(L0, dN.L.prev, L.prev, A.prev){
-    -0.2-0.05*K-0.025*(K>7)-0.25*dN.L.prev-0.15*L0-0.1*(A.prev==1)+0.3*L.prev
-}
-# Treatment monitoring process, time of current measurement 
-form.dN.A <- function(L0, dN.A.prev, L.prev, A.prev){
-    -0.75-0.05*K-0.42*dN.A.prev+0.15*L0+0.3*(A.prev==2)+0.4*(A.prev==1)-0.25*L.prev
-}
-# Covariate values at monitoring times
-form.L <- function(L0, L.prev, A.prev, A0){
-    0.5-0.4*A0+0.15*L0-0.25*(A.prev==1)+0.4*L.prev
-}
-# Treatment values at monitoring times
-form.A <- function(L0, L.prev, A.prev, A0){
-    cbind(-2.1+(1-A0)*1.7+(1-A.prev)*1.8-A.prev*1.7+L.prev*2.1)
-}
-# Censoring process
-form.C <- function(L0, L.prev, A.prev, A0){
-    -3.95+(K>40)*5-0.4*K^{2/3}-0.24*(K>2 & K<=4)-0.4*(K>4 & K<=9)
-    -(K>9)*0.4*K^{1/5}+0.2*(K>25)*K^{1/4}
-    +0.1*L0+0.2*(A0==1)+0.9*(A0==2)+2.15*L.prev
-}
-# Outcome process
-form.Y <- function(L0, L.prev, A.prev, A0, dN.A.prev) {
-    -1.1-0.33*K/3*(K>2 & K<=4)-0.25*K^{2/3}-0.25*(K>4 & K<=9)-
-        (K>25 & K<45)*0.3*K^{1/5}-
-            (K>75)*0.31+(K>85)*0.2-
-            (K>25 & K<75)*0.5*K^{1/5}+0.6*(K>25)*K^{1/4}-0.25*A.prev+
-            0.4*L.prev-0.25*A0+0.35*L.prev*A0+(K>75)*0.1*A0+(K>85)*0.01*A0
-}
-#+END_SRC
-
-** Changing the current setting
-
-
-
-We have to be careful when changing the simulation setting. For
-example, just changing the distribution of =A= given the history (does
-not change the true values of the target parameter, but) may result in
-positivity violation as in the following (as signaled by the warning
-message):
-
-
-#+BEGIN_SRC R  :results output   :exports both  :session *R* :cache yes  
-source("./examples/load.R")
-treatment.formula <- function(L0, L.prev, A.prev, A0){
-        cbind(-5.5*(1-A0))
-    }  
-compute.true(K=5,n=100000,B=1,seed=9,form.A=treatment.formula,progress.bar=-1) 
-# dt <- sim.data(n=200,K=3,seed=3,form.Y=outcome.formula)
-test1 <- runTMLE(K=5, # number of time points
-                 n = 200, # sample size
-                 misspecify.init = FALSE, # if TRUE, the initial outcome model is misspecified (see manuscript)
-                 seed=3, # control randomness of data simulation
-                 M = 1, # number of simulations
-                 no_cores=1,
-                 form.A=treatment.formula,progress.bar=-1)
-test1     
-#+END_SRC
-
-#+begin_example
-psi0.A0 psi0.A1 
-0.56194 0.42764
-
-Estimating psi with TMLE based on observed data:
-
-Warning message:
-In conTMLE(dt, targeting = 2, smooth.initial = TRUE, max.iter = max.iter,  :
-  not much support for regime A=0 (13%); beware of positivity issues
-   conTMLE.A0     se.A0   init.A0 conTMLE.A1      se.A1   init.A1
-1:  0.5294796 0.0369986 0.5642535   0.289432 0.05778478 0.3153624
-#+end_example
-
-
-
-The positivity violations result in considerably inaccurate
-inference. Here we have repeated the simulations above =M=1000= times
-to illustrate this:
-
-#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
-source("./examples/load.R") 
-table1.K5.true <- readRDS(file="./examples/table1-K5-true.rds")
-table1.K5.conTMLE <- readRDS(file="./examples/positivity-violation-table1-K5-conTMLE.rds") 
-summary(object=table1.K5.conTMLE,true=table1.K5.true)  
-#+END_SRC
-
-:    conTMLE       A0      A1      psi
-: 1     true  0.55999 0.42451  0.13548
-: 2     mean  0.55420 0.42484  0.12936
-: 3     bias -0.00579 0.00033 -0.00612
-: 4       se  0.07496 0.02275  0.07834
-: 5 coverage  0.58800 0.95400  0.62800
-: 6      MSE  0.13922 0.02276  0.14147
-
-
-
-In the following, we instead as an example remove the direct effect
-(note that there is still an effect through the =L= process) of the
-treatment on outcome:
-
-#+BEGIN_SRC R  :results output   :exports both  :session *R* :cache yes  
-source("./examples/load.R")
-outcome.formula <- function(L0, L.prev, A.prev, A0, dN.A.prev) {
-  return(-2 # intercept
-         -0*A.prev # treatment effect
-         + 0.4*L.prev  # covariate effect
-         +0*A0 # baseline treatment effect
-         )
-}
-compute.true(K=5,n=100000,B=1,seed=8,form.Y=outcome.formula,progress.bar=-1)
-test2 <- runTMLE(K=5, # number of time points
-                n = 200, # sample size
-                misspecify.init = FALSE, # if TRUE, the initial outcome model is misspecified (see manuscript)
-                seed=3, # control randomness of data simulation
-                M = 1, # number of simulations
-                no_cores=1,
-                form.Y=outcome.formula,progress.bar=-1) 
-test2 
-#+END_SRC
-
-: psi0.A0 psi0.A1 
-: 0.58832 0.57308
-: 
-: Estimating psi with TMLE based on observed data:
-:    conTMLE.A0      se.A0   init.A0 conTMLE.A1      se.A1  init.A1
-: 1:  0.5768492 0.05338095 0.5877601  0.5846994 0.05433202 0.555641
-
-
-
-
-*  Dependencies 
+*  Dependencies :noexport:
 
 ** R-version
 
