@@ -247,7 +247,7 @@ source("./simulation-contmle/load.R")
                  ))   
 #+END_SRC
 
-x
+
 : $init
 :               tau=0.3       tau=0.5
 : init.est -0.000366087 -0.0007001979
