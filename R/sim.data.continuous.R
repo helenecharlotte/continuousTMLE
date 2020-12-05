@@ -1,3 +1,48 @@
+sim.data2 <- function(n, setting=1, competing.risk=FALSE,
+                      censoring.informative=FALSE,
+                      m=sample(373211, 1)) {
+
+    betaA <- -0.15
+    betaL <- 1.1
+    nu    <- 1.7
+    eta   <- 0.7
+    t0    <- 0.9
+    
+    if (setting==1) {
+        square.effect1        <- TRUE
+        square.effect2        <- FALSE
+        interaction.Atime     <- TRUE
+        reversed.setting      <- TRUE
+    } else {
+        square.effect1        <- FALSE
+        square.effect2        <- TRUE
+        interaction.Atime     <- FALSE
+        reversed.setting      <- FALSE
+    }
+ 
+    randomize.A           <- TRUE
+    no.censoring          <- FALSE
+
+    if (interaction.Atime) betaA <- -0.7
+    
+    if (reversed.setting) {
+        betaA <- 0.5
+        t0 <- 0.7
+    }
+
+    return(sim.data(n, betaA=betaA, betaL=betaL, nu=nu, eta=eta, t0=t0,
+                    seed=m+100,
+                    competing.risk=competing.risk,
+                    categorical=FALSE, randomize.A=randomize.A,
+                    censoring.informative=censoring.informative,
+                    censoring=!no.censoring,
+                    square.effect2=square.effect2,
+                    square.effect1=square.effect1,
+                    reversed.setting=reversed.setting,
+                    interaction.Atime=interaction.Atime))
+    
+}
+
 sim.data <- function(n, loop.max=20, endoffollowup=30,
                      betaA=0.1, betaL=0.3,
                      nu=0.5, eta=4/sqrt(2)*(1/8),
