@@ -37,7 +37,7 @@ For simulation study:
 
 - [[https://github.com/helenecharlotte/continuousTMLE/blob/master/R/sim.data.continuous.R][R/sim.data.continuous.R]]
 
-- [[https://github.com/helenecharlotte/continuousTMLE/blob/master/simulation-contmle/run.fun.R][R/run.fun.R]]
+- [[https://github.com/helenecharlotte/continuousTMLE/blob/master/simulation-contmle/run.fun.R][simulation-contmle/run.fun.R]]
 
 
 
