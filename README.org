@@ -235,7 +235,7 @@ source("./simulation-contmle/load.R")
 (run3 <- contmle(dt1, #-- dataset
                  treat.effect="ate", #-- target the ate directly
                  tau=0.5, #-- time-point of interest
-                 estimation=list("cause1"=list(fit="sl", 
+                 estimation=list("survival"=list(fit="sl", 
                                                model=Surv(time, delta==1)~A+L1.squared),
                                  "cens"=list(fit="sl",
                                              model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
@@ -252,9 +252,27 @@ source("./simulation-contmle/load.R")
                      mod9=c(Surv(time, delta==1)~A+L1+L2+L3, changepoint=NULL),
                      mod10=c(Surv(time, delta==1)~A*L1+L2+L3, changepoint=NULL),
                      mod11=c(Surv(time, delta==1)~A*L1.squared+L2+L3, changepoint=NULL)
-                 )
-                 ))   
+                 ),  
+                 verbose.sl=TRUE,
+                 ))     
 #+END_SRC
+
+
+#+begin_example
+[1] "model picked for survival: A + L1.squared + L1 * L2 + L3"
+[1] "changepoint picked: 0.9"
+[1] "model picked for cens: A + L1.squared + L1 * L2 + L3"
+[1] "changepoint picked: 0.9"
+$init
+            tau=0.5
+init.est 0.02229132
+init.se  0.02480141
+
+$tmle
+            tau=0.5
+tmle.est 0.02696983
+tmle.se  0.02480234
+#+end_example
 
 
 #+begin_example

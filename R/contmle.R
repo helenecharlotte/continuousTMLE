@@ -43,7 +43,7 @@ contmle <- function(dt,
                     cut.L1.A=8, cut.L.interaction=3,
                     #-- maximum number of iterations in iterative tmle; 
                     maxIter=10,
-                    verbose=FALSE,
+                    verbose=FALSE, verbose.sl=FALSE, 
                     #-- for comparison; output kaplan-meier and hr; 
                     output.km=FALSE, only.km=FALSE, only.cox.sl=FALSE,
                     #-- models incorporated in super learner; 
@@ -209,17 +209,17 @@ contmle <- function(dt,
 
             fit.model <- sl.model[[1]]
             fit.model <- as.formula(paste0(gsub(1, fit.delta, fit.model[2]), fit.model[1], fit.model[3]))
-            if (verbose) print(paste0("model picked for ", fit.name, ": ", fit.model)[3])
+            if (verbose.sl) print(paste0("model picked for ", fit.name, ": ", fit.model)[3])
             estimation[[each]]$model <- fit.model
             
             if (length(sl.model)>1) {
                 if (grep("changepoint", names(sl.model)[2])>0) {
                     fit.changepoint <- sl.model[[2]]
-                    if (verbose) print(paste0("changepoint picked: ", fit.changepoint))
+                    if (verbose.sl) print(paste0("changepoint picked: ", fit.changepoint))
                     estimation[[each]]$changepoint <- fit.changepoint
                 }  else {
                     fit.penalty <- sl.model[[2]]
-                    if (verbose) print(paste0("penalty picked: ", fit.penalty))
+                    if (verbose.sl) print(paste0("penalty picked: ", fit.penalty))
                     estimation[[each]]$penalty <- fit.penalty
                 }
             }
