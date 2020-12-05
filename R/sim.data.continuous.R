@@ -401,13 +401,18 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
         dt[, hist(time)]
     }
 
-    if (length(intervention.A)>0 & cr.both==TRUE) {
+    if (length(intervention.A)>0 & (competing.risk & cr.both==TRUE)) {
         return(do.call("rbind", lapply(tau, function(tau.kk) {
-            c(tau=tau.kk, F1=mean(dt[, time<=tau.kk & delta==1]), F2=mean(dt[, time<=tau.kk & delta==2]))
+            out <- do.call("rbind", lapply(1:2, function(each) {
+                c(tau=tau.kk,
+                  psi0=mean(dt[, time<=tau.kk & delta==each]))
+            }))
+            rownames(out) <- paste0("F", 1:2)
+            return(out)
         })))
     } else if (length(intervention.A)>0) {
         return(do.call("rbind", lapply(tau, function(tau.kk) {
-            mean(tau=tau.kk, dt[, time<=tau.kk & delta==1])
+            c(tau=tau.kk, S=mean(dt[, time<=tau.kk & delta==1]))
         })))
     } else return(dt)
 }

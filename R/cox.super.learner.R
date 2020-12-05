@@ -1,5 +1,4 @@
 cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE,
-                   covars=c("L1", "L2", "L3"), 
                    outcome.models=list(mod1=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.9),
                                        mod2=c(Surv(time, delta==1)~A*L1.squared+L1*L2+L3, t0=NULL),
                                        mod3=c(Surv(time, delta==1)~A+L1.squared, t0=NULL),
@@ -15,9 +14,6 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE,
     n <- nrow(dt)
     unique.times <- sort(unique(dt[, time]))
     cv.split <- matrix(sample(1:n, size=n), ncol=V)
-
-    for (covar in covars)
-        dt[, (paste0(covar, ".squared")):=(get(covar))^2]
 
     if (any(method>=1)) {
     
