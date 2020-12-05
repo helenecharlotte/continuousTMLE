@@ -25,11 +25,11 @@
 
 ** Overview of code
 
-- [[https://github.com/helenecharlotte/continuousTMLE/blob/master/R/contmle.R][contmle.R]]
+- [[https://github.com/helenecharlotte/continuousTMLE/blob/master/R/contmle.R][R/contmle.R]]
 
-- [[https://github.com/helenecharlotte/continuousTMLE/blob/master/R/sim.data.continuous.R][sim.data.continuous.R]]
+- [[https://github.com/helenecharlotte/continuousTMLE/blob/master/R/sim.data.continuous.R][R/sim.data.continuous.R]]
 
-- [[https://github.com/helenecharlotte/continuousTMLE/blob/master/R/cox.super.learner.R][cox.super.learner.R]]
+- [[https://github.com/helenecharlotte/continuousTMLE/blob/master/R/cox.super.learner.R][R/cox.super.learner.R]]
 
 
 * TMLE for survival analysis
