@@ -253,12 +253,11 @@ source("./simulation-contmle/load.R")
                      mod10=c(Surv(time, delta==1)~A*L1+L2+L3, changepoint=NULL),
                      mod11=c(Surv(time, delta==1)~A*L1.squared+L2+L3, changepoint=NULL)
                  )
-                 ))  
+                 ))   
 #+END_SRC
 
+#+RESULTS[<2020-12-05 16:01:59> be58f7482681362003c36f0db1767e562c3d1e7f]:
 #+begin_example
-[1] "model picked by cox super learner: mod34"
-[1] "model picked by cox super learner: mod34"
 $init
             tau=0.5
 init.est 0.02229132
