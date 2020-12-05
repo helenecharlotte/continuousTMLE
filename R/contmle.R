@@ -197,10 +197,11 @@ contmle <- function(dt,
             dt.tmp[, (delta.var):=(get(delta.var))==fit.delta]
      
             set.seed(1)
-            sl.pick <- cox.sl(dt.tmp, A.name=A.name,
-                              only.cox.sl=only.cox.sl,
-                              method=sl.method, V=V,
-                              outcome.models=sl.models)[1]
+            sl.pick <- suppressWarnings(
+                cox.sl(dt.tmp, A.name=A.name,
+                       only.cox.sl=only.cox.sl,
+                       method=sl.method, V=V,
+                       outcome.models=sl.models)[1])
 
             rm(dt.tmp)
         
