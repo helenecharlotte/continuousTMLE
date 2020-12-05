@@ -94,13 +94,67 @@ source("./simulation-contmle/load.R")
 
 ** Examples of applying the code to simulated data
 
-*** Targeting the time-specific survival probability
+
+*** Targeting time-specific and treatment-specific survival probabilities
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")    
+(run0 <- contmle(dt1, #-- dataset
+                 treat.effect="0", #-- target the ate directly
+                 tau=0.5, #-- time-point of interest
+                 estimation=list("cause1"=list(fit="cox", 
+                                               model=Surv(time, delta==1)~A+L1.squared),
+                                 "cens"=list(fit="cox",
+                                             model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
+                                 )
+                 ))    
+#+END_SRC
+
+: $init
+:             tau=0.5
+: init.est 0.08909946
+: init.se  0.01660139
+: 
+: $tmle
+:             tau=0.5
+: tmle.est 0.06933829
+: tmle.se  0.01657499
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory  
 source("./simulation-contmle/load.R")    
 (run1 <- contmle(dt1, #-- dataset
+                 treat.effect="1", #-- target the ate directly
+                 tau=0.5, #-- time-point of interest
+                 estimation=list("cause1"=list(fit="cox", 
+                                               model=Surv(time, delta==1)~A+L1.squared),
+                                 "cens"=list(fit="cox",
+                                             model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
+                                 )
+                 ))   
+#+END_SRC
+
+: $init
+:             tau=0.5
+: init.est 0.07562680
+: init.se  0.01850529
+: 
+: $tmle
+:             tau=0.5
+: tmle.est 0.09682654
+: tmle.se  0.01847456
+
+
+*** Targeting the time-specific average treatment effect (ATE) on survival
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")    
+(run2 <- contmle(dt1, #-- dataset
                  treat.effect="ate", #-- target the ate directly
                  tau=0.5, #-- time-point of interest
                  estimation=list("cause1"=list(fit="cox", 
@@ -132,7 +186,7 @@ source("./simulation-contmle/load.R")
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory  
 source("./simulation-contmle/load.R")    
-(run2 <- contmle(dt1, #-- dataset
+(run3 <- contmle(dt1, #-- dataset
                  treat.effect="ate", #-- target the ate directly
                  tau=c(0.3, 0.5), #-- time-point of interest
                  estimation=list("cause1"=list(fit="cox",  
