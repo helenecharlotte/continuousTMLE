@@ -58,23 +58,25 @@ indicator, =delta=.
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory  
 source("./simulation-contmle/load.R")    
-(dt1 <- sim.data2(500, setting=1))   
+(dt1 <- sim.data2(500, setting=1, m=101))   
 #+END_SRC
 
+
 #+begin_example
-      id      time delta A          L1          L2        L3
-  1:   1 0.8100002     1 0  0.94261020  0.27985342 0.1031382
-  2:   2 1.4502260     0 1 -0.25797067 -0.47395586 0.4651436
-  3:   3 0.8296075     1 0  0.06520837 -0.88843887 0.8656481
-  4:   4 0.9951963     1 1  0.50515942  0.92833757 0.7473536
-  5:   5 0.5157014     0 0  0.75570359  0.49506938 0.3118374
- ---                                                        
-496: 496 4.4054541     1 1 -0.43756861  0.29171967 0.7055158
-497: 497 1.6474467     1 1  0.75889535 -0.54660755 0.3045856
-498: 498 0.5935097     1 0  0.35789923 -0.84041999 0.9514172
-499: 499 2.2699648     1 1 -0.35127632 -0.01062143 0.3641394
-500: 500 2.6056930     0 1 -0.75344235  0.66964005 0.3897868
+      id      time delta A          L1         L2          L3
+  1:   1 2.0631444     1 0  0.49139281 -0.6688724 0.291922718
+  2:   2 2.1493063     1 0 -0.73285336  0.5850001 0.500198228
+  3:   3 1.4273563     1 0 -0.14371713  0.5780268 0.445078787
+  4:   4 0.4280762     1 1 -0.26399351 -0.3642358 0.450386852
+  5:   5 0.8844077     1 0 -0.38961309  0.3991256 0.867301825
+ ---                                                         
+496: 496 0.2453018     1 1  0.22407892  0.9891128 0.980549826
+497: 497 1.4340098     1 0  0.11135457 -0.7108160 0.006933557
+498: 498 1.8405661     1 1 -0.91630937 -0.9992122 0.391603182
+499: 499 0.7440901     0 1 -0.45349936 -0.6978073 0.435121550
+500: 500 0.6051863     1 1 -0.01772394  0.5169929 0.821363185
 #+end_example
+
 
 
 *** Setting 2
@@ -83,23 +85,26 @@ source("./simulation-contmle/load.R")
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory  
 source("./simulation-contmle/load.R")    
-(dt2 <- sim.data2(500, setting=2))   
+(dt2 <- sim.data2(500, setting=2, m=30033))   
 #+END_SRC
 
+
 #+begin_example
-      id      time delta A         L1        L2         L3
-  1:   1 0.4132532     1 1  0.7061089 0.1952092 0.05819595
-  2:   2 0.4642015     1 1 -0.2134748 0.3070825 0.95670351
-  3:   3 0.6220027     1 1 -0.9355447 0.9640623 0.31208394
-  4:   4 0.9925885     0 0  0.4689362 0.5076957 0.08968828
-  5:   5 1.8214260     1 0 -0.2059220 0.5135538 0.92813930
- ---                                                      
-496: 496 1.3029924     1 1 -0.7585462 0.6557159 0.65152925
-497: 497 0.7232362     1 0  0.3929011 0.6974605 0.87480652
-498: 498 0.3991887     1 1 -0.4575361 0.6280713 0.32450182
-499: 499 0.1726519     1 1  0.5882465 0.4211234 0.41523119
-500: 500 0.8296751     1 0 -0.7846494 0.8117789 0.40373350
+      id      time delta A           L1         L2        L3
+  1:   1 0.9471819     1 0  0.756822031 0.77002296 0.7797066
+  2:   2 1.1323334     1 0 -0.065353703 0.35827118 0.7976352
+  3:   3 1.7053282     1 1  0.656070347 0.20709002 0.5780152
+  4:   4 0.8061263     1 1 -0.763604288 0.40173444 0.6358432
+  5:   5 0.8088335     1 1  0.875432958 0.01411658 0.9980470
+ ---                                                        
+496: 496 0.7946299     1 1 -0.946018820 0.47053691 0.4194170
+497: 497 0.8807391     1 0 -0.648760873 0.84350969 0.8831198
+498: 498 1.2373449     1 1 -0.334965690 0.05032776 0.3214108
+499: 499 0.7937388     1 1 -0.006926148 0.63071498 0.7458795
+500: 500 0.1190475     1 0  0.820146986 0.84440805 0.5426060
 #+end_example
+
+
 
 
 
@@ -121,8 +126,19 @@ source("./simulation-contmle/load.R")
                                  "cens"=list(fit="cox",
                                              model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
                                  )
-                 ))    
+                 ))     
 #+END_SRC
+
+
+: $init
+:             tau=0.5
+: init.est 0.08273712
+: init.se  0.01390123
+: 
+: $tmle
+:             tau=0.5
+: tmle.est 0.04657883
+: tmle.se  0.01377620
 
 : $init
 :             tau=0.5
@@ -134,7 +150,7 @@ source("./simulation-contmle/load.R")
 : tmle.est 0.06933829
 : tmle.se  0.01657499
 
-#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory  
 source("./simulation-contmle/load.R")    
@@ -145,9 +161,20 @@ source("./simulation-contmle/load.R")
                                                model=Surv(time, delta==1)~A+L1.squared),
                                  "cens"=list(fit="cox",
                                              model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
-                                 )
+                                 ) 
                  ))   
 #+END_SRC
+
+
+: $init
+:             tau=0.5
+: init.est 0.08203692
+: init.se  0.02045089
+: 
+: $tmle
+:             tau=0.5
+: tmle.est 0.11721628
+: tmle.se  0.02041782
 
 : $init
 :             tau=0.5
@@ -174,8 +201,19 @@ source("./simulation-contmle/load.R")
                                  "cens"=list(fit="cox",
                                              model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
                                  )
-                 ))  
+                 ))   
 #+END_SRC
+
+
+: $init
+:                tau=0.5
+: init.est -0.0007001979
+: init.se   0.0246345062
+: 
+: $tmle
+:             tau=0.5
+: tmle.est 0.07052852
+: tmle.se  0.02469477
 
 : $init
 :              tau=0.5
@@ -206,8 +244,19 @@ source("./simulation-contmle/load.R")
                                  "cens"=list(fit="cox",
                                              model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
                                  )
-                 ))  
+                 ))   
 #+END_SRC
+
+x
+: $init
+:               tau=0.3       tau=0.5
+: init.est -0.000366087 -0.0007001979
+: init.se   0.017949756  0.0246345062
+: 
+: $tmle
+:             tau=0.3    tau=0.5
+: tmle.est 0.04027219 0.07067547
+: tmle.se  0.01798117 0.02469414
 
 : $init
 :               tau=0.3     tau=0.5
@@ -253,9 +302,30 @@ source("./simulation-contmle/load.R")
                      mod10=c(Surv(time, delta==1)~A*L1+L2+L3, changepoint=NULL),
                      mod11=c(Surv(time, delta==1)~A*L1.squared+L2+L3, changepoint=NULL)
                  ),  
-                 verbose.sl=TRUE,
+                 verbose.sl=TRUE, 
                  ))     
 #+END_SRC
+
+
+#+begin_example
+[1] "model picked for survival: A + L1.squared + L1 * L2 + L3"
+[1] "changepoint picked: 0.7"
+[1] "model picked for cens: A + L1.squared + L1 * L2 + L3"
+[1] "changepoint picked: 0.3"
+$init
+            tau=0.5
+init.est 0.05088319
+init.se  0.02514863
+
+$tmle
+            tau=0.5
+tmle.est 0.07081248
+tmle.se  0.02516692
+
+Warning message:
+In fitter(X, Y, istrat, offset, init, control, weights = weights,  :
+  Loglik converged before variable  1 ; beta may be infinite.
+#+end_example
 
 
 #+begin_example
