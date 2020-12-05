@@ -328,39 +328,6 @@ In fitter(X, Y, istrat, offset, init, control, weights = weights,  :
 #+end_example
 
 
-#+begin_example
-[1] "model picked for survival: A + L1.squared + L1 * L2 + L3"
-[1] "changepoint picked: 0.9"
-[1] "model picked for cens: A + L1.squared + L1 * L2 + L3"
-[1] "changepoint picked: 0.9"
-$init
-            tau=0.5
-init.est 0.02229132
-init.se  0.02480141
-
-$tmle
-            tau=0.5
-tmle.est 0.02696983
-tmle.se  0.02480234
-#+end_example
-
-
-#+begin_example
-$init
-            tau=0.5
-init.est 0.02229132
-init.se  0.02480141
-
-$tmle
-            tau=0.5
-tmle.est 0.02696983
-tmle.se  0.02480234
-
-There were 20 warnings (use warnings() to see them)
-#+end_example
-
-
-
 
 * TMLE for competing risks analysis
 
