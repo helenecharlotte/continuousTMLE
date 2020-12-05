@@ -256,7 +256,7 @@ source("./simulation-contmle/load.R")
                  ))   
 #+END_SRC
 
-#+RESULTS[<2020-12-05 16:01:59> be58f7482681362003c36f0db1767e562c3d1e7f]:
+
 #+begin_example
 $init
             tau=0.5
