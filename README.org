@@ -306,7 +306,6 @@ source("./simulation-contmle/load.R")
                  ))       
 #+END_SRC
 
-#+RESULTS[<2020-12-07 14:08:43> 531a9152f3050312864d79f79290a3651943d980]:
 #+begin_example
 [1] "model picked for survival: A + L1.squared + L1 * L2 + L3"
 [1] "changepoint picked: 0.7"
