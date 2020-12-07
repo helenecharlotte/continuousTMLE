@@ -157,14 +157,13 @@ contmle <- function(dt,
     #-- if there is any of the outcome models that uses coxnet
     sl.models.tmp <- sl.models
     sl.models <- list()
-    
     #-- add separate sl models when specified with, e.g., multiple changepoints
     for (k1 in 1:length(sl.models.tmp)) {
         if (length(sl.models.tmp[[k1]])>1) {
             for (k2 in 2:length(sl.models.tmp[[k1]])) {
                 sl.models[[length(sl.models)+1]] <- c(sl.models.tmp[[k1]][1],
                                                       sl.models.tmp[[k1]][k2])
-                if (length(sl.models.tmp[[k1]])>3) {
+                if (length(sl.models.tmp[[k1]])>=3) {
                     names(sl.models)[length(sl.models)] <- paste0(names(sl.models.tmp)[k1], k2)
                 } else {
                     names(sl.models)[length(sl.models)] <- names(sl.models.tmp)[k1]

@@ -280,7 +280,7 @@ source("./simulation-contmle/load.R")
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory   
-source("./simulation-contmle/load.R")    
+source("./simulation-contmle/load.R")      
 (run3 <- contmle(dt1, #-- dataset
                  treat.effect="ate", #-- target the ate directly
                  tau=0.5, #-- time-point of interest
@@ -290,12 +290,12 @@ source("./simulation-contmle/load.R")
                                              model=Surv(time, delta==0)~L1+L2+L3+A*L1)                                         
                                  ),
                  sl.models=list(
-                     mod1=c(Surv(time, delta==1)~A+L1+L2+L3, changepoint=c(0.3, 0.7, 0.9)),
+                     mod1=c(Surv(time, delta==1)~A+L1+L2+L3, changepoint=c(0.3, 0.7)),
                      mod2=c(Surv(time, delta==1)~A+L2.squared+L1*L2+L3, changepoint=NULL),
-                     mod3=c(Surv(time, delta==1)~A+L1.squared+L1*L2+L3, changepoint=c(0.3, 0.7, 0.9)),
-                     mod4=c(Surv(time, delta==1)~A+L2.squared, changepoint=c(0.3, 0.7, 0.9)),
-                     mod5=c(Surv(time, delta==1)~A+L1.squared, changepoint=c(0.3, 0.7, 0.9)),
-                     mod6=c(Surv(time, delta==1)~A+L1.squared+L2+L3, changepoint=c(0.3, 0.7, 0.9)),
+                     mod3=c(Surv(time, delta==1)~A+L1.squared+L1*L2+L3, changepoint=c(0.3, 0.7)),
+                     mod4=c(Surv(time, delta==1)~A+L2.squared, changepoint=c(0.3, 0.7)),
+                     mod5=c(Surv(time, delta==1)~A+L1.squared, changepoint=c(0.3, 0.7)),
+                     mod6=c(Surv(time, delta==1)~A+L1.squared+L2+L3, changepoint=c(0.3, 0.7)),
                      mod7=c(Surv(time, delta==1)~A+L2.squared, changepoint=NULL),
                      mod8=c(Surv(time, delta==1)~A+L1.squared, changepoint=NULL),
                      mod9=c(Surv(time, delta==1)~A+L1+L2+L3, changepoint=NULL),
@@ -303,10 +303,10 @@ source("./simulation-contmle/load.R")
                      mod11=c(Surv(time, delta==1)~A*L1.squared+L2+L3, changepoint=NULL)
                  ),  
                  verbose.sl=TRUE, 
-                 ))     
+                 ))       
 #+END_SRC
 
-
+#+RESULTS[<2020-12-07 14:08:43> 531a9152f3050312864d79f79290a3651943d980]:
 #+begin_example
 [1] "model picked for survival: A + L1.squared + L1 * L2 + L3"
 [1] "changepoint picked: 0.7"
@@ -326,7 +326,6 @@ Warning message:
 In fitter(X, Y, istrat, offset, init, control, weights = weights,  :
   Loglik converged before variable  1 ; beta may be infinite.
 #+end_example
-
 
 
 * TMLE for competing risks analysis

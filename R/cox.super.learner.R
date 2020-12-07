@@ -106,7 +106,7 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE,
     }
     
     if (only.cox.sl) {
-        print(cbind(cve2))
+        print(cbind(names(outcome.models), cve2))
         return(c(#method1=(names(outcome.models)[cve1==min(cve1[abs(cve1)<Inf])]),
             method2=(names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])])))
     }
