@@ -20,7 +20,7 @@ contmle <- function(dt,
                     #-- target cause-specific hazards separately or together in one-step tmle; 
                     separate.cr=FALSE, #DO NOT CHANGE.
                     #-- use weighted norm in multivariate one-step;
-                    weighted.norm=FALSE, 
+                    weighted.norm=c(FALSE, "sigma", "Sigma"), 
                     #-- treatment effect of interest; 
                     treat.effect=c("1", "0", "ate", "stochastic"),
                     #-- specify stochastic intervention; 
@@ -67,6 +67,8 @@ contmle <- function(dt,
                                    mod17=c(Surv(time, delta==1)~A*L3+L1+L2, t0=NULL)
                                    )) {
 
+    if (verbose) verbose.sl <- TRUE
+    
     #-- names of time variable and event (delta) variable; 
     time.var <- gsub("Surv\\(", "", unlist(strsplit(as.character(estimation[[1]][["model"]])[2], ","))[1])
     delta.var <- gsub(" ", "",
@@ -195,7 +197,7 @@ contmle <- function(dt,
 
             dt.tmp <- copy(dt)
             dt.tmp[, (delta.var):=(get(delta.var))==fit.delta]
-     
+
             set.seed(1)
             sl.pick <- suppressWarnings(
                 cox.sl(dt.tmp, A.name=A.name,
@@ -610,7 +612,7 @@ contmle <- function(dt,
         }
     } else {
         if (cr) {
-            eval.ic <- function(mat, target.index=outcome.index) {
+            eval.ic <- function(mat, target.index=outcome.index, Sigma=FALSE) {
                 outer <- lapply(target.index, function(each) {
                     fit.delta <- estimation[[each]][["event"]]
                     each.index <- (1:length(target.index))[target.index==each]
@@ -631,15 +633,23 @@ contmle <- function(dt,
                                               by="id"][,2][[1]])))-
                         (length(a)==2)*init.fit[[paste0("F", fit.delta)]][kk]-
                         (length(a)==1)*init.fit[[paste0("F", fit.delta)]][kk])^2
-                        return(sqrt(mean(ic.squared)/n))
+                        if (Sigma) return(sqrt(ic.squared)) else return(sqrt(mean(ic.squared)/n))
                     })
                 })
-                names(outer) <- paste0("F", sapply(target.index, function(each) estimation[[each]]["event"]))
-                return(outer)
+                if (Sigma) {
+                    outer2 <- do.call("cbind", outer)
+                    Sigma.list <- lapply(1:n, function(i) {
+                        t(outer2[i,,drop=FALSE])%*%outer2[i,,drop=FALSE]
+                    })
+                    return(Reduce("+", Sigma.list) / length(Sigma.list))
+                } else {
+                    names(outer) <- paste0("F", sapply(target.index, function(each) estimation[[each]]["event"]))
+                    return(outer)
+                }
             }
         } else {
-            eval.ic <- function(mat, target.index=1) {
-                sapply(1:length(tau), function(kk) {
+            eval.ic <- function(mat, target.index=1, Sigma=FALSE) {
+                outer <- sapply(1:length(tau), function(kk) {
                     out <- mat[, sum( (get(A.name)==A.obs) * (get(time.var)<=tau[kk]) *
                                       (get(time.var)<=time.obs) * Ht *
                                       get(paste0("Ht.lambda.", kk)) *
@@ -652,13 +662,18 @@ contmle <- function(dt,
                                                          by="id"][,2][[1]]))) -
                                    (length(a)==2)*init.fit[kk]-
                                    (length(a)==1)*(1-init.fit[kk]))^2
-                    return(sqrt(mean(ic.squared)/n))
+                    if (Sigma) return(sqrt(ic.squared)) else return(sqrt(mean(ic.squared)/n))
                 })
+                if (Sigma) {
+                    return(matrix(outer, length(tau), 1)%*%matrix(outer, length(tau), 1))
+                } else return(outer)
             }
         }
     }
 
     init.ic <- eval.ic(mat, target.index=outcome.index[target])
+
+    if (weighted.norm[1]=="Sigma") Sigma.inv <- solve(eval.ic(mat, target.index=outcome.index[target], Sigma=TRUE))
 
     if (cr) {
         init.list <-  lapply(1:length(init.fit), function(each.index) {
@@ -731,52 +746,45 @@ contmle <- function(dt,
         }
     }
 
+   
     #----------------------------------------
     #-- 12 (I) -- multivariate one-step tmle:
 
-   
     if (length(tau)>1 | one.step | (length(target)>1 & !iterative)) {
 
         if (verbose) print(init.fit)
         if (verbose) print(init.ic)
 
-        if (weighted.norm) {
+        if (weighted.norm[1]=="sigma") {
             if (cr) {
-                if (!separate.cr) {
-                    Pn.eic.fun <- function(mat) {
-                        eval <- eval.equation(mat, eps=0, target.index=outcome.index[target])
-                        out <- sapply(1:length(init.fit), function(each) {
-                            sapply(1:length(tau), function(kk) {
-                                (eval[[each]][kk])/init.ic[[each]][kk]
-                            })
+                Pn.eic.fun <- function(mat) {
+                    eval <- eval.equation(mat, eps=0, target.index=outcome.index[target])
+                    out <- lapply(1:length(init.fit), function(each) {
+                        sapply(1:length(tau), function(kk) {
+                            return(eval[[each]][kk])
                         })
-                        colnames(out) <- paste0("F", sapply(outcome.index[target], function(each) estimation[[each]]["event"]))
-                        return(out)
-                    }
-                } else { # FIXME: I REMOVED THIS AFTER NEW SETTING
-                    Pn.eic.fun <- function(mat) {
-                        cbind(
-                            sapply(1:length(tau), function(kk) {
-                                eval.equation(mat, eps=0, kk=kk)/init.ic[kk]
-                            }),
-                            sapply(1:length(tau), function(kk) {
-                                eval.equation(mat, eps=0, kk=kk, j2=2)/init.ic[length(tau)+kk]
-                            }),
-                            sapply(1:length(tau), function(kk) {
-                                eval.equation(mat, eps=0, kk=kk, j=2)/init.ic[kk]
-                            }),
-                            sapply(1:length(tau), function(kk) {
-                                eval.equation(mat, eps=0, kk=kk, j2=2, j=2)/init.ic[length(tau)+kk]
-                            })
-                        )
-                    }
-                }
+                    })
+                    names(out) <- paste0("F", sapply(outcome.index[target], function(each) estimation[[each]]["event"]))
+                    return(out)
+                } 
             } else {
                 Pn.eic.fun <- function(mat) {
                     eval <- eval.equation(mat, eps=0)
                     sapply(1:length(tau), function(kk) {
-                        eval[kk]/init.ic[kk]
+                        return(eval[kk])
                     })
+                }
+            }
+        } else if (weighted.norm[1]=="Sigma") {
+            if (cr) {
+                Pn.eic.fun <- function(mat) {
+                    eval <- eval.equation(mat, eps=0, target.index=outcome.index[target])
+                    return(eval)
+                } 
+            } else {
+                Pn.eic.fun <- function(mat) {
+                    eval <- eval.equation(mat, eps=0)
+                    return(eval)
                 }
             }
         } else {
@@ -821,13 +829,24 @@ contmle <- function(dt,
         }
 
         Pn.eic <- Pn.eic.fun(mat)
-        if (verbose) print(Pn.eic)
-       
-        Pn.eic.norm.fun <- function(x) {
-            sqrt(sum(unlist(x)^2))
+
+        if (weighted.norm[1]=="sigma") {
+            Pn.eic.norm.fun <- function(x) {
+                return(sqrt(sum(unlist(x)^2/unlist(init.ic))))
+            }
+        } else if (weighted.norm[1]=="Sigma") {
+            Pn.eic.norm.fun <- function(x) {
+                return(c(sqrt(matrix(unlist(x), 1, length(unlist(x)))%*%Sigma.inv%*%
+                              matrix(unlist(x), length(unlist(x)), 1))))
+            }
+        } else {
+            Pn.eic.norm.fun <- function(x) {
+                return(sqrt(sum(unlist(x)^2)))
+            }
         }
-           
+
         Pn.eic.norm.prev <- Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic)#sqrt(sum(c(Pn.eic)^2))
+           
         if (verbose) print(Pn.eic.norm)
       
         for (step in 1:no.small.steps) {
@@ -851,11 +870,7 @@ contmle <- function(dt,
                     mat[, (paste0("Ht.lambda.", kk, ".tmp")):=get((paste0("Ht.lambda.", kk)))]
                 }
             }
-
-            #if (step==8 | step==100) deps.size <- 0.1*deps.size
-
-            #if (Pn.eic.norm.prev<=Pn.eic.norm) browser()#deps.size <- 0.1*deps.size#break
-            
+           
             if (cr) {
                 if (!separate.cr) {
                     for (each in outcome.index) {
@@ -898,8 +913,6 @@ contmle <- function(dt,
                               Ht*get(paste0("Ht.lambda.", kk))*Pn.eic[kk]/Pn.eic.norm]
                 }
             }
-
-            #if (step==8) browser()
 
             deps <- deps.size
         
@@ -1004,7 +1017,7 @@ contmle <- function(dt,
 
             if (verbose) print(max(unlist(init.ic))/(sqrt(n)*log(n)))
             if (verbose) print(Pn.eic.norm)
-            
+           
             if (Pn.eic.norm<=max(unlist(init.ic))/(sqrt(n)*log(n))) {
                 if (verbose) print(paste0("converged", " at ", step, "th step"))
                 break

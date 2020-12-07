@@ -103,7 +103,6 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE,
         cve2 <- unlist(lapply(1:length(outcome.models), function(mm) {
             sum(-unlist(lapply(outlist2, function(out) out[[mm]])))
         }))
-        #print(paste0("model picked by cox super learner: ", (names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])])))
     }
     
     if (only.cox.sl) {
@@ -111,7 +110,7 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE,
         return(c(#method1=(names(outcome.models)[cve1==min(cve1[abs(cve1)<Inf])]),
             method2=(names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])])))
     }
-    
+
     return(names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])])
 }
 
