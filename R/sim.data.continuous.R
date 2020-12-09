@@ -1,4 +1,4 @@
-sim.data2 <- function(n, setting=1, competing.risk=FALSE,
+sim.data2 <- function(n, setting=1, competing.risk=FALSE, no.cr=2,
                       censoring.informative=FALSE,
                       m=sample(373211, 1)) {
 
@@ -31,7 +31,7 @@ sim.data2 <- function(n, setting=1, competing.risk=FALSE,
     }
 
     return(sim.data(n, betaA=betaA, betaL=betaL, nu=nu, eta=eta, t0=t0,
-                    seed=m+100,
+                    seed=m+100, no.cr=2,
                     competing.risk=competing.risk,
                     categorical=FALSE, randomize.A=randomize.A,
                     censoring.informative=censoring.informative,
@@ -48,7 +48,7 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
                      nu=0.5, eta=4/sqrt(2)*(1/8),
                      firstevent=TRUE,
                      censoring=TRUE,
-                     competing.risk=FALSE, cr.both=FALSE, 
+                     competing.risk=FALSE, cr.both=FALSE, no.cr=2,
                      seed=sample(4034244, 1),
                      interaction.AL=FALSE,
                      interaction.Atime=FALSE, t0=0.3,
@@ -242,19 +242,39 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
         return(phiT2(t, A, L1, L2, L3)*eta*nu*t^{nu-1})
     }
 
+    phiT3 <- function(t, A, L1, L2, L3) phiT2(t, A, L1, L2, L3)
+    
+    lambdaT3 <- function(t, A, L1, L2, L3, eta, nu) {
+        return(phiT3(t, A, L1, L2, L3)*eta*nu*t^{nu-1})
+    }
+
+
     if (censoring) {
         if (competing.risk) {
-            phi <- function(t, A, L1, L2, L3, betaA, betaL) phiT(t, A, L1, L2, L3, betaA, betaL) +
-                                                                phiC(t, A, L1, L2, L3) +
-                                                                phiT2(t, A, L1, L2, L3)
+            if (no.cr==3) {
+                phi <- function(t, A, L1, L2, L3, betaA, betaL) phiT(t, A, L1, L2, L3, betaA, betaL) +
+                                                                    phiC(t, A, L1, L2, L3) +
+                                                                    phiT2(t, A, L1, L2, L3) +
+                                                                    phiT3(t, A, L1, L2, L3)
+            } else {
+                phi <- function(t, A, L1, L2, L3, betaA, betaL) phiT(t, A, L1, L2, L3, betaA, betaL) +
+                                                                    phiC(t, A, L1, L2, L3) +
+                                                                    phiT2(t, A, L1, L2, L3)
+            } 
         } else {
             phi <- function(t, A, L1, L2, L3, betaA, betaL) phiT(t, A, L1, L2, L3, betaA, betaL) +
                                                                 phiC(t, A, L1, L2, L3)
         }
     } else {
         if (competing.risk) {
-            phi <- function(t, A, L1, L2, L3, betaA, betaL) phiT(t, A, L1, L2, L3, betaA, betaL) +
-                                                                phiT2(t, A, L1, L2, L3)
+            if (no.cr==3) {
+                phi <- function(t, A, L1, L2, L3, betaA, betaL) phiT(t, A, L1, L2, L3, betaA, betaL) +
+                                                                    phiT2(t, A, L1, L2, L3) +
+                                                                    phiT3(t, A, L1, L2, L3)
+            } else {
+                phi <- function(t, A, L1, L2, L3, betaA, betaL) phiT(t, A, L1, L2, L3, betaA, betaL) +
+                                                                    phiT2(t, A, L1, L2, L3)
+            } 
         } else {
             phi <- function(t, A, L1, L2, L3, betaA, betaL) phiT(t, A, L1, L2, L3, betaA, betaL)
         }
@@ -322,7 +342,12 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
                 probT <- lambdaT(Tout, A, L1, L2, L3, betaA, betaL, eta, nu) / (denom)
                 probC <- lambdaC(Tout, A, L1, L2, L3, eta, nu) / (denom)
                 probT2 <- lambdaT2(Tout, A, L1, L2, L3, eta, nu) / (denom)
-                which <- apply(cbind(probC, probT, probT2), 1, function(p) sample(0:2, size=1, prob=p))
+                if (no.cr==3) {
+                    probT3 <- lambdaT3(Tout, A, L1, L2, L3, eta, nu) / (denom)
+                    which <- apply(cbind(probC, probT, probT2, probT3), 1, function(p) sample(0:3, size=1, prob=p))
+                } else {
+                    which <- apply(cbind(probC, probT, probT2), 1, function(p) sample(0:2, size=1, prob=p))
+                }
             } else {
                 denom <- (lambdaT(Tout, A, L1, L2, L3, betaA, betaL, eta, nu) +
                           lambdaC(Tout, A, L1, L2, L3, eta, nu))
@@ -332,11 +357,22 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
             }
         } else {
             if (competing.risk) {
-                denom <- (lambdaT(Tout, A, L1, L2, L3, betaA, betaL, eta, nu) +
-                          lambdaT2(Tout, A, L1, L2, L3, eta, nu))
+                if (no.cr==3) {
+                    denom <- (lambdaT(Tout, A, L1, L2, L3, betaA, betaL, eta, nu) +
+                              lambdaT2(Tout, A, L1, L2, L3, eta, nu)+
+                              lambdaT3(Tout, A, L1, L2, L3, eta, nu))
+                } else {
+                    denom <- (lambdaT(Tout, A, L1, L2, L3, betaA, betaL, eta, nu) +
+                              lambdaT2(Tout, A, L1, L2, L3, eta, nu))
+                }
                 probT <- lambdaT(Tout, A, L1, L2, L3, betaA, betaL, eta, nu) / (denom)
                 probT2 <- lambdaT2(Tout, A, L1, L2, L3, eta, nu) / (denom)
-                which <- apply(cbind(probT, probT2), 1, function(p) sample(1:2, size=1, prob=p))
+                if (no.cr==3) {
+                    probT3 <- lambdaT3(Tout, A, L1, L2, L3, eta, nu) / (denom)
+                    which <- apply(cbind(probT, probT2, probT3), 1, function(p) sample(1:3, size=1, prob=p))
+                } else {
+                    which <- apply(cbind(probT, probT2), 1, function(p) sample(1:2, size=1, prob=p))
+                }
             } else {
                 which <- 1
             }
@@ -382,11 +418,11 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
 
     if (length(intervention.A)>0 & (competing.risk & cr.both==TRUE)) {
         return(do.call("rbind", lapply(tau, function(tau.kk) {
-            out <- do.call("rbind", lapply(1:2, function(each) {
+            out <- do.call("rbind", lapply(1:no.cr, function(each) {
                 c(tau=tau.kk,
                   psi0=mean(dt[, time<=tau.kk & delta==each]))
             }))
-            rownames(out) <- paste0("F", 1:2)
+            rownames(out) <- paste0("F", 1:no.cr)
             return(out)
         })))
     } else if (length(intervention.A)>0) {
