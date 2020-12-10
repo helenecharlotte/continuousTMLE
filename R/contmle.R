@@ -152,7 +152,6 @@ contmle <- function(dt,
     #-- initialize dataset to be used later; 
     dt2 <- NULL
     bhaz.cox <- do.call("rbind", lapply(a, function(aa) data.table(time=c(0, unique.times), A=aa)))
-    names(bhaz.cox) <- c(time.var, A.name)
 
     #-- if there is any of the outcome models that uses coxnet
     sl.models.tmp <- sl.models
@@ -283,21 +282,14 @@ contmle <- function(dt,
 
         #-- 6 -- get baseline hazard:
 
-        #-- FIXME: CHANGE ALL FOLLOWING FROM "time" TO "time.var"
         if (fit[1]=="km") {
             tmp <- suppressWarnings(setDT(basehaz(fit.cox, centered=TRUE)))
             setnames(tmp, "strata", "A")
             tmp[, A:=as.numeric(gsub("A=", "", A))]
-            if (length(bhaz.cox)==0) { # FIXME: NOT USED AFTER CHANGE
-                bhaz.cox <- rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
-                                  merge(do.call("rbind", lapply(a, function(aa) data.table(time=unique.times, A=aa))),
-                                        tmp, by=c("time", "A"), all.x=TRUE))[order(A)]
-            } else {
-                bhaz.cox <- merge(bhaz.cox, 
-                                  rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
-                                        tmp),
-                                  by=c("time", "A"), all.x=TRUE)[order(A)]
-            }
+            bhaz.cox <- merge(bhaz.cox, 
+                              rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
+                                    tmp),
+                              by=c("time", "A"), all.x=TRUE)
             bhaz.cox[, hazard:=na.locf(hazard), by="A"]
             bhaz.cox[, (paste0("dhaz.", fit.delta)):=c(0, diff(hazard)), by="A"]
             setnames(bhaz.cox, "hazard", paste0("chaz", fit.delta))
@@ -305,35 +297,23 @@ contmle <- function(dt,
             if (fit[1]=="sl" & length(grep("coxnet", sl.pick))>0) { 
                 basehaz <- glmnet_basesurv(dt[, get(time.var)],
                                            dt[, get(time.var)==fit.delta], X, centered=TRUE)
-                if (length(bhaz.cox)==0) { # FIXME: NOT USED AFTER CHANGE
-                    bhaz.cox <- rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
-                                      merge(do.call("rbind", lapply(a, function(aa) data.table(time=unique.times, A=aa))),
-                                            data.table(time=basehaz$time,
-                                                       hazard=basehaz$cumulative_base_hazard),
-                                            by="time", all.x=TRUE))
-                } else {
-                    bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
-                                                      data.table(time=basehaz$time,
-                                                                 hazard=basehaz$cumulative_base_hazard)),
-                                      by="time", all.x=TRUE)
-                }
+                bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
+                                                  data.table(time=basehaz$time,
+                                                             hazard=basehaz$cumulative_base_hazard)),
+                                  by="time", all.x=TRUE)
             } else {
-                if (length(bhaz.cox)==0) { # FIXME: NOT USED AFTER CHANGE
-                    bhaz.cox <- rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
-                                      merge(do.call("rbind", lapply(a, function(aa) data.table(time=unique.times, A=aa))),
-                                            suppressWarnings(setDT(basehaz(fit.cox, centered=TRUE))),
-                                            by="time", all.x=TRUE))
-                } else {
-                    bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
-                                                      suppressWarnings(setDT(basehaz(fit.cox, centered=TRUE)))),
-                                      by="time", all.x=TRUE)
-                }
+                bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
+                                                  suppressWarnings(setDT(basehaz(fit.cox, centered=TRUE)))),
+                                  by="time", all.x=TRUE)
             }
             bhaz.cox[, (paste0("dhaz", fit.delta)):=c(0, diff(hazard)), by="A"]
             setnames(bhaz.cox, "hazard", paste0("chaz", fit.delta))
         }
 
     }
+
+    #-- set names of bhaz.cox to match observed data
+    setnames(bhaz.cox, c("time", "A"), c(time.var, A.name))
     
     #-- Xc -- get censoring survival one time-point back: 
 
@@ -382,7 +362,7 @@ contmle <- function(dt,
     if (only.km) return(km.est)
 
     if (TRUE) {#(!(fit.outcome[1]=="hal")) {
-        bhaz.cox <- bhaz.cox[time<=max(tau)]
+        bhaz.cox <- bhaz.cox[get(time.var)<=max(tau)]
     }
 
     #-- 8 -- add subject-specific information:
@@ -423,7 +403,7 @@ contmle <- function(dt,
         for (each in 1:length(estimation)) {
             if (length(estimation[[each]][["changepoint"]])>0) {
                 tmp[, (paste0("period", estimation[[each]][["event"]])):=
-                          (time<=estimation[[each]][["changepoint"]])*1+(time>estimation[[each]][["changepoint"]])*2]
+                          (get(time.var)<=estimation[[each]][["changepoint"]])*1+(get(time.var)>estimation[[each]][["changepoint"]])*2]
                 tmp <- merge(tmp, dt2.a[id==i, c(paste0("period", estimation[[each]][["event"]]),
                                                  A.name,
                                                  paste0("fit.cox", estimation[[each]][["event"]])),
@@ -580,12 +560,13 @@ contmle <- function(dt,
     if (treat.effect[1]=="stochastic") {   # FIXME: NEED TO ADAPT TO NEW SETTING
         if (cr) {
             eval.ic <- function(mat, kk=1) {
-                out <- mat[, sum( (get(A.name)==A.obs) * (time<=tau[kk]) * (time<=time.obs) * Ht *
+                out <- mat[, sum( (get(A.name)==A.obs) * (get(time.var)<=tau[kk]) *
+                                  (get(time.var)<=time.obs) * Ht *
                                   get(paste0("Ht.lambda", ifelse(length(tau)>1, paste0(".", kk), ""))) *
-                                  ( (delta.obs==1 & time==time.obs) -
+                                  ( (delta.obs==1 & get(time.var)==time.obs) -
                                     dhaz * fit.cox ) +
-                                  (get(A.name)==A.obs) * (time<=time.obs) * Ht * Ht.lambda2 *
-                                  ( (delta.obs==2 & time==time.obs) -
+                                  (get(A.name)==A.obs) * (get(time.var)<=time.obs) * Ht * Ht.lambda2 *
+                                  ( (delta.obs==2 & get(time.var)==time.obs) -
                                     cr.dhaz * fit.cr.cox )), by="id"]
                 ic.squared <- (out[, 2][[1]] +
                                rowSums(sapply(a, function(aa)
@@ -597,9 +578,10 @@ contmle <- function(dt,
             }
         } else {
             eval.ic <- function(mat, kk=1) {
-                out <- mat[, sum( pi.star * (time<=tau[kk]) * (time<=time.obs) * Ht *
+                out <- mat[, sum( pi.star * (get(time.var)<=tau[kk]) *
+                                  (get(time.var)<=time.obs) * Ht *
                                   get(paste0("Ht.lambda", ifelse(length(tau)>1, paste0(".", kk), ""))) *
-                                  ( (delta.obs==1 & time==time.obs) -
+                                  ( (delta.obs==1 & get(time.var)==time.obs) -
                                     dhaz * fit.cox )), by="id"]
                 ic.squared <- (out[, 2][[1]] +
                                rowSums(sapply(a, function(aa)
@@ -664,7 +646,11 @@ contmle <- function(dt,
                     if (Sigma) return(sqrt(ic.squared)) else return(sqrt(mean(ic.squared)/n))
                 })
                 if (Sigma) {
-                    return(matrix(outer, length(tau), 1)%*%matrix(outer, length(tau), 1))
+                    Sigma.list <- lapply(1:n, function(i) {
+                        t(outer[i,,drop=FALSE])%*%outer[i,,drop=FALSE]
+                    })
+                    return(Reduce("+", Sigma.list) / length(Sigma.list))
+                    #return(matrix(outer, length(tau), 1)%*%matrix(outer, length(tau), 1))
                 } else return(outer)
             }
         }
@@ -673,6 +659,10 @@ contmle <- function(dt,
     init.ic <- eval.ic(mat, target.index=outcome.index[target])
 
     if (weighted.norm[1]=="Sigma") Sigma.inv <- solve(eval.ic(mat, target.index=outcome.index[target], Sigma=TRUE))
+
+    if (FALSE) {
+        heatmap(eval.ic(mat, target.index=outcome.index[target], Sigma=TRUE))
+    }
 
     if (cr) {
         init.list <-  lapply(1:length(init.fit), function(each.index) {
@@ -880,7 +870,7 @@ contmle <- function(dt,
                             for (kk in 1:length(tau)) {
                                 mat[, (paste0("delta", fit.delta, ".dx")):=
                                           get(paste0("delta", fit.delta, ".dx"))+
-                                          (time<=tau[kk])*Ht*(
+                                          (get(time.var)<=tau[kk])*Ht*(
                                               (get(paste0("Ht", fit.delta2,".lambda", fit.delta,".", kk)))*
                                               Pn.eic[[paste0("F", fit.delta2)]][kk]
                                           )/Pn.eic.norm]
@@ -892,12 +882,12 @@ contmle <- function(dt,
                         fit.delta <- estimation[[each]][["event"]]
                         for (kk in 1:length(tau)) {
                             mat[, delta1.dx:=delta1.dx+
-                                      (time<=tau[kk])*Ht*(
+                                      (get(time.var)<=tau[kk])*Ht*(
                                           (get(paste0("Ht.lambda.", kk)))*Pn.eic[kk,1]+
                                           (get(paste0("Ht2.lambda.", kk)))*Pn.eic[kk,2]
                                       )/Pn.eic.norm]
                             mat[, delta2.dx:=delta2.dx+
-                                      (time<=tau[kk])*Ht*(
+                                      (get(time.var)<=tau[kk])*Ht*(
                                           (get(paste0("Ht.lambda2.", kk)))*Pn.eic[kk,3]+
                                           (get(paste0("Ht2.lambda2.", kk)))*Pn.eic[kk,4]
                                       )/Pn.eic.norm]
@@ -908,7 +898,7 @@ contmle <- function(dt,
                 mat[, delta.dx:=0]
                 for (kk in 1:length(tau)) {
                     mat[, delta.dx:=delta.dx+
-                              (time<=tau[kk])*
+                              (get(time.var)<=tau[kk])*
                               Ht*get(paste0("Ht.lambda.", kk))*Pn.eic[kk]/Pn.eic.norm]
                 }
             }
@@ -970,10 +960,8 @@ contmle <- function(dt,
             Pn.eic <- Pn.eic.fun(mat)
             if (verbose) print(Pn.eic)
             
-            Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic)#sqrt(sum(Pn.eic^2))
+            Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic)
             if (verbose) print(Pn.eic.norm)
-
-            #if (step==8 | step==100) deps.size <- 0.1*deps.size
 
             if (Pn.eic.norm.prev<=Pn.eic.norm) {
                 if (verbose) {
@@ -981,7 +969,6 @@ contmle <- function(dt,
                     print(step)
                     print("----")
                 }
-                #browser()
 
                 if (cr) {
                     for (each in outcome.index) {
