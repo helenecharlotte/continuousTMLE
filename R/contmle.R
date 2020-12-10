@@ -24,7 +24,7 @@ contmle <- function(dt,
                     #-- treatment effect of interest; 
                     treat.effect=c("1", "0", "ate", "stochastic"),
                     #-- specify stochastic intervention; 
-                    pi.star.fun=function(L) 0.2,
+                    pi.star.fun=function(L) L$L1*0.2,
                     #-- time-point(s) of interest;
                     tau=c(1.2),
                     #-- pick super learning loss (should not change this);
@@ -132,7 +132,7 @@ contmle <- function(dt,
         mod3 <- as.character(mod)[3]
         covars <- unique(c(covars, unlist(strsplit(gsub("\\+", " ",
                                                         mod3), " "))))
-        covars <- covars[!covars%in%c(A.name, "")]
+        covars <- covars[!covars%in%c(A.name, "", "*")]
         if (length(grep(".squared", mod3))>0) {
             names.squared <- unique(gsub(".squared", "",
                                          grep(".squared", unlist(strsplit(gsub("\\+", " ",
@@ -392,13 +392,18 @@ contmle <- function(dt,
         tmp[, A.obs:=dt[id==i, get(A.name)]]
         if (treat.effect[1]=="stochastic") {
             tmp <- merge(tmp, dt[, c("id", covars), with=FALSE], by="id")
-            tmp[, pi.star:=pi.star.fun(cbind(L1,L2,L3))]
+            tmp[, pi.star:=pi.star.fun(.SD), .SDcols=covars]
             tmp[, pi.star:=pi.star*get(A.name)+(1-pi.star)*(1-get(A.name))]
             tmp[, Ht:=-(pi.star / # treatment and censoring weights
                         ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))))]
         } else {
-            tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
-                      ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name))))]
+            if (length(a)==2) {
+                tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
+                          ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name))))]
+            } else {
+                tmp[, Ht:=-((get(A.name)==a)) / # treatment and censoring weights
+                          ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name))))]
+            }            
         }
         for (each in 1:length(estimation)) {
             if (length(estimation[[each]][["changepoint"]])>0) {
@@ -421,8 +426,6 @@ contmle <- function(dt,
     }))
 
     if (verbose) paste0("min of censoring weights: ", mat[, min(surv.C1)])
-
-
     
     #-- 10 -- poisson used for initial:
 
@@ -471,8 +474,6 @@ contmle <- function(dt,
                            penalize.time=penalize.time)
     }
 
-
-    
     #-- 9 -- compute clever covariates:
 
     outcome.index <- unlist(lapply(1:length(estimation), function(each) {
@@ -527,17 +528,19 @@ contmle <- function(dt,
     }
 
     #-- 11 -- initial fit:
-   
-    if (treat.effect[1]=="stochastic") {
-        if (cr) { # FIXME: NEED TO ADAPT TO NEW SETTING
-            init.fit <- mean(rowSums(sapply(a, function(aa)
-            (mat[get(A.name)==aa, pi.star*F1.tau[1], by="id"][,2][[1]]))))
+  
+    if (cr) {
+        if (treat.effect[1]=="stochastic") {
+            init.fit <- lapply(target, function(each) {
+                sapply(1:length(tau), function(kk) {
+                    mean(rowSums(sapply(a, function(aa)
+                    (mat[get(A.name)==aa, pi.star[1]*
+                                          get(paste0("F", estimation[[outcome.index[each]]][["event"]],
+                                                     ".tau", kk))[1],
+                         by="id"][,2][[1]]))))
+                })
+            })
         } else {
-            init.fit <- mean(rowSums(sapply(a, function(aa)
-            (mat[get(A.name)==aa, pi.star*(1-surv.tau[1]), by="id"][,2][[1]]))))
-        }
-    } else {
-        if (cr) {
             init.fit <- lapply(target, function(each) {
                 sapply(1:length(tau), function(kk) {
                     mean(rowSums(sapply(a, function(aa)
@@ -545,10 +548,15 @@ contmle <- function(dt,
                                                                       ".tau", kk))[1],
                                           by="id"][,2][[1]]))))
                 })
-                #names(init.tmp) <- paste0("F", estimation[[each]][["event"]])
-                #return(init.tmp)
             })
-            names(init.fit) <- paste0("F", sapply(outcome.index[target], function(each) estimation[[each]][["event"]]))
+        }
+        names(init.fit) <- paste0("F", sapply(outcome.index[target], function(each) estimation[[each]][["event"]]))
+    } else {
+        if (treat.effect[1]=="stochastic") {
+            init.fit <- sapply(1:length(tau), function(kk) {
+                mean(rowSums(sapply(a, function(aa)
+                (mat[get(A.name)==aa, pi.star[1]*(1-get(paste0("surv.tau", kk))[1]), by="id"][,2][[1]]))))
+            })
         } else {
             init.fit <- sapply(1:length(tau), function(kk) {
                 mean(rowSums(sapply(a, function(aa)
@@ -556,103 +564,85 @@ contmle <- function(dt,
             })
         }
     }
-    
-    if (treat.effect[1]=="stochastic") {   # FIXME: NEED TO ADAPT TO NEW SETTING
-        if (cr) {
-            eval.ic <- function(mat, kk=1) {
-                out <- mat[, sum( (get(A.name)==A.obs) * (get(time.var)<=tau[kk]) *
-                                  (get(time.var)<=time.obs) * Ht *
-                                  get(paste0("Ht.lambda", ifelse(length(tau)>1, paste0(".", kk), ""))) *
-                                  ( (delta.obs==1 & get(time.var)==time.obs) -
-                                    dhaz * fit.cox ) +
-                                  (get(A.name)==A.obs) * (get(time.var)<=time.obs) * Ht * Ht.lambda2 *
-                                  ( (delta.obs==2 & get(time.var)==time.obs) -
-                                    cr.dhaz * fit.cr.cox )), by="id"]
-                ic.squared <- (out[, 2][[1]] +
-                               rowSums(sapply(a, function(aa)
-                               (mat[get(A.name)==aa, pi.star[1]*get(paste0("F1.tau", ifelse(length(tau)>1, kk, "")))[1], by="id"][,2][[1]]))) -
-                               (length(a)==2 & !(treat.effect[1]=="stochastic"))*init.fit[1]-
-                               #(length(a)==1 | (treat.effect[1]=="stochastic"))*(1-init.fit))^2
-                               (length(a)==1 | (treat.effect[1]=="stochastic"))*(init.fit[1]))^2
-                return(sqrt(mean(ic.squared)/n))
-            }
-        } else {
-            eval.ic <- function(mat, kk=1) {
-                out <- mat[, sum( pi.star * (get(time.var)<=tau[kk]) *
-                                  (get(time.var)<=time.obs) * Ht *
-                                  get(paste0("Ht.lambda", ifelse(length(tau)>1, paste0(".", kk), ""))) *
-                                  ( (delta.obs==1 & get(time.var)==time.obs) -
-                                    dhaz * fit.cox )), by="id"]
-                ic.squared <- (out[, 2][[1]] +
-                               rowSums(sapply(a, function(aa)
-                               (mat[get(A.name)==aa, pi.star[1]*(1-get(paste0("surv.tau", ifelse(length(tau)>1, kk, "")))[1]), by="id"][,2][[1]]))) -
-                               (length(a)==2 & !(treat.effect[1]=="stochastic"))*init.fit[1]-
-                               (length(a)==1 | (treat.effect[1]=="stochastic"))*(1-init.fit[1]))^2
-                return(sqrt(mean(ic.squared)/n))
-            }
-        }
-    } else {
-        if (cr) {
-            eval.ic <- function(mat, target.index=outcome.index, Sigma=FALSE) {
-                outer <- lapply(target.index, function(each) {
-                    fit.delta <- estimation[[each]][["event"]]
-                    each.index <- (1:length(target.index))[target.index==each]
-                    sapply(1:length(tau), function(kk) {
-                        out <- 0
-                        for (each2 in outcome.index) {
-                            fit.delta2 <- estimation[[each2]][["event"]]
-                            out2 <- mat[, sum( (get(A.name)==A.obs) * (get(time.var)<=tau[kk]) *
-                                               (get(time.var)<=time.obs) * Ht *
-                                               get(paste0("Ht", fit.delta, ".lambda", fit.delta2,".", kk)) *
-                                               ( (delta.obs==fit.delta2 & get(time.var)==time.obs) -
-                                                 get(paste0("dhaz", fit.delta2)) * get(paste0("fit.cox", fit.delta2)) )), by="id"]
-                            out <- out + out2[, 2][[1]]
-                        }
+
+    if (cr) {
+        eval.ic <- function(mat, target.index=outcome.index, Sigma=FALSE) {
+            outer <- lapply(target.index, function(each) {
+                fit.delta <- estimation[[each]][["event"]]
+                each.index <- (1:length(target.index))[target.index==each]
+                sapply(1:length(tau), function(kk) {
+                    out <- 0
+                    for (each2 in outcome.index) {
+                        fit.delta2 <- estimation[[each2]][["event"]]
+                        out2 <- mat[, sum( (get(A.name)==A.obs) * (get(time.var)<=tau[kk]) *
+                                           (get(time.var)<=time.obs) * Ht *
+                                           get(paste0("Ht", fit.delta, ".lambda", fit.delta2,".", kk)) *
+                                           ( (delta.obs==fit.delta2 & get(time.var)==time.obs) -
+                                             get(paste0("dhaz", fit.delta2)) * get(paste0("fit.cox", fit.delta2)) )), by="id"]
+                        out <- out + out2[, 2][[1]]
+                    }
+                    if (treat.effect[1]=="stochastic") {
+                        ic.squared <- (out + rowSums(sapply(a, function(aa)
+                        (mat[get(A.name)==aa, pi.star[1]*
+                                              get(paste0("F", fit.delta,
+                                                         ".tau", kk))[1],
+                             by="id"][,2][[1]])))-
+                        init.fit[[paste0("F", fit.delta)]][kk])^2
+                    } else {
                         ic.squared <- (out + rowSums(sapply(a, function(aa)
                         (2*(aa==a[1])-1)*(mat[get(A.name)==aa, get(paste0("F", fit.delta,
                                                                           ".tau", kk))[1],
                                               by="id"][,2][[1]])))-
                         (length(a)==2)*init.fit[[paste0("F", fit.delta)]][kk]-
                         (length(a)==1)*init.fit[[paste0("F", fit.delta)]][kk])^2
-                        if (Sigma) return(sqrt(ic.squared)) else return(sqrt(mean(ic.squared)/n))
-                    })
+                    }
+                    if (Sigma) return(sqrt(ic.squared)) else return(sqrt(mean(ic.squared)/n))
                 })
-                if (Sigma) {
-                    outer2 <- do.call("cbind", outer)
-                    Sigma.list <- lapply(1:n, function(i) {
-                        t(outer2[i,,drop=FALSE])%*%outer2[i,,drop=FALSE]
-                    })
-                    return(Reduce("+", Sigma.list) / length(Sigma.list))
-                } else {
-                    names(outer) <- paste0("F", sapply(target.index, function(each) estimation[[each]]["event"]))
-                    return(outer)
-                }
+            })
+            if (Sigma) {
+                outer2 <- do.call("cbind", outer)
+                Sigma.list <- lapply(1:n, function(i) {
+                    t(outer2[i,,drop=FALSE])%*%outer2[i,,drop=FALSE]
+                })
+                return(Reduce("+", Sigma.list) / length(Sigma.list))
+            } else {
+                names(outer) <- paste0("F", sapply(target.index, function(each) estimation[[each]]["event"]))
+                return(outer)
             }
-        } else {
-            eval.ic <- function(mat, target.index=1, Sigma=FALSE) {
-                outer <- sapply(1:length(tau), function(kk) {
-                    out <- mat[, sum( (get(A.name)==A.obs) * (get(time.var)<=tau[kk]) *
-                                      (get(time.var)<=time.obs) * Ht *
-                                      get(paste0("Ht.lambda.", kk)) *
-                                      ( (delta.obs==1 & get(time.var)==time.obs) -
-                                        dhaz1 * fit.cox1 )), by="id"]
+        }
+    } else {
+        eval.ic <- function(mat, target.index=1, Sigma=FALSE) {
+            outer <- sapply(1:length(tau), function(kk) {
+                out <- mat[, sum( (get(A.name)==A.obs) * (get(time.var)<=tau[kk]) *
+                                  (get(time.var)<=time.obs) * Ht *
+                                  get(paste0("Ht.lambda.", kk)) *
+                                  ( (delta.obs==1 & get(time.var)==time.obs) -
+                                    dhaz1 * fit.cox1 )), by="id"]
+                if (treat.effect[1]=="stochastic") {
+                    ic.squared <- (out[, 2][[1]] +
+                                   rowSums(sapply(a, function(aa)
+                                   (mat[get(A.name)==aa,
+                                        pi.star[1]*(get(paste0("surv.tau", kk))[1]),
+                                        by="id"][,2][[1]]))) -
+                                   (1-init.fit[kk]))^2
+                } else {
                     ic.squared <- (out[, 2][[1]] +
                                    rowSums(sapply(a, function(aa)
                                    (2*(aa==a[1])-1)*(mat[get(A.name)==aa,
                                                          get(paste0("surv.tau", kk))[1],
                                                          by="id"][,2][[1]]))) -
-                                   (length(a)==2)*init.fit[kk]-
+                                   (length(a)==2)*init.fit[kk] -
                                    (length(a)==1)*(1-init.fit[kk]))^2
-                    if (Sigma) return(sqrt(ic.squared)) else return(sqrt(mean(ic.squared)/n))
+                }
+                if (Sigma) return(sqrt(ic.squared)) else return(sqrt(mean(ic.squared)/n))
+            })
+            if (Sigma) {
+                Sigma.list <- lapply(1:n, function(i) {
+                    t(outer[i,,drop=FALSE])%*%outer[i,,drop=FALSE]
                 })
-                if (Sigma) {
-                    Sigma.list <- lapply(1:n, function(i) {
-                        t(outer[i,,drop=FALSE])%*%outer[i,,drop=FALSE]
-                    })
-                    return(Reduce("+", Sigma.list) / length(Sigma.list))
-                    #return(matrix(outer, length(tau), 1)%*%matrix(outer, length(tau), 1))
-                } else return(outer)
-            }
+                return(Reduce("+", Sigma.list) / length(Sigma.list))
+                #return(matrix(outer, length(tau), 1)%*%matrix(outer, length(tau), 1))
+            } else return(outer)
         }
     }
 
@@ -1132,18 +1122,36 @@ contmle <- function(dt,
                     update.ic <-
                         eval.ic(mat, target.index=outcome.index[target1])[[1]]
                     if (cr) {
-                        update.est <- sapply(1:length(tau), function(kk) {
-                            mean(rowSums(sapply(a, function(aa)
-                            (2*(aa==a[1])-1)*(mat[get(A.name)==aa,
-                                                  get(paste0("F", estimation[[outcome.index[target1]]][["event"]],
-                                                             ".tau", kk))[1],
-                                                  by="id"][,2][[1]]))))
-                        })
+                        if (treat.effect[1]=="stochastic") {
+                            update.est <- sapply(1:length(tau), function(kk) {
+                                mean(rowSums(sapply(a, function(aa)
+                                (mat[get(A.name)==aa,
+                                     pi.star[1]*
+                                     get(paste0("F", estimation[[outcome.index[target1]]][["event"]],
+                                                ".tau", kk))[1],
+                                     by="id"][,2][[1]]))))
+                            })
+                        } else {
+                            update.est <- sapply(1:length(tau), function(kk) {
+                                mean(rowSums(sapply(a, function(aa)
+                                (2*(aa==a[1])-1)*(mat[get(A.name)==aa,
+                                                      get(paste0("F", estimation[[outcome.index[target1]]][["event"]],
+                                                                 ".tau", kk))[1],
+                                                      by="id"][,2][[1]]))))
+                            })
+                        }
                     } else {
-                        update.est <- sapply(1:length(tau), function(kk) {
-                            mean(rowSums(sapply(a, function(aa)
-                            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
-                        })
+                        if (treat.effect[1]=="stochastic") {
+                            update.est <- sapply(1:length(tau), function(kk) {
+                                mean(rowSums(sapply(a, function(aa)
+                                (mat[get(A.name)==aa, pi.star[1]*(1-get(paste0("surv.tau", kk))[1]), by="id"][,2][[1]]))))
+                            })
+                        } else {
+                            update.est <- sapply(1:length(tau), function(kk) {
+                                mean(rowSums(sapply(a, function(aa)
+                                (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
+                            })
+                        }
                     }
                     out.list <- list(update.est=update.est, update.ic=update.ic)
                     if (cr) names(out.list)[length(out.list)] <- paste0("F", target1)
@@ -1156,24 +1164,14 @@ contmle <- function(dt,
         })
 
         #-- 12c -- evaluate target parameter:
-        if (treat.effect[1]=="stochastic") { #FIXME: NOT ADAPTED TO NEW SETTING
-            if (cr) {
-                tmle.fit <- mean(rowSums(sapply(a, function(aa)
-                (mat[get(A.name)==aa, pi.star*F1.tau[1], by="id"][,2][[1]]))))
-            } else {
-                tmle.fit <- mean(rowSums(sapply(a, function(aa)
-                (mat[get(A.name)==aa, pi.star*(1-surv.tau[1]), by="id"][,2][[1]]))))
-            }        
-        } else {
-
-            update.list <- lapply(1:length(update.fit), function(each.index) {
-                out <- rbind(tmle.est=update.fit[[each.index]]$update.est,
-                             tmle.se=update.fit[[each.index]]$update.ic)
-                colnames(out) <- paste0("tau=", tau)
-                return(out)
-            })
-            if (cr) names(update.list) <- paste0("F", target) else update.list <- update.list[[1]]
-        }
+       
+        update.list <- lapply(1:length(update.fit), function(each.index) {
+            out <- rbind(tmle.est=update.fit[[each.index]]$update.est,
+                         tmle.se=update.fit[[each.index]]$update.ic)
+            colnames(out) <- paste0("tau=", tau)
+            return(out)
+        })
+        if (cr) names(update.list) <- paste0("F", target) else update.list <- update.list[[1]]
 
         #-- 12e -- compute sd:
 

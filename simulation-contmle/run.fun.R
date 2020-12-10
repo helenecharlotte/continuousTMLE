@@ -189,7 +189,7 @@ run.fun <- function(competing.risk=FALSE,
 
                        #dt[, delta:=1*(delta==3)+3*(delta==1)+2*(delta==2)]
                        #target <- 1
-                   
+
                        out <- list("est"=contmle(dt, sl.method=3,
                                                  deps.size=0.1, V=10,
                                                  no.small.steps=500,
@@ -197,6 +197,7 @@ run.fun <- function(competing.risk=FALSE,
                                                  one.step=one.step, 
                                                  target=target, iterative=iterative,
                                                  treat.effect=treat.effect,
+                                                 pi.star.fun=function(L) 0, 
                                                  tau=tau, 
                                                  output.km=TRUE,
                                                  verbose=verbose,
@@ -207,8 +208,8 @@ run.fun <- function(competing.risk=FALSE,
                                                                              model=cens.model,
                                                                              changepoint=NULL),
                                                                  "cr2"=list(fit=fit.cr,
-                                                                           model=Surv(time, delta==2)~A+L1+L2+L3,
-                                                                           changepoint=NULL),
+                                                                            model=Surv(time, delta==2)~A+L1+L2+L3,
+                                                                            changepoint=NULL),
                                                                  "cr3"=list(fit=fit.cr,
                                                                             model=Surv(time, delta==3)~A+L1+L2+L3,
                                                                             changepoint=NULL)
