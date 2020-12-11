@@ -1003,22 +1003,41 @@ contmle <- function(dt,
 
         #-- 12c -- compute sd:
         if (cr) {
-            final.fit <- lapply(outcome.index[target], function(each) {
-                sapply(1:length(tau), function(kk) {
-                    mean(rowSums(sapply(a, function(aa)
-                    (2*(aa==a[1])-1)*(mat[get(A.name)==aa,
-                                          get(paste0("F", estimation[[each]][["event"]],
-                                                     ".tau", kk))[1],
-                                          by="id"][,2][[1]]))))
+            if (treat.effect[1]=="stochastic") {
+                final.fit <- lapply(target, function(each) {
+                    sapply(1:length(tau), function(kk) {
+                        mean(rowSums(sapply(a, function(aa)
+                        (mat[get(A.name)==aa, pi.star[1]*
+                                              get(paste0("F", estimation[[outcome.index[each]]][["event"]],
+                                                         ".tau", kk))[1],
+                             by="id"][,2][[1]]))))
+                    })
                 })
-            })
+            } else {
+                final.fit <- lapply(outcome.index[target], function(each) {
+                    sapply(1:length(tau), function(kk) {
+                        mean(rowSums(sapply(a, function(aa)
+                        (2*(aa==a[1])-1)*(mat[get(A.name)==aa,
+                                              get(paste0("F", estimation[[each]][["event"]],
+                                                         ".tau", kk))[1],
+                                              by="id"][,2][[1]]))))
+                    })
+                })
+            }
             names(final.fit) <- paste0("F", sapply(outcome.index[target], function(each) estimation[[each]][["event"]]))
             final.ic <- eval.ic(mat, target.index=outcome.index[target])
         } else {
-            final.fit <- list(sapply(1:length(tau), function(kk) {
-                mean(rowSums(sapply(a, function(aa)
-                (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
-            }))
+            if (treat.effect[1]=="stochastic") {
+                final.fit <- list(sapply(1:length(tau), function(kk) {
+                    mean(rowSums(sapply(a, function(aa)
+                    (mat[get(A.name)==aa, pi.star[1]*(1-get(paste0("surv.tau", kk))[1]), by="id"][,2][[1]]))))
+                }))
+            } else {
+                final.fit <- list(sapply(1:length(tau), function(kk) {
+                    mean(rowSums(sapply(a, function(aa)
+                    (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
+                }))
+            }
             final.ic <- list(eval.ic(mat))
         }
         final.list <-  lapply(1:length(final.fit), function(each.index) {
