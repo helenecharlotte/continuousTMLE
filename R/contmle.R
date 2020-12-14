@@ -142,6 +142,7 @@ contmle <- function(dt,
                 dt[, (paste0(col, ".squared")):=get(col)^2]
         }
     }
+    covars <- covars[-grep(".squared", covars)]
 
     #-- get unique times in dataset
     unique.times <- sort(unique(dt[, get(time.var)]))
@@ -427,51 +428,35 @@ contmle <- function(dt,
 
     if (verbose) paste0("min of censoring weights: ", mat[, min(surv.C1)])
     
-    #-- 10 -- poisson used for initial:
+    #-- 10 -- poisson-HAL used for initial:
 
-    if (FALSE) {#(fit.outcome[1]==c("hal")) { #-- FIXME: ADAPT TO NEW SETUP
-         
-        mat <- poisson.hal(mat=mat, delta.outcome=1, dt=dt,
-                           verbose=verbose,
-                           cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
-                           cut.time.A=cut.time.A, V=V,
-                           cut.L1.A=cut.L1.A,
-                           cut.L.interaction=cut.L.interaction,
-                           covars=covars,
-                           sl.poisson=(length(lambda.cvs)>0), 
-                           lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
-                           penalize.time=penalize.time,
-                           fit.cr=fit.cr[1], fit.cens=fit.cens[1])
+    any.hal <- unlist(lapply(estimation, function(each) each[["fit"]][1]=="hal"))
 
-    }
+    if (any(any.hal)) {
 
-    #-- 10a -- poisson used for censoring:
+        count.hals <- 1
+        
+        for (each in (1:length(estimation))[any.hal]) {
+            
+            fit.delta <- estimation[[each]][["event"]]
+            fit.name <- names(estimation)[each]
 
-    if (FALSE) {#(fit.cens[1]==c("hal")) { #-- FIXME: ADAPT TO NEW SETUP
-        mat <- poisson.hal(mat=mat, delta.outcome=0, dt=dt,
-                           verbose=verbose,
-                           cut.covars=cut.covars, cut.time=cut.time,
-                           cut.time.A=cut.time.A, browse=FALSE, V=V,
-                           cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
-                           covars=covars,
-                           sl.poisson=(length(lambda.cvs.cens)>0), 
-                           lambda.cv=lambda.cv, lambda.cvs=lambda.cvs.cens,
-                           penalize.time=penalize.time,
-                           fit.cr=fit.cr[1], fit.cens=fit.cens[1])
-    }
+            mat <- poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                               time.var=time.var, A.name=A.name,
+                               verbose=verbose,
+                               cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
+                               cut.time.A=cut.time.A, V=V,
+                               cut.L1.A=cut.L1.A,
+                               cut.L.interaction=cut.L.interaction,
+                               covars=covars,
+                               sl.poisson=(length(lambda.cvs)>0), 
+                               lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
+                               penalize.time=penalize.time,
+                               save.X=count.hals<sum(any.hal))
 
-    #-- 10b -- poisson used for competing risk:
+            count.hals <- count.hals+1
+        }
 
-    if (FALSE) {#(fit.cr[1]==c("hal")) { #-- FIXME: ADAPT TO NEW SETUP
-        mat <- poisson.hal(mat=mat, delta.outcome=2, dt=dt,
-                           verbose=verbose,
-                           cut.covars=cut.covars, cut.time=cut.time,
-                           cut.time.A=cut.time.A, browse=FALSE, V=V,
-                           cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
-                           covars=covars,
-                           sl.poisson=(length(lambda.cvs)>0), 
-                           lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
-                           penalize.time=penalize.time)
     }
 
     #-- 9 -- compute clever covariates:
