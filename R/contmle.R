@@ -117,7 +117,7 @@ contmle <- function(dt,
 
     #-- are there competing risks?
     if (length(dt[get(delta.var)>0, unique(get(delta.var))])>1) cr <- TRUE else cr <- FALSE
-    if (!cr) target <- 1
+    if (!cr) target <- 1 else if (!cr3) target <- target[target<3]
     
     #-- get number of subjects:
     n <- length(dt[, unique(id)])
@@ -229,7 +229,7 @@ contmle <- function(dt,
             
             sl.pick <- ""
             
-            if (fit[1] %in% c("km", "hal")) { #-- later for hal or if uses km
+            if (fit[1] %in% c("km")) { #-- later for hal or if uses km
                 tmp.model <- as.character(fit.model)
                 if (fit[1]=="km") tmp.model[3] <- "strata(A)" else tmp.model[3] <- "1"
                 estimation[[each]]$model <- fit.model <- formula(paste0(tmp.model[2], tmp.model[1], tmp.model[3]))
@@ -431,7 +431,7 @@ contmle <- function(dt,
     #-- 10 -- poisson-HAL used for initial:
 
     any.hal <- unlist(lapply(estimation, function(each) each[["fit"]][1]=="hal"))
-
+    
     if (any(any.hal)) {
 
         count.hals <- 1
@@ -441,7 +441,8 @@ contmle <- function(dt,
             fit.delta <- estimation[[each]][["event"]]
             fit.name <- names(estimation)[each]
 
-            mat <- poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+            mat <- suppressWarnings(
+                poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                                time.var=time.var, A.name=A.name,
                                verbose=verbose,
                                cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
@@ -452,7 +453,7 @@ contmle <- function(dt,
                                sl.poisson=(length(lambda.cvs)>0), 
                                lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
                                penalize.time=penalize.time,
-                               save.X=count.hals<sum(any.hal))
+                               save.X=count.hals<sum(any.hal)))
 
             count.hals <- count.hals+1
         }
