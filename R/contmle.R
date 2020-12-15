@@ -435,8 +435,10 @@ contmle <- function(dt,
     if (any(any.hal)) {
 
         count.hals <- 1
+
+        # dt[id%in%sample(dt[delta==1, id], 220), delta:=0]
         
-        for (each in (1:length(estimation))[any.hal]) {
+        for (each in (1:length(estimation))[any.hal]) { 
             
             fit.delta <- estimation[[each]][["event"]]
             fit.name <- names(estimation)[each]
