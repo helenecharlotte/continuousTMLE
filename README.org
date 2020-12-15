@@ -28,8 +28,7 @@
   + [[https://github.com/helenecharlotte/continuousTMLE#targeting-the-cause-specific-cumulative-risks-simultaneously-across-multiple-time-points][Targeting
     the cause-specific cumulative risks simultaneously across multiple
     time-points]]
- + [[https://github.com/helenecharlotte/continuousTMLE#targeting-subsets-of-cause-specific-cumulative-risks-simultaneously][Targeting
-   subsets of cause-specific cumulative risks simultaneously]]
+    + [[https://github.com/helenecharlotte/continuousTMLE#targeting-subsets-of-cause-specific-cumulative-risks-simultaneously][Targeting subsets of cause-specific cumulative risks  simultaneously]]
 
 **** [[https://github.com/helenecharlotte/continuousTMLE#results-from-simulation-studies-2][Results from  simulation studies]]
 
