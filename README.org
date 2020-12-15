@@ -14,6 +14,8 @@
     survival]]
   + [[https://github.com/helenecharlotte/continuousTMLE#targeting-survival-probabilities-simultaneously-across-multiple-time-points][Targeting survival probabilities simultaneously across multiple time-points]]
 
+**** Results from a simulation study
+
 *** [[https://github.com/helenecharlotte/continuousTMLE#tmle-for-competing-risks-analysis][TMLE for continuous-time competing risks analysis]]
 
  + [[https://github.com/helenecharlotte/continuousTMLE#simulated-data-examples-1][Simulating data examples]]
@@ -325,6 +327,204 @@ Warning message:
 In fitter(X, Y, istrat, offset, init, control, weights = weights,  :
   Loglik converged before variable  1 ; beta may be infinite.
 #+end_example
+
+
+** Results from a simulation study
+
+*** Monotonicity
+
+In this small simulation study, we investigate one-step TMLE's ability
+to fit a monotone survival curve compared to the iterative TMLE. We
+simple fit the treatment-specific survival curve at four time-points
+where two of the time-points are very close to each other. \\
+
+First, let's look at the results from the one-step TMLE:
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")     
+source("./simulation-contmle/make.table.fun.R")    
+make.table.fun(setting=1, tau=c(0.4, 0.5, 0.99, 1.00), target=1,
+               treat.effect="1", M=500, n=300, censoring.informative=TRUE)
+#+END_SRC
+
+#+RESULTS[<2020-12-15 08:58:12> 04bc8fe22a4f9352209c0d1298525e3d1a9fcaf8]:
+: [1] "Estimate A=1 (n=300, M=500)"
+: $F
+:          true.value          bias     bias.init         sd   cov cov.oracle   rel.mse
+: tau=0.4    0.089757  0.0003486295  0.0001689490 0.02342802 0.936      0.942 0.9886447
+: tau=0.5    0.128354 -0.0011479946 -0.0006327264 0.02740761 0.938      0.952 0.9931828
+: tau=0.99   0.284073  0.0006176577  0.0011930328 0.03801468 0.946      0.948 0.9707157
+: tau=1      0.286628  0.0007756627  0.0011263135 0.03814598 0.952      0.952 0.9733194
+
+These look similar to what we achieve with the iterative TMLE: 
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")     
+source("./simulation-contmle/make.table.fun.R")    
+do.call("rbind", lapply(c(0.4, 0.5, 0.99, 1.00), function(tt)  
+    make.table.fun(setting=1, tau=tt, target=1,
+                   treat.effect="1", M=500, n=300, censoring.informative=TRUE)[[1]]
+    ))  
+#+END_SRC
+
+#+RESULTS[<2020-12-15 09:00:29> e52993d75c04abc3be65db26dea1a26baa3d1f3e]:
+: [1] "Estimate A=1 (n=300, M=500)"
+: [1] "Estimate A=1 (n=300, M=500)"
+: [1] "Estimate A=1 (n=300, M=500)"
+: [1] "Estimate A=1 (n=300, M=500)"
+:          true.value           bias      bias.init         sd   cov cov.oracle   rel.mse
+: tau=0.4    0.089899  0.00020970339  0.00002694904 0.02342812 0.934      0.940 0.9912122
+: tau=0.5    0.128700 -0.00150778177 -0.00097872636 0.02740787 0.936      0.952 0.9937420
+: tau=0.99   0.284617  0.00004529501  0.00064903276 0.03801478 0.946      0.948 0.9700442
+: tau=1      0.287066  0.00026965476  0.00068831350 0.03814609 0.952      0.952 0.9744732
+
+
+But let us also look at the monotonicity properties of the fitted
+probabilities. First we extract all the fitted values from the
+simulation study: 
+
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")     
+source("./simulation-contmle/make.table.fun.R")    
+run.one <- do.call("cbind", make.table.fun(setting=1, tau=c(0.4, 0.5, 0.99, 1.00), target=1, 
+                                           output.est=TRUE,
+                                           treat.effect="1", M=500, n=300, censoring.informative=TRUE))
+run.sep <- do.call("cbind", lapply(c(0.4, 0.5, 0.99, 1.00), function(tt)  
+    make.table.fun(setting=1, tau=tt, target=1, output.est=TRUE,
+                   treat.effect="1", M=500, n=300, censoring.informative=TRUE)[[1]]
+    ))
+#+END_SRC
+
+Then we look at moniticity:
+ 
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+mean(run.one.diff <- apply(run.one, 1, diff)<0)
+mean(run.sep.diff <- apply(run.sep, 1, diff)<0) 
+#+END_SRC
+
+#+RESULTS[<2020-12-15 09:09:07> 1598405d96187a1123f5450fcecfeb6d34f2ff95]:
+: [1] 0
+: [1] 0.03266667
+
+Thus, we see that the iterative TMLE does not always result in a
+monotone curve. We do note, however, that in the present simulations
+this mostly kicks in at the time-points very close to each other
+(\(\tau=0.99,1\)):
+ 
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+mean(run.sep.diff <- apply(run.sep[,3:4], 1, diff)<0)
+#+END_SRC
+
+#+RESULTS[<2020-12-15 09:09:54> 186d2e6a96efd00d44b593202d5f790112b98c62]:
+: [1] 0.094
+
+And almost never at the other time-points (\(\tau=0.4,0.5\)):
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+mean(run.sep.diff <- apply(run.sep[,1:2], 1, diff)<0)
+#+END_SRC
+
+#+RESULTS[<2020-12-15 09:10:10> 868a5406bc97528583c4e584898e85df698ddf95]:
+: [1] 0.004
+
+In these cases, the fitted values look as follows (we only show the
+worst examples for \(\tau=0.99,1\)):
+
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports results  :session *R* :cache yes 
+sep.out <- run.sep[run.sep[,4]-run.sep[,3]<(-0.0001),3:4]
+colnames(sep.out) <- paste0("tau=", c(0.99, 1)) 
+sep.out 
+#+END_SRC
+
+#+RESULTS[<2020-12-15 09:20:59> f4808baa1678e70b599336fcf5016dfcb3503fcb]:
+#+begin_example
+          tau=0.99     tau=1
+tmle.est 0.3442180 0.3440807
+tmle.est 0.3073135 0.3070199
+tmle.est 0.2965696 0.2962569
+tmle.est 0.2816341 0.2815084
+tmle.est 0.2554443 0.2552757
+tmle.est 0.2377091 0.2375831
+tmle.est 0.2749989 0.2748831
+tmle.est 0.2861972 0.2859966
+tmle.est 0.2682481 0.2680999
+tmle.est 0.3029685 0.3028329
+tmle.est 0.2756541 0.2754998
+tmle.est 0.2520386 0.2518931
+#+end_example
+
+With corresponding one-step fitted values: 
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports results  :session *R* :cache yes  
+one.out <- run.one[run.sep[,4]-run.sep[,3]<(-0.0001),3:4]
+colnames(one.out) <- paste0("tau=", c(0.99, 1)) 
+one.out 
+#+END_SRC
+
+#+RESULTS[<2020-12-15 09:21:09> 85c5ac04d379628bbdaea9e6250916a11cfab4c5]:
+#+begin_example
+          tau=0.99     tau=1
+tmle.est 0.3439312 0.3446871
+tmle.est 0.3070050 0.3077063
+tmle.est 0.2961468 0.2969222
+tmle.est 0.2810581 0.2818064
+tmle.est 0.2550053 0.2556832
+tmle.est 0.2373026 0.2379165
+tmle.est 0.2747290 0.2753992
+tmle.est 0.2855378 0.2863071
+tmle.est 0.2679179 0.2685774
+tmle.est 0.3026780 0.3033653
+tmle.est 0.2752695 0.2760548
+tmle.est 0.2519170 0.2526037
+#+end_example
+
+
+
+And: 
+
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports results  :session *R* :cache yes  
+sep.out <- run.sep[run.sep[,2]-run.sep[,1]<0,1:2]
+colnames(sep.out) <- paste0("tau=", c(0.4,0.5)) 
+sep.out
+#+END_SRC
+
+#+RESULTS[<2020-12-15 09:13:24> d39ab8c3d20efeae4ebcb4ab660ab4066a3fa8a7]:
+:             tau=0.4    tau=0.5
+: tmle.est 0.07731765 0.07718782
+: tmle.est 0.13481901 0.13480390
+
+With corresponding one-step fitted values:
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports results  :session *R* :cache yes  
+one.out <- run.one[run.sep[,2]-run.sep[,1]<0,1:2]
+colnames(one.out) <- paste0("tau=", c(0.4,0.5)) 
+one.out
+#+END_SRC
+
+#+RESULTS[<2020-12-15 09:15:53> a586ff0b11990a8619b87ad922f4f034790ac7d3]:
+:            tau=0.4    tau=0.5
+: tmle.est 0.0769099 0.07770785
+: tmle.est 0.1343741 0.13526776
+
+
+
+*** Coverage of TMLE
 
 
 * TMLE for competing risks analysis
