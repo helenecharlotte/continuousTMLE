@@ -14,7 +14,7 @@
     survival]]
   + [[https://github.com/helenecharlotte/continuousTMLE#targeting-survival-probabilities-simultaneously-across-multiple-time-points][Targeting survival probabilities simultaneously across multiple time-points]]
 
-**** [[https://github.com/helenecharlotte/continuousTMLE#results-from-a-simulation-studies-1][Results from simulation studies]]
+**** [[https://github.com/helenecharlotte/continuousTMLE#results-from-simulation-studies-1][Results from simulation studies]]
 
  + [[https://github.com/helenecharlotte/continuousTMLE#monotonicity][Testing monotonicity]]
 
