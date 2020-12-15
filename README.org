@@ -3,9 +3,9 @@
 
 ** Overview 
 
-- [[https://github.com/helenecharlotte/continuousTMLE#tmle-for-survival-analysis][TMLE for continuous-time survival analysis]]
+*** [[https://github.com/helenecharlotte/continuousTMLE#tmle-for-survival-analysis][TMLE for continuous-time survival analysis]]
 
- + [[https://github.com/helenecharlotte/continuousTMLE#simulated-data-examples-1][Simulated data examples]]
+ + [[https://github.com/helenecharlotte/continuousTMLE#simulated-data-examples-1][Simulating data examples]]
 
  + [[https://github.com/helenecharlotte/continuousTMLE#examples-of-applying-the-code-to-simulated-data][Examples of applying the code to simulated data]]
 
@@ -14,9 +14,9 @@
     survival]]
   + [[https://github.com/helenecharlotte/continuousTMLE#targeting-survival-probabilities-simultaneously-across-multiple-time-points][Targeting survival probabilities simultaneously across multiple time-points]]
 
-- [[https://github.com/helenecharlotte/continuousTMLE#tmle-for-competing-risks-analysis][TMLE for continuous-time competing risks analysis]]
+*** [[https://github.com/helenecharlotte/continuousTMLE#tmle-for-competing-risks-analysis][TMLE for continuous-time competing risks analysis]]
 
- + [[https://github.com/helenecharlotte/continuousTMLE#simulated-data-examples-1][Simulated data examples]]
+ + [[https://github.com/helenecharlotte/continuousTMLE#simulated-data-examples-1][Simulating data examples]]
 
  + [[https://github.com/helenecharlotte/continuousTMLE#examples-of-applying-the-code-to-simulated-data-1][Examples of applying the code to data]]
 
