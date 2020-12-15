@@ -25,8 +25,9 @@
  + [[https://github.com/helenecharlotte/continuousTMLE#examples-of-applying-the-code-to-simulated-data-1][Examples of applying the code to data]]
 
   + [[https://github.com/helenecharlotte/continuousTMLE#targeting-the-cause-specific-cumulative-risks-simultaneously][Targeting the cause-specific cumulative risks simultaneously]]
-  + [[https://github.com/helenecharlotte/continuousTMLE#targeting-the-cause-specific-cumulative-risks-simultaneously-across-multiple-time-points][Targeting the cause-specific cumulative risks simultaneously
-    across multiple time-points]]
+  + [[https://github.com/helenecharlotte/continuousTMLE#targeting-the-cause-specific-cumulative-risks-simultaneously-across-multiple-time-points][Targeting
+    the cause-specific cumulative risks simultaneously across multiple
+    time-points]]
 
 
 **** [[https://github.com/helenecharlotte/continuousTMLE#results-from-simulation-studies-2][Results from  simulation studies]]
@@ -594,6 +595,47 @@ source("./simulation-contmle/load.R")
 #+end_example
 
 
+*** Setting 2 with three causes
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")    
+(dt3 <- sim.data2(500, setting=2, no.cr=3, competing.risk=TRUE))  
+#+END_SRC
+
+#+begin_example
+      id      time delta A          L1         L2        L3
+  1:   1 0.1450495     2 0  0.18646167 0.53803176 0.9218310
+  2:   2 0.5472824     3 1 -0.91214117 0.18023776 0.2624584
+  3:   3 0.4206132     3 1  0.26982345 0.63716911 0.1119786
+  4:   4 0.6061732     1 1 -0.52404887 0.68882887 0.4691299
+  5:   5 0.5278644     2 1  0.08703335 0.61165321 0.9285522
+ ---                                                       
+496: 496 0.2583767     0 1  0.32032951 0.99817887 0.8142770
+497: 497 0.6388712     3 1  0.97519593 0.02428083 0.1036670
+498: 498 0.3337664     1 1  0.81967845 0.10287961 0.7454781
+499: 499 0.1383786     2 0  0.23112059 0.68527974 0.5222549
+500: 500 0.1981358     0 0 -0.14390677 0.85631816 0.5716522
+#+end_example
+
+
+#+begin_example
+      id      time delta A          L1          L2        L3
+  1:   1 0.2104011     2 1  0.47499590 0.507529442 0.5081989
+  2:   2 0.9950924     2 0 -0.18157279 0.465752728 0.6365665
+  3:   3 0.0962248     1 0 -0.72525429 0.303056284 0.9455085
+  4:   4 0.6079188     1 1 -0.99947581 0.691318560 0.3090190
+  5:   5 0.6786964     0 0 -0.57499470 0.990865805 0.7190923
+ ---                                                        
+496: 496 0.9254278     2 1 -0.32272306 0.754394145 0.2812119
+497: 497 1.3892085     1 1 -0.49018167 0.724425462 0.4775683
+498: 498 0.7920518     0 0 -0.09834086 0.534232647 0.8407960
+499: 499 0.5770960     2 0  0.12161625 0.123686559 0.2523931
+500: 500 0.4539557     0 1  0.51500226 0.006624758 0.3918125
+#+end_example
+
+
 [[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 ** Examples of applying the code to simulated data 
@@ -698,7 +740,7 @@ tmle.se   0.03692450
 source("./simulation-contmle/load.R")    
 (run3 <- contmle(dt2, #-- dataset
                  target=1:2, #-- go after cause 1 and cause 2 specific risks
-                 iterative=FALSE, #-- use one-step tmle to target F1 and F2 separately
+                 iterative=FALSE, #-- use one-step tmle to target F1 and F2 simultaneously
                  treat.effect="ate", #-- target the ate directly
                  tau=0.5, #-- time-point of interest
                  estimation=list("cause1"=list(fit="cox",
@@ -749,7 +791,7 @@ tmle.se   0.03692414
 source("./simulation-contmle/load.R")    
 (run4 <- contmle(dt2, #-- dataset
                  target=1:2, #-- go after cause 1 and cause 2 specific risks
-                 iterative=FALSE, #-- use one-step tmle to target F1 and F2 separately
+                 iterative=FALSE, #-- use one-step tmle to target F1 and F2 simultaneously
                  treat.effect="ate", #-- target the ate directly
                  tau=c(0.3, 0.5), #-- time-point of interest
                  estimation=list("cause1"=list(fit="cox",
@@ -790,6 +832,124 @@ tmle.se   0.02771312  0.03692375
 
 
 [[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
+
+
+*** Targeting subsets of cause-specific cumulative risks simultaneously 
+
+
+Here we have a dataset with three causes, but we only target the
+cause-1 and cause-2 risks:
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")     
+(run5 <- contmle(dt3, #-- dataset (with three competing risks) 
+                 target=1:2, #-- go after cause 1 and cause 2 specific risks
+                 iterative=FALSE, #-- use one-step tmle to target F1 and F2 simultaneously
+                 treat.effect="ate", #-- target the ate directly
+                 tau=0.5, #-- time-point of interest
+                 estimation=list("cause1"=list(fit="cox",
+                                               model=Surv(time, delta==1)~A+L1.squared),
+                                 "cens"=list(fit="cox",
+                                             model=Surv(time, delta==0)~L1+L2+L3+A*L1),
+                                 "cause2"=list(fit="cox",
+                                               model=Surv(time, delta==2)~A+L1+L2+L3),                                         
+                                 "cause3"=list(fit="cox",
+                                               model=Surv(time, delta==3)~A+L1+L2+L3)                                         
+                                 )
+                 ))    
+#+END_SRC
+
+#+begin_example
+$init
+$init$F1
+              tau=0.5
+init.est -0.007292943
+init.se   0.036790910
+
+$init$F2
+             tau=0.5
+init.est 0.001042136
+init.se  0.035002328
+
+
+$tmle
+$tmle$F1
+            tau=0.5
+tmle.est 0.01112978
+tmle.se  0.03679016
+
+$tmle$F2
+             tau=0.5
+tmle.est 0.009518483
+tmle.se  0.035000835
+#+end_example
+
+Similarly, we can target all three cause-specific risks
+simultaneously:
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")        
+(run6 <- contmle(dt3, #-- dataset (with three competing risks) 
+                 target=1:3, #-- go after all three cause-specific risks
+                 iterative=FALSE, #-- use one-step tmle to target F1, F2 and F3 simultaneously
+                 treat.effect="ate", #-- target the ate directly
+                 tau=0.5, #-- time-point of interest 
+                 estimation=list("cause1"=list(fit="cox",
+                                               model=Surv(time, delta==1)~A+L1.squared),
+                                 "cens"=list(fit="cox", 
+                                             model=Surv(time, delta==0)~L1+L2+L3+A*L1),
+                                 "cause2"=list(fit="cox",
+                                               model=Surv(time, delta==2)~A+L1+L2+L3),                                         
+                                 "cause3"=list(fit="cox",
+                                               model=Surv(time, delta==3)~A+L1+L2+L3)                                         
+                                 )
+                 ))    
+#+END_SRC
+
+#+begin_example
+$init
+$init$F1
+              tau=0.5
+init.est -0.007292943
+init.se   0.036790910
+
+$init$F2
+             tau=0.5
+init.est 0.001042136
+init.se  0.035002328
+
+$init$F3
+             tau=0.5
+init.est -0.04157675
+init.se   0.03528795
+
+
+$tmle
+$tmle$F1
+            tau=0.5
+tmle.est 0.01130622
+tmle.se  0.03679005
+
+$tmle$F2
+             tau=0.5
+tmle.est 0.009468111
+tmle.se  0.035000793
+
+$tmle$F3
+             tau=0.5
+tmle.est -0.04573218
+tmle.se   0.03528728
+#+end_example
+
+
+
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
+
+
 
 ** Code for simulation studies
 
@@ -838,15 +998,12 @@ tmle.se   0.02778435
 
 *** Single time-point iterative TMLE for competing risks (three causes)
 
-
-
-
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory  
 source("./simulation-contmle/load.R")     
 source("./simulation-contmle/make.table.fun.R")     
-make.table.fun(setting=2, tau=0.5, target=1:3, cr3=TRUE,
+make.table.fun(setting=2, tau=0.5, target=1:3, cr3=TRUE, 
                fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
                iterative=TRUE, competing.risk=TRUE, misspecify.outcome=FALSE,
                censoring.informative=TRUE)   
