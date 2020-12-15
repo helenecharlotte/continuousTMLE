@@ -119,7 +119,7 @@ source("./simulation-contmle/load.R")
 
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 ** Examples of applying the code to simulated data
 
@@ -199,7 +199,7 @@ source("./simulation-contmle/load.R")
 : tmle.se  0.01847456
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 *** Targeting the time-specific average treatment effect (ATE) on survival
 
@@ -244,7 +244,7 @@ source("./simulation-contmle/load.R")
 
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 *** Targeting survival probabilities simultaneously across multiple time-points
 
@@ -291,7 +291,7 @@ source("./simulation-contmle/load.R")
 
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 *** Use super learner for initial estimation 
 
@@ -345,7 +345,7 @@ In fitter(X, Y, istrat, offset, init, control, weights = weights,  :
 #+end_example
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 ** Results from simulation studies
 
@@ -533,7 +533,7 @@ one.out
 : tmle.est 0.1343741 0.13526776
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 
 * TMLE for competing risks analysis
@@ -594,7 +594,7 @@ source("./simulation-contmle/load.R")
 #+end_example
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 ** Examples of applying the code to simulated data 
 
@@ -635,7 +635,7 @@ tmle.se  0.040002785
 
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 *** Targeting both cause-specific cumulative risks separately
 
@@ -687,7 +687,7 @@ tmle.se   0.03692450
 
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 *** Targeting the cause-specific cumulative risks simultaneously 
 
@@ -737,7 +737,7 @@ tmle.se   0.03692414
 #+end_example
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 *** Targeting the cause-specific cumulative risks simultaneously across multiple time-points
 
@@ -789,7 +789,7 @@ tmle.se   0.02771312  0.03692375
 
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 ** Code for simulation studies
 
@@ -832,7 +832,7 @@ tmle.se   0.02778435
 
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 ** Results from simulation studies
 
@@ -854,7 +854,7 @@ make.table.fun(setting=2, tau=0.5, target=1:3, cr3=TRUE,
 
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 *** Single time-point one-step TMLE for competing risks (three causes) 
 
@@ -887,7 +887,7 @@ tau=0.5  -0.050664 0.0004003152 0.02617214 0.944 0.9890767
 
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 *** Two time-points one-step TMLE for competing risks (three causes) 
 
@@ -957,7 +957,7 @@ tau=0.5   -0.050453 0.001854374 0.04833382 0.946 1.218507
 
 
 
-[[https://github.com/helenecharlotte/continuousTMLE][Back to top]]
+[[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
 
 *  Dependencies :noexport:
 
