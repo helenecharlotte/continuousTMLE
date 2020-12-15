@@ -14,7 +14,9 @@
     survival]]
   + [[https://github.com/helenecharlotte/continuousTMLE#targeting-survival-probabilities-simultaneously-across-multiple-time-points][Targeting survival probabilities simultaneously across multiple time-points]]
 
-**** Results from a simulation study
+**** [[https://github.com/helenecharlotte/continuousTMLE#results-from-a-simulation-study-1][Results from a simulation study]]
+
+ + [[https://github.com/helenecharlotte/continuousTMLE#monotonicity][Testing monotonicity]]
 
 *** [[https://github.com/helenecharlotte/continuousTMLE#tmle-for-competing-risks-analysis][TMLE for continuous-time competing risks analysis]]
 
@@ -349,7 +351,6 @@ make.table.fun(setting=1, tau=c(0.4, 0.5, 0.99, 1.00), target=1,
                treat.effect="1", M=500, n=300, censoring.informative=TRUE)
 #+END_SRC
 
-#+RESULTS[<2020-12-15 08:58:12> 04bc8fe22a4f9352209c0d1298525e3d1a9fcaf8]:
 : [1] "Estimate A=1 (n=300, M=500)"
 : $F
 :          true.value          bias     bias.init         sd   cov cov.oracle   rel.mse
@@ -371,7 +372,6 @@ do.call("rbind", lapply(c(0.4, 0.5, 0.99, 1.00), function(tt)
     ))  
 #+END_SRC
 
-#+RESULTS[<2020-12-15 09:00:29> e52993d75c04abc3be65db26dea1a26baa3d1f3e]:
 : [1] "Estimate A=1 (n=300, M=500)"
 : [1] "Estimate A=1 (n=300, M=500)"
 : [1] "Estimate A=1 (n=300, M=500)"
@@ -402,7 +402,7 @@ run.sep <- do.call("cbind", lapply(c(0.4, 0.5, 0.99, 1.00), function(tt)
     ))
 #+END_SRC
 
-Then we look at moniticity:
+Then we look at monoticity:
  
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -410,7 +410,6 @@ mean(run.one.diff <- apply(run.one, 1, diff)<0)
 mean(run.sep.diff <- apply(run.sep, 1, diff)<0) 
 #+END_SRC
 
-#+RESULTS[<2020-12-15 09:09:07> 1598405d96187a1123f5450fcecfeb6d34f2ff95]:
 : [1] 0
 : [1] 0.03266667
 
@@ -424,7 +423,7 @@ this mostly kicks in at the time-points very close to each other
 mean(run.sep.diff <- apply(run.sep[,3:4], 1, diff)<0)
 #+END_SRC
 
-#+RESULTS[<2020-12-15 09:09:54> 186d2e6a96efd00d44b593202d5f790112b98c62]:
+
 : [1] 0.094
 
 And almost never at the other time-points (\(\tau=0.4,0.5\)):
@@ -434,7 +433,6 @@ And almost never at the other time-points (\(\tau=0.4,0.5\)):
 mean(run.sep.diff <- apply(run.sep[,1:2], 1, diff)<0)
 #+END_SRC
 
-#+RESULTS[<2020-12-15 09:10:10> 868a5406bc97528583c4e584898e85df698ddf95]:
 : [1] 0.004
 
 In these cases, the fitted values look as follows (we only show the
@@ -448,7 +446,6 @@ colnames(sep.out) <- paste0("tau=", c(0.99, 1))
 sep.out 
 #+END_SRC
 
-#+RESULTS[<2020-12-15 09:20:59> f4808baa1678e70b599336fcf5016dfcb3503fcb]:
 #+begin_example
           tau=0.99     tau=1
 tmle.est 0.3442180 0.3440807
@@ -474,7 +471,6 @@ colnames(one.out) <- paste0("tau=", c(0.99, 1))
 one.out 
 #+END_SRC
 
-#+RESULTS[<2020-12-15 09:21:09> 85c5ac04d379628bbdaea9e6250916a11cfab4c5]:
 #+begin_example
           tau=0.99     tau=1
 tmle.est 0.3439312 0.3446871
@@ -503,7 +499,6 @@ colnames(sep.out) <- paste0("tau=", c(0.4,0.5))
 sep.out
 #+END_SRC
 
-#+RESULTS[<2020-12-15 09:13:24> d39ab8c3d20efeae4ebcb4ab660ab4066a3fa8a7]:
 :             tau=0.4    tau=0.5
 : tmle.est 0.07731765 0.07718782
 : tmle.est 0.13481901 0.13480390
@@ -517,7 +512,6 @@ colnames(one.out) <- paste0("tau=", c(0.4,0.5))
 one.out
 #+END_SRC
 
-#+RESULTS[<2020-12-15 09:15:53> a586ff0b11990a8619b87ad922f4f034790ac7d3]:
 :            tau=0.4    tau=0.5
 : tmle.est 0.0769099 0.07770785
 : tmle.est 0.1343741 0.13526776
