@@ -14,7 +14,7 @@
     survival]]
   + [[https://github.com/helenecharlotte/continuousTMLE#targeting-survival-probabilities-simultaneously-across-multiple-time-points][Targeting survival probabilities simultaneously across multiple time-points]]
 
-**** [[https://github.com/helenecharlotte/continuousTMLE#results-from-a-simulation-study-1][Results from a simulation study]]
+**** [[https://github.com/helenecharlotte/continuousTMLE#results-from-a-simulation-studies-1][Results from simulation studies]]
 
  + [[https://github.com/helenecharlotte/continuousTMLE#monotonicity][Testing monotonicity]]
 
@@ -29,7 +29,7 @@
     across multiple time-points]]
 
 
-**** [[https://github.com/helenecharlotte/continuousTMLE#results-from-a-simulation-study-2][Results from a simulation study]]
+**** [[https://github.com/helenecharlotte/continuousTMLE#results-from-simulation-studies-2][Results from  simulation studies]]
 
  + [[https://github.com/helenecharlotte/continuousTMLE#single-time-point-iterative-tmle-for-competing-risks-three-causes][Single time-point iterative TMLE (three causes)]]
 
@@ -339,7 +339,7 @@ In fitter(X, Y, istrat, offset, init, control, weights = weights,  :
 #+end_example
 
 
-** Results from a simulation study
+** Results from simulation studies
 
 *** Monotonicity
 
@@ -813,11 +813,23 @@ tmle.se   0.02778435
 
 
 
-** Results from a simulation study
+** Results from simulation studies
 
 *** Single time-point iterative TMLE for competing risks (three causes)
 
 
+
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")     
+source("./simulation-contmle/make.table.fun.R")     
+make.table.fun(setting=2, tau=0.5, target=1:3, cr3=TRUE,
+               fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
+               iterative=TRUE, competing.risk=TRUE, misspecify.outcome=FALSE,
+               censoring.informative=TRUE)   
+#+END_SRC
 
 
 
