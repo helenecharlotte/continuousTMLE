@@ -345,7 +345,7 @@ First, let's look at the results from the one-step TMLE:
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory  
-source("./simulation-contmle/load.R")     
+source("./simulation-contmle/load.R")      
 source("./simulation-contmle/make.table.fun.R")    
 make.table.fun(setting=1, tau=c(0.4, 0.5, 0.99, 1.00), target=1,
                treat.effect="1", M=500, n=300, censoring.informative=TRUE)
@@ -353,11 +353,11 @@ make.table.fun(setting=1, tau=c(0.4, 0.5, 0.99, 1.00), target=1,
 
 : [1] "Estimate A=1 (n=300, M=500)"
 : $F
-:          true.value          bias     bias.init         sd   cov cov.oracle   rel.mse
-: tau=0.4    0.089757  0.0003486295  0.0001689490 0.02342802 0.936      0.942 0.9886447
-: tau=0.5    0.128354 -0.0011479946 -0.0006327264 0.02740761 0.938      0.952 0.9931828
-: tau=0.99   0.284073  0.0006176577  0.0011930328 0.03801468 0.946      0.948 0.9707157
-: tau=1      0.286628  0.0007756627  0.0011263135 0.03814598 0.952      0.952 0.9733194
+:          true.value          bias         sd   cov   rel.mse
+: tau=0.4    0.089757  0.0003486295 0.02342802 0.936 0.9886447
+: tau=0.5    0.128354 -0.0011479946 0.02740761 0.938 0.9931828
+: tau=0.99   0.284073  0.0006176577 0.03801468 0.946 0.9707157
+: tau=1      0.286628  0.0007756627 0.03814598 0.952 0.9733194
 
 These look similar to what we achieve with the iterative TMLE: 
 
@@ -369,18 +369,18 @@ source("./simulation-contmle/make.table.fun.R")
 do.call("rbind", lapply(c(0.4, 0.5, 0.99, 1.00), function(tt)  
     make.table.fun(setting=1, tau=tt, target=1,
                    treat.effect="1", M=500, n=300, censoring.informative=TRUE)[[1]]
-    ))  
+    ))   
 #+END_SRC
 
 : [1] "Estimate A=1 (n=300, M=500)"
 : [1] "Estimate A=1 (n=300, M=500)"
 : [1] "Estimate A=1 (n=300, M=500)"
 : [1] "Estimate A=1 (n=300, M=500)"
-:          true.value           bias      bias.init         sd   cov cov.oracle   rel.mse
-: tau=0.4    0.089899  0.00020970339  0.00002694904 0.02342812 0.934      0.940 0.9912122
-: tau=0.5    0.128700 -0.00150778177 -0.00097872636 0.02740787 0.936      0.952 0.9937420
-: tau=0.99   0.284617  0.00004529501  0.00064903276 0.03801478 0.946      0.948 0.9700442
-: tau=1      0.287066  0.00026965476  0.00068831350 0.03814609 0.952      0.952 0.9744732
+:          true.value           bias         sd   cov   rel.mse
+: tau=0.4    0.089899  0.00020970339 0.02342812 0.934 0.9912122
+: tau=0.5    0.128700 -0.00150778177 0.02740787 0.936 0.9937420
+: tau=0.99   0.284617  0.00004529501 0.03801478 0.946 0.9700442
+: tau=1      0.287066  0.00026965476 0.03814609 0.952 0.9744732
 
 
 But let us also look at the monotonicity properties of the fitted
@@ -518,7 +518,6 @@ one.out
 
 
 
-*** Coverage of TMLE
 
 
 * TMLE for competing risks analysis
@@ -803,6 +802,129 @@ tmle.est -0.04757723
 tmle.se   0.02778435
 #+end_example
 
+
+
+
+** Results from a simulation study
+
+*** Single time-point iterative TMLE for competing risks (three causes)
+
+
+
+
+
+*** Single time-point one-step TMLE for competing risks (three causes) 
+
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")     
+source("./simulation-contmle/make.table.fun.R")     
+make.table.fun(setting=2, tau=0.5, target=1:3, cr3=TRUE,
+               fit.outcome="sl", fit.cr="sl", fit.cens="sl", M=500, n=1000, 
+               iterative=FALSE, competing.risk=TRUE,
+               censoring.informative=TRUE)   
+#+END_SRC
+
+#+RESULTS[<2020-12-15 09:39:10> 1b576db98447c7853437e8223bb82ef5aa8aac2b]:
+#+begin_example
+[1] "Estimate ATE (n=1000, M=500)"
+$F1
+        true.value         bias        sd  cov  rel.mse
+tau=0.5  -0.007538 0.0001793097 0.0269632 0.94 0.970743
+
+$F2
+        true.value          bias         sd   cov  rel.mse
+tau=0.5  -0.050232 -0.0003145141 0.02601505 0.958 1.033968
+
+$F3
+        true.value         bias         sd   cov   rel.mse
+tau=0.5  -0.050664 0.0004003152 0.02617214 0.944 0.9890767
+#+end_example
+
+
+#+begin_example
+[1] "Estimate ATE (n=1000, M=500)"
+$F1
+        true.value         bias        sd  cov  rel.mse
+tau=0.5  -0.007538 0.0001793097 0.0269632 0.94 0.970743
+
+$F2
+        true.value          bias         sd   cov  rel.mse
+tau=0.5  -0.050232 -0.0003145141 0.02601505 0.958 1.033968
+
+$F3
+        true.value         bias         sd   cov   rel.mse
+tau=0.5  -0.050664 0.0004003152 0.02617214 0.944 0.9890767
+#+end_example
+
+
+*** Two time-points one-step TMLE for competing risks (three causes) 
+
+Unweighted inner product: 
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")     
+source("./simulation-contmle/make.table.fun.R")     
+make.table.fun(setting=2, tau=c(0.35, 0.5), target=1:3, cr3=TRUE,
+               fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
+               iterative=FALSE, competing.risk=TRUE, 
+               censoring.informative=TRUE)   
+#+END_SRC
+
+#+begin_example
+[1] "Estimate ATE (n=300, M=500)"
+$F1
+         true.value         bias         sd   cov   rel.mse
+tau=0.35  -0.010336 -0.004938819 0.04087746 0.948 0.9798167
+tau=0.5   -0.006968 -0.005912663 0.04930019 0.954 1.0202049
+
+$F2
+         true.value           bias         sd   cov   rel.mse
+tau=0.35   -0.03870 -0.00002837189 0.03882888 0.946 0.9940814
+tau=0.5    -0.05009 -0.00051064749 0.04728502 0.948 1.0367347
+
+$F3
+         true.value        bias         sd   cov  rel.mse
+tau=0.35  -0.039266 0.001747679 0.03911737 0.956 1.020954
+tau=0.5   -0.050453 0.001802615 0.04828533 0.946 1.197730
+#+end_example
+
+
+
+Inner product weighted by covariance matrix:
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")      
+source("./simulation-contmle/make.table.fun.R")     
+make.table.fun(setting=2, tau=c(0.35, 0.5), target=1:3, cr3=TRUE,
+               fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
+               iterative=FALSE, competing.risk=TRUE, weighted.norm="Sigma", 
+               censoring.informative=TRUE)  
+#+END_SRC
+
+#+begin_example
+[1] "Estimate ATE (n=300, M=500)"
+$F1
+         true.value         bias         sd   cov   rel.mse
+tau=0.35  -0.010336 -0.004933618 0.04087752 0.948 0.9824014
+tau=0.5   -0.006968 -0.005922571 0.04930021 0.954 1.0203707
+
+$F2
+         true.value           bias         sd   cov   rel.mse
+tau=0.35   -0.03870 -0.00001796331 0.03882895 0.946 0.9977335
+tau=0.5    -0.05009 -0.00051372728 0.04728483 0.948 1.0381076
+
+$F3
+         true.value        bias         sd   cov  rel.mse
+tau=0.35  -0.039266 0.001752358 0.03911742 0.956 1.024541
+tau=0.5   -0.050453 0.001854374 0.04833382 0.946 1.218507
+#+end_example
 
 
 
