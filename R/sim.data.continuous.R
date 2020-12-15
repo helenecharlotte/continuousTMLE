@@ -31,7 +31,7 @@ sim.data2 <- function(n, setting=1, competing.risk=FALSE, no.cr=2,
     }
 
     return(sim.data(n, betaA=betaA, betaL=betaL, nu=nu, eta=eta, t0=t0,
-                    seed=m+100, no.cr=2,
+                    seed=m+100, no.cr=no.cr,
                     competing.risk=competing.risk,
                     categorical=FALSE, randomize.A=randomize.A,
                     censoring.informative=censoring.informative,

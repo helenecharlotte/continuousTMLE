@@ -117,8 +117,9 @@ contmle <- function(dt,
 
     #-- are there competing risks?
     if (length(dt[get(delta.var)>0, unique(get(delta.var))])>1) cr <- TRUE else cr <- FALSE
-    if (!cr) target <- 1 else if (!cr3) target <- target[target<3]
-    
+    if (!cr) target <- 1 else if (length(dt[get(delta.var)>0, unique(get(delta.var))])<3)
+                             target <- target[target<3]
+
     #-- get number of subjects:
     n <- length(dt[, unique(id)])
     
