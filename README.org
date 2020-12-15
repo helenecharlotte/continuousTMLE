@@ -416,7 +416,7 @@ mean(run.sep.diff <- apply(run.sep, 1, diff)<0)
 Thus, we see that the iterative TMLE does not always result in a
 monotone curve. We do note, however, that in the present simulations
 this mostly kicks in at the time-points very close to each other
-($\tau=0.99,1$):
+(=tau=0.99,1=):
  
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -426,7 +426,7 @@ mean(run.sep.diff <- apply(run.sep[,3:4], 1, diff)<0)
 
 : [1] 0.094
 
-And almost never at the other time-points ($\tau=0.4,0.5$):
+And almost never at the other time-points (=tau=0.4,0.5=):
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
@@ -436,7 +436,7 @@ mean(run.sep.diff <- apply(run.sep[,1:2], 1, diff)<0)
 : [1] 0.004
 
 In these cases, the fitted values look as follows (we only show the
-worst examples for $\tau=0.99,1$):
+worst examples for =tau=0.99,1=):
 
 
 #+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
