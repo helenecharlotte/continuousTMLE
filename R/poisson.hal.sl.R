@@ -1,17 +1,17 @@
-poisson.hal.sl <- function(mat, dt, X=NULL,
+poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A",
                            delta.outcome=1, cols.obs=cols.obs,
                            cut.covars=5, cut.time=10, cut.time.A=4,
                            cut.L1.A=5, cut.L.interaction=5,
                            covars=c("L1", "L2", "L3"),
-                           poisson.cens=FALSE, lambda.cv=NULL,
+                           lambda.cv=NULL,
                            penalize.time=TRUE, adjust.penalization=TRUE,
                            lambda.cvs=seq(0, 0.003, length=51)[-1], 
                            V=10, verbose=TRUE
                            ) {
 
     n <- nrow(dt)
-    unique.times <- sort(unique(dt[, time]))
-    unique.T <- sort(unique(dt[delta==1, time]))
+    unique.times <- sort(unique(dt[, get(time.var)]))
+    unique.T <- sort(unique(dt[delta==delta.outcome, get(time.var)]))
     unique.Tdiff <- unique.T - c(0, unique.T[-length(unique.T)])
     cv.split <- matrix(sample(1:n, size=n), ncol=V)
 
@@ -33,18 +33,19 @@ poisson.hal.sl <- function(mat, dt, X=NULL,
         #---- 2. compute cve for hal
         #----------------------------
 
-        print(paste0("v=", vv, "/", V))
+        if (verbose) print(paste0("v=", vv, "/", V))
 
         mat.train <- mat[id %in% train.set]
 
-        mat.train[, RT:=sum(tdiff*(time<=time.obs)), by=c("x", "A")]
-        mat.train[, D:=sum(event*(time<=time.obs)), by=c("x", "A")]
+        mat.train[, RT:=sum(tdiff*(get(time.var)<=time.obs)), by=c("x", A.name)]
+        mat.train[, D:=sum(event*(get(time.var)<=time.obs)), by=c("x", A.name)]
 
-        if (length(mat[, unique(A)])>1) reduce.A <- TRUE else reduce.A <- FALSE
+        if (length(mat[, unique(get(A.name))])>1) reduce.A <- TRUE else reduce.A <- FALSE
 
-        tmp.train <- unique(mat.train[time<=time.obs & (!reduce.A | A.obs==A), c("RT", "D", "x"), with=FALSE])
+        tmp.train <- unique(mat.train[get(time.var)<=time.obs & (!reduce.A | A.obs==get(A.name)),
+                                      c("RT", "D", "x"), with=FALSE])
 
-        X.obs <- unique.matrix(X[mat$id %in% train.set,][mat.train$time<=mat.train$time.obs,
+        X.obs <- unique.matrix(X[mat$id %in% train.set,][mat.train[, get(time.var)]<=mat.train$time.obs,
                                                          cols.obs])[tmp.train$RT>0,]
 
         Y <- tmp.train[RT>0, D] 
@@ -62,30 +63,40 @@ poisson.hal.sl <- function(mat, dt, X=NULL,
             fit.vv <- glmnet(x=X.obs, y=Y, lambda=lambda.cv,
                              family="poisson",
                              offset=offset,
-                             penalty.factor=penalty.factor,
-                             maxit=1000)
+                             penalty.factor=penalty.factor)# ,
+            # maxit=1000)
+                      
             mat[id %in% test.set, fit.lambda.vv:=exp(predict(fit.vv, X[mat$id %in% test.set, cols.obs],
                                                              newoffset=0))]
 
             mat[id %in% test.set, fit.pois.dLambda.vv:=fit.lambda.vv*tdiff]
-            mat[id %in% test.set, fit.pois.Lambda.vv:=cumsum(fit.pois.dLambda.vv), by=c("id", "A")]
+            mat[id %in% test.set, fit.pois.Lambda.vv:=cumsum(fit.pois.dLambda.vv), by=c("id", A.name)]
 
             if (sum(abs(coef(fit.vv)[,1]))==0) {
                 return(Inf)
             } else {
-                return(lebesgue.log.like.loss.fun(dN=mat[id %in% test.set & time==time.obs, 1*(delta.obs==delta.outcome)],
-                                                  lambda=mat[id %in% test.set & time==time.obs, fit.lambda.vv],
-                                                  Lambda=mat[id %in% test.set & time==time.obs, fit.pois.Lambda.vv]))
+                return(lebesgue.log.like.loss.fun(dN=mat[id %in% test.set & get(time.var)==time.obs, 1*(delta.obs==delta.outcome)],
+                                                  lambda=mat[id %in% test.set & get(time.var)==time.obs, fit.lambda.vv],
+                                                  Lambda=mat[id %in% test.set & get(time.var)==time.obs, fit.pois.Lambda.vv]))
             }
         })
     }
 
+    #-- remove if all failed to run in given split? 
+    outlist.hal <- lapply(outlist.hal, function(out) {
+        if (all(unique(unlist(out))==Inf)) return(NULL) else return(out)
+        message("obs: HAL cv failed in at least one of the sample splits")
+    })
+
     cve.hal <- unlist(lapply(1:length(lambda.cvs), function(mm) {
         sum(unlist(lapply(outlist.hal, function(out) out[[mm]])))
     }))
-    
-    #if (verbose) plot(lambda.cvs,cve.hal)
+
     if (verbose) print(cbind(lambda.cvs,cve.hal))
-    
-    return(lambda.cvs[cve.hal==min(cve.hal)])
+
+    if (all(unique(cve.hal)==Inf)) {
+        return(NULL)
+    } else {
+        return(lambda.cvs[cve.hal==min(cve.hal)])
+    }
 }

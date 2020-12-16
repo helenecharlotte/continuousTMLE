@@ -1,8 +1,10 @@
 poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
+                        time.var="time", A.name="A",
                         cut.covars=5, cut.time=10, cut.time.A=4,
                         cut.L1.A=5, cut.L.interaction=5,
                         covars=c("L1", "L2", "L3"),
-                        fit.cens="cox", fit.cr="cox",
+                        #fit.cens="cox", fit.cr="cox", #<-CHECK"
+                        save.X=FALSE,
                         sl.poisson=TRUE, lambda.cv=NULL,
                         penalize.time=TRUE, adjust.penalization=TRUE, browse=FALSE,
                         lambda.cvs=seq(0, 0.0015, length=21)[-1],
@@ -20,22 +22,30 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
         
         #-- merge covariate information to mat:
         mat <- merge(mat, dt[, c("id", c(covars)), with=FALSE], by="id")
-        mat[, tdiff:=c(diff(time),0), by=c("id", "A")]
-        mat[, event:=1*(time==time.obs & delta.obs==delta.outcome)]
-
+        mat[, tdiff:=c(diff(get(time.var)),0), by=c("id", A.name)]
+        mat[, event:=1*(get(time.var)==time.obs & delta.obs==delta.outcome)]
+        
         #-- make model matrix
         X <- Matrix(
             model.matrix(formula(paste0(
                 "event~",
-                paste0("-1+A+A.obs+",
-                       paste0(paste0("A.obs:", indicator.fun(mat, "time", cut.time.A)), collapse="+"), "+",
-                       paste0(paste0("A.obs:", indicator.fun(mat, "L1", cut.L1.A)), collapse="+"), "+",
-                       paste0(paste0("A:", indicator.fun(mat, "time", cut.time.A)), collapse="+"), "+",
-                       paste0(paste0("A:", indicator.fun(mat, "L1", cut.L1.A)), collapse="+"), "+",
-                       paste0(indicator.fun(mat, "time", cut.time), collapse="+"), "+", 
-                       paste0(apply(expand.grid(indicator.fun(mat, "L1", cut.L.interaction),
-                                                indicator.fun(mat, "L2", cut.L.interaction)), 1,
-                                    function(x) paste0(x, collapse=":")), collapse="+"), "+", 
+                paste0("-1+", A.name, "+A.obs+",
+                       paste0(paste0("A.obs:", indicator.fun(mat, time.var, cut.time.A)), collapse="+"), "+",
+                       paste0(sapply(covars, function(covar)
+                           paste0(paste0("A.obs:", indicator.fun(mat, covar, cut.L1.A)), collapse="+")),
+                           collapse="+"), "+",
+                       paste0(paste0(A.name, ":", indicator.fun(mat, time.var, cut.time.A)), collapse="+"), "+",
+                       paste0(sapply(covars, function(covar)
+                           paste0(paste0(A.name, ":", indicator.fun(mat, covar, cut.L1.A)), collapse="+")),
+                           collapse="+"), "+",
+                       paste0(indicator.fun(mat, time.var, cut.time), collapse="+"), "+", 
+                       paste0(sapply(1:(length(covars)-1), function(cc) {
+                           paste0(sapply((cc+1):length(covars), function(cc2) {
+                               paste0(apply(expand.grid(indicator.fun(mat, covars[cc], cut.L.interaction),
+                                                        indicator.fun(mat, covars[cc2], cut.L.interaction)), 1,
+                                            function(x) paste0(x, collapse=":")), collapse="+")
+                           }), collapse="+")
+                       }), collapse="+"), "+", 
                        paste0(sapply(covars, function(covar) paste0(indicator.fun(mat, covar, cut.covars), collapse="+")),
                               collapse="+")
                        ))), 
@@ -43,7 +53,7 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
 
         cols <- colnames(X)
         cols.A <- (1:length(cols))[-grep("A.obs", cols)]
-        cols.obs <- (1:length(cols))[cols!="A" & !(substr(cols, 1, 2)=="A:")]
+        cols.obs <- (1:length(cols))[cols!=A.name & !(substr(cols, 1, 2)==paste0(A.name, ":"))]
 
         #-- THIS is the botleneck (and I could not improve with Rcpp); 
         x <- apply(X[, cols.obs], 1, function(x) paste0(x, collapse=","))
@@ -51,107 +61,101 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
         mat[, x:=x]
         
     } else {
-        mat[, tdiff:=c(diff(time),0), by=c("id", "A")]
-        mat[, event:=1*(time==time.obs & delta.obs==delta.outcome)]
+        mat[, tdiff:=c(diff(get(time.var)),0), by=c("id", A.name)]
+        mat[, event:=1*(get(time.var)==time.obs & delta.obs==delta.outcome)]
         cols <- colnames(X)
         cols.A <- (1:length(cols))[-grep("A.obs", cols)]
-        cols.obs <- (1:length(cols))[cols!="A" & !(substr(cols, 1, 2)=="A:")]
+        cols.obs <- (1:length(cols))[cols!=A.name & !(substr(cols, 1, 2)==paste0(A.name, ":"))]
     }
 
     #-- use sl to pick penalization
     if (sl.poisson) {
-        lambda.cv <- poisson.hal.sl(mat=mat[A==A.obs & time<=time.obs], dt=dt,
-                                    X=X[mat$time<=mat$time.obs & mat$A==mat$A.obs, ],
+        lambda.cv <- poisson.hal.sl(mat=mat[get(A.name)==A.obs & get(time.var)<=time.obs], dt=dt,
+                                    time.var=time.var, A.name=A.name,
+                                    X=X[mat[, get(time.var)]<=mat$time.obs &
+                                        mat[, get(A.name)]==mat$A.obs, ],
                                     delta.outcome=delta.outcome, cols.obs=cols.obs,
                                     cut.covars=cut.covars, cut.time=cut.time,
                                     cut.time.A=cut.time.A,
                                     cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
                                     covars=covars,
-                                    poisson.cens=poisson.cens, lambda.cv=lambda.cv,
+                                    lambda.cv=lambda.cv,
                                     lambda.cvs=lambda.cvs,
                                     penalize.time=penalize.time,
                                     adjust.penalization=adjust.penalization,
                                     V=V)[1]
     }
 
-    if (sl.poisson) print(paste0("Pick penalization parameter (CV): ", lambda.cv))
-
-    mat[, RT:=sum(tdiff*(time<=time.obs)), by=c("x", "A")]
-    mat[, D:=sum(event*(time<=time.obs)), by=c("x", "A")]
-
-    if (length(mat[, unique(A)])>1) reduce.A <- TRUE else reduce.A <- FALSE
-
-    tmp <- unique(mat[time<=time.obs & (!reduce.A | A.obs==A), c("RT", "D", "x"), with=FALSE])
-
-    X.obs <- unique.matrix(X[mat$time<=mat$time.obs, cols.obs])[tmp$RT>0,]
-    X.A <- Matrix(X[, cols.A], sparse=TRUE)
-                    
-    Y <- tmp[RT>0, D] 
-    offset <- tmp[RT>0, log(RT)]
-
-    if (penalize.time) {# | delta.outcome==0) {
-        penalty.factor <- c(0, rep(1, ncol(X.obs)-1))
-    } else {
-        print("no penalization of coefficients for time indicators (main effects)")
-        penalty.factor <- rep(1, ncol(X.obs))
-        penalty.factor[1:cut.time] <- 0
-    }
-        
     if (length(lambda.cv)>0) {
-        fit <- glmnet(x=X.obs, y=Y, lambda=lambda.cv,
-                      family="poisson",
-                      offset=offset,
-                      penalty.factor=penalty.factor,
-                      maxit=1000)
+        if (sl.poisson) print(paste0("Pick penalization parameter (CV): ", lambda.cv))
+
+        mat[, RT:=sum(tdiff*(get(time.var)<=time.obs)), by=c("x", A.name)]
+        mat[, D:=sum(event*(get(time.var)<=time.obs)), by=c("x", A.name)]
+
+        if (length(mat[, unique(get(A.name))])>1) reduce.A <- TRUE else reduce.A <- FALSE
+
+        tmp <- unique(mat[get(time.var)<=time.obs & (!reduce.A | A.obs==get(A.name)), c("RT", "D", "x"), with=FALSE])
+
+        X.obs <- unique.matrix(X[mat[, get(time.var)]<=mat$time.obs, cols.obs])[tmp$RT>0,]
+        X.A <- Matrix(X[, cols.A], sparse=TRUE)
+                    
+        Y <- tmp[RT>0, D] 
+        offset <- tmp[RT>0, log(RT)]
+
+        if (penalize.time) {# | delta.outcome==0) {
+            penalty.factor <- c(0, rep(1, ncol(X.obs)-1))
+        } else {
+            if (verbose) print("no penalization of coefficients for time indicators (main effects)")
+            penalty.factor <- rep(1, ncol(X.obs))
+            penalty.factor[1:cut.time] <- 0
+        }
+
+        #if (delta.outcome==0) browser()
+        if (length(lambda.cv)>0) {
+            fit <- glmnet(x=X.obs, y=Y, lambda=lambda.cv,
+                          family="poisson",
+                          offset=offset,
+                          penalty.factor=penalty.factor,
+                          maxit=1000)
+        } else {
+            if (verbose) print("glmnet picks penalization")
+            fit <- cv.glmnet(x=X.obs, y=Y, 
+                             family="poisson",
+                             offset=offset,
+                             penalty.factor=penalty.factor,
+                             maxit=1000)
+            if (verbose) print(paste0("lambda=",fit$lambda.1se))
+        }
+
+        rm(X.obs)
+        
+        if (verbose) print(coef(fit))
+
+        mat[, (paste0("fit.lambda", delta.outcome)):=exp(predict(fit, X.A,
+                                                                 newoffset=0))]
+
+        rm(X.A)
+
+        mat[, (paste0("fit.lambda", delta.outcome)):=na.locf(get(paste0("fit.lambda", delta.outcome))), by=c("id", A.name)]
+        mat[, (paste0("fit.pois.dLambda", delta.outcome)):=get(paste0("fit.lambda", delta.outcome))*tdiff]
+        
+        if (delta.outcome>0) {
+            mat[, (paste0("dhaz", delta.outcome)):=get(paste0("fit.pois.dLambda", delta.outcome))]
+            mat[, (paste0("fit.cox", delta.outcome)):=1]
+        } else {
+            mat[, (paste0("surv.t.pois", delta.outcome)):=exp(-cumsum(get(paste0("fit.pois.dLambda", delta.outcome)))), by=c("id", A.name)]
+            mat[, (paste0("surv.t1.pois", delta.outcome)):=c(1, get(paste0("surv.t.pois", delta.outcome))[-.N]), by=c("id", A.name)]
+            mat[, Ht:=Ht*surv.C1/get(paste0("surv.t1.pois", delta.outcome))]
+        }
     } else {
-        print("glmnet picks penalization")
-        fit <- cv.glmnet(x=X.obs, y=Y, 
-                         family="poisson",
-                         offset=offset,
-                         penalty.factor=penalty.factor,
-                         maxit=1000)
-        print(paste0("lambda=",fit$lambda.1se))
+        warning(paste0("hal did not fit for delta=", delta.outcome))
     }
 
-    rm(X.obs)
-        
-    if (verbose) print(coef(fit))
-
-    if (delta.outcome==1) fit.name <- "" else if (delta.outcome==0) fit.name <- ".cens" else fit.name <- ".cr"
-
-    mat[, (paste0("fit.lambda", fit.name)):=exp(predict(fit, X.A,
-                                                        newoffset=0))]
-
-    rm(X.A)
-
-    mat[, (paste0("fit.lambda", fit.name)):=na.locf(get(paste0("fit.lambda", fit.name))), by=c("id", "A")]
-    mat[, (paste0("fit.pois.dLambda", fit.name)):=get(paste0("fit.lambda", fit.name))*tdiff]
-    mat[, (paste0("surv.t.pois", fit.name)):=exp(-cumsum(get(paste0("fit.pois.dLambda", fit.name)))), by=c("id", "A")]
-        
-    if (delta.outcome==1) {
-        mat[, surv.tau.pois:=surv.t.pois[time==max(time[time<=tau])], by=c("id", "A")]
-        mat[, Ht.lambda.pois:=surv.tau.pois / surv.t.pois]
-        mat[, dhaz:=fit.pois.dLambda]
-        mat[, fit.cox:=1]
-        mat[, surv.t:=exp(-cumsum(dhaz*fit.cox)), by=c("id", "A")]
-        mat[, surv.tau:=surv.tau.pois]
-    } else {
-        mat[, surv.t1.pois.cens:=c(1, surv.t.pois.cens[-.N]), by=c("id", "A")]
-        mat[, Ht.pois:=Ht*surv.C1/surv.t1.pois.cens]
-        mat[, Ht:=Ht.pois]
-    }
-
-    #if (delta.outcome==0 | !poisson.cens)
-    if ((delta.outcome==0 & fit.cr!="hal") | (fit.cens!="hal" & fit.cr!="hal" & delta.outcome==1) | delta.outcome==2) {
-        mat <- mat[time<=tau]
+    if (!save.X) {#((delta.outcome==0 & fit.cr!="hal") | (fit.cens!="hal" & fit.cr!="hal" & delta.outcome==1) | delta.outcome==2) {
         return(mat)
     } else {
         list(mat=mat, X=X)
     }
-
-    #if (poisson.cens & delta.outcome==1)
-    #    return(list(mat=mat, X=X)) else return(mat)
-
 }
 
 
