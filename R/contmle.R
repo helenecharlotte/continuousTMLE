@@ -36,11 +36,12 @@ contmle <- function(dt,
                     #-- specify penalization in hal? 
                     lambda.cv=NULL,
                     #-- specify grid over which to pick penalization in hal by cross-validation; 
+                    #lambda.cvs=seq(0.00000000001, 0.1, length=50),
                     lambda.cvs=seq(0.0000001, 0.01, length=50),#seq(0, 0.008, length=51)[-1],
                     lambda.cvs.cens=NULL,
                     #-- penalize time indicators in hal? 
                     penalize.time=FALSE,
-                    #-- pick grid for indicators in hal; 
+                    #-- pick grid for indicators in hal;
                     cut.covars=8, cut.time=10,
                     cut.time.A=10,
                     cut.L.A=8, cut.L.interaction=3,
@@ -206,6 +207,7 @@ contmle <- function(dt,
                 cox.sl(dt.tmp, A.name=A.name, time.var=time.var, 
                        only.cox.sl=only.cox.sl,
                        method=sl.method, V=V,
+                       verbose=verbose,
                        outcome.models=sl.models)[1])
 
             rm(dt.tmp)
