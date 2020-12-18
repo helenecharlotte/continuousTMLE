@@ -11,7 +11,9 @@ contmle <- function(dt,
                                     #         changepoint=NULL)                                          
                                     ),
                     #-- when there are competing risks, what is the target?
-                    target=1, 
+                    target=1,
+                    #-- use poisson-based or cox-based hal?
+                    cox.hal=FALSE, #DO NOT CHANGE.
                     #-- use iterative or one-step tmle; (for competing risks, one-step is default)
                     one.step=FALSE, deps.size=0.1, no.small.steps=500,
                     iterative=FALSE,
@@ -39,8 +41,9 @@ contmle <- function(dt,
                     #-- penalize time indicators in hal? 
                     penalize.time=FALSE,
                     #-- pick grid for indicators in hal; 
-                    cut.covars=8, cut.time=10, cut.time.A=10,
-                    cut.L1.A=8, cut.L.interaction=3,
+                    cut.covars=8, cut.time=10,
+                    cut.time.A=10,
+                    cut.L.A=8, cut.L.interaction=3,
                     #-- maximum number of iterations in iterative tmle; 
                     maxIter=10,
                     verbose=FALSE, verbose.sl=FALSE, 
@@ -200,7 +203,7 @@ contmle <- function(dt,
 
             set.seed(1)
             sl.pick <- suppressWarnings(
-                cox.sl(dt.tmp, A.name=A.name,
+                cox.sl(dt.tmp, A.name=A.name, time.var=time.var, 
                        only.cox.sl=only.cox.sl,
                        method=sl.method, V=V,
                        outcome.models=sl.models)[1])
@@ -363,7 +366,11 @@ contmle <- function(dt,
 
     if (only.km) return(km.est)
 
-    if (TRUE) {#(!(fit.outcome[1]=="hal")) {
+    #-- hal?
+    
+    any.hal <- unlist(lapply(estimation, function(each) each[["fit"]][1]=="hal"))
+    
+    if (!any(any.hal)) {
         bhaz.cox <- bhaz.cox[get(time.var)<=max(tau)]
     }
 
@@ -431,35 +438,59 @@ contmle <- function(dt,
     
     #-- 10 -- poisson-HAL used for initial:
 
-    any.hal <- unlist(lapply(estimation, function(each) each[["fit"]][1]=="hal"))
-    
+    not.fit.list <- list()
+
     if (any(any.hal)) {
 
         count.hals <- 1
-
-        # dt[id%in%sample(dt[delta==1, id], 220), delta:=0]
         
         for (each in (1:length(estimation))[any.hal]) { 
             
             fit.delta <- estimation[[each]][["event"]]
             fit.name <- names(estimation)[each]
 
-            mat <- suppressWarnings(
-                poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
-                               time.var=time.var, A.name=A.name,
-                               verbose=verbose,
-                               cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
-                               cut.time.A=cut.time.A, V=V,
-                               cut.L1.A=cut.L1.A,
-                               cut.L.interaction=cut.L.interaction,
-                               covars=covars,
-                               sl.poisson=(length(lambda.cvs)>0), 
-                               lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
-                               penalize.time=penalize.time,
-                               save.X=count.hals<sum(any.hal)))
+            if (cox.hal) { #--- only testing. 
+                mat <- suppressWarnings(
+                    cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                            time.var=time.var, A.name=A.name, delta.var=delta.var,
+                            verbose=verbose,
+                            cut.covars=cut.covars, browse=FALSE,
+                            cut.time.A=cut.time.A, V=V,
+                            cut.L.A=cut.L.A,
+                            cut.L.interaction=cut.L.interaction,
+                            covars=covars,
+                            sl.hal=(length(lambda.cvs)>0), 
+                            lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
+                            penalize.time=penalize.time,
+                            save.X=count.hals<sum(any.hal)))
+            } else {
+                mat <- suppressWarnings(
+                    poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                verbose=verbose,
+                                cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
+                                cut.time.A=cut.time.A, V=V,
+                                cut.L.A=cut.L.A,
+                                cut.L.interaction=cut.L.interaction,
+                                covars=covars,
+                                sl.poisson=(length(lambda.cvs)>0), 
+                                lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
+                                penalize.time=penalize.time,
+                                save.X=count.hals<sum(any.hal)))
+            }
+
+            if (mat[["not.fit"]]) {
+                warning(paste0("hal did not fit for ", fit.name, " (", delta.var, "=", fit.delta, ")"))
+                not.fit.list[[length(not.fit.list)+1]] <-
+                    paste0("hal did not fit for ", fit.name, " (", delta.var, "=", fit.delta, ")")
+            }
+
+            if (!(count.hals<sum(any.hal))) mat <- mat[["mat"]] else mat[["not.fit"]] <- NULL
 
             count.hals <- count.hals+1
         }
+
+        mat <- mat[get(time.var)<=max(tau)]
 
     }
 
@@ -1186,6 +1217,11 @@ contmle <- function(dt,
         tmle.list$tmle <- update.list
     }
 
+    if (length(not.fit.list)>0) {
+        tmle.list[[length(tmle.list)+1]] <- not.fit.list
+        names(tmle.list)[length(tmle.list)] <- "messages"
+    }
+    
     return(tmle.list)    
 }
 

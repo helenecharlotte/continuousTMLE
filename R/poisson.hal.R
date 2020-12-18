@@ -1,9 +1,9 @@
 poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
-                        time.var="time", A.name="A",
-                        cut.covars=5, cut.time=10, cut.time.A=4,
-                        cut.L1.A=5, cut.L.interaction=5,
+                        time.var="time", A.name="A", delta.var="delta",
+                        cut.covars=5, cut.time=10,
+                        cut.time.A=4,
+                        cut.L.A=5, cut.L.interaction=5,
                         covars=c("L1", "L2", "L3"),
-                        #fit.cens="cox", fit.cr="cox", #<-CHECK"
                         save.X=FALSE,
                         sl.poisson=TRUE, lambda.cv=NULL,
                         penalize.time=TRUE, adjust.penalization=TRUE, browse=FALSE,
@@ -17,6 +17,8 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
         X <- mat[["X"]]
         mat <- mat[["mat"]]
     }
+
+    not.fit <- FALSE
     
     if (length(X)==0) {
         
@@ -32,11 +34,11 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                 paste0("-1+", A.name, "+A.obs+",
                        paste0(paste0("A.obs:", indicator.fun(mat, time.var, cut.time.A)), collapse="+"), "+",
                        paste0(sapply(covars, function(covar)
-                           paste0(paste0("A.obs:", indicator.fun(mat, covar, cut.L1.A)), collapse="+")),
+                           paste0(paste0("A.obs:", indicator.fun(mat, covar, cut.L.A)), collapse="+")),
                            collapse="+"), "+",
                        paste0(paste0(A.name, ":", indicator.fun(mat, time.var, cut.time.A)), collapse="+"), "+",
                        paste0(sapply(covars, function(covar)
-                           paste0(paste0(A.name, ":", indicator.fun(mat, covar, cut.L1.A)), collapse="+")),
+                           paste0(paste0(A.name, ":", indicator.fun(mat, covar, cut.L.A)), collapse="+")),
                            collapse="+"), "+",
                        paste0(indicator.fun(mat, time.var, cut.time), collapse="+"), "+", 
                        paste0(sapply(1:(length(covars)-1), function(cc) {
@@ -50,7 +52,7 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                               collapse="+")
                        ))), 
                 data=mat), sparse=TRUE)
-
+        
         cols <- colnames(X)
         cols.A <- (1:length(cols))[-grep("A.obs", cols)]
         cols.obs <- (1:length(cols))[cols!=A.name & !(substr(cols, 1, 2)==paste0(A.name, ":"))]
@@ -77,7 +79,7 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                                     delta.outcome=delta.outcome, cols.obs=cols.obs,
                                     cut.covars=cut.covars, cut.time=cut.time,
                                     cut.time.A=cut.time.A,
-                                    cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
+                                    cut.L.A=cut.L.A, cut.L.interaction=cut.L.interaction,
                                     covars=covars,
                                     lambda.cv=lambda.cv,
                                     lambda.cvs=lambda.cvs,
@@ -87,6 +89,7 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
     }
 
     if (length(lambda.cv)>0) {
+
         if (sl.poisson) print(paste0("Pick penalization parameter (CV): ", lambda.cv))
 
         mat[, RT:=sum(tdiff*(get(time.var)<=time.obs)), by=c("x", A.name)]
@@ -96,7 +99,9 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
 
         tmp <- unique(mat[get(time.var)<=time.obs & (!reduce.A | A.obs==get(A.name)), c("RT", "D", "x"), with=FALSE])
 
-        X.obs <- unique.matrix(X[mat[, get(time.var)]<=mat$time.obs, cols.obs])[tmp$RT>0,]
+        #X.obs <- unique.matrix(X[mat[, get(time.var)<=time.obs &
+        #                               (!reduce.A | A.obs==get(A.name))], cols.obs])[tmp$RT>0,]
+        X.obs <- unique.matrix(X[mat$time<=mat$time.obs, cols.obs])[tmp$RT>0,]
         X.A <- Matrix(X[, cols.A], sparse=TRUE)
                     
         Y <- tmp[RT>0, D] 
@@ -110,7 +115,6 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
             penalty.factor[1:cut.time] <- 0
         }
 
-        #if (delta.outcome==0) browser()
         if (length(lambda.cv)>0) {
             fit <- glmnet(x=X.obs, y=Y, lambda=lambda.cv,
                           family="poisson",
@@ -138,23 +142,27 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
 
         mat[, (paste0("fit.lambda", delta.outcome)):=na.locf(get(paste0("fit.lambda", delta.outcome))), by=c("id", A.name)]
         mat[, (paste0("fit.pois.dLambda", delta.outcome)):=get(paste0("fit.lambda", delta.outcome))*tdiff]
-        
-        if (delta.outcome>0) {
-            mat[, (paste0("dhaz", delta.outcome)):=get(paste0("fit.pois.dLambda", delta.outcome))]
-            mat[, (paste0("fit.cox", delta.outcome)):=1]
+
+        if (!(sum(abs(coef(fit)[,1]))==0)) {
+            if (delta.outcome>0) {
+                mat[, (paste0("dhaz", delta.outcome)):=get(paste0("fit.pois.dLambda", delta.outcome))]
+                mat[, (paste0("fit.cox", delta.outcome)):=1]
+            } else {
+                mat[, (paste0("surv.t.pois", delta.outcome)):=exp(-cumsum(get(paste0("fit.pois.dLambda", delta.outcome)))), by=c("id", A.name)]
+                mat[, (paste0("surv.t1.pois", delta.outcome)):=c(1, get(paste0("surv.t.pois", delta.outcome))[-.N]), by=c("id", A.name)]
+                mat[, Ht:=Ht*surv.C1/get(paste0("surv.t1.pois", delta.outcome))]
+            }
         } else {
-            mat[, (paste0("surv.t.pois", delta.outcome)):=exp(-cumsum(get(paste0("fit.pois.dLambda", delta.outcome)))), by=c("id", A.name)]
-            mat[, (paste0("surv.t1.pois", delta.outcome)):=c(1, get(paste0("surv.t.pois", delta.outcome))[-.N]), by=c("id", A.name)]
-            mat[, Ht:=Ht*surv.C1/get(paste0("surv.t1.pois", delta.outcome))]
+            not.fit <- TRUE
         }
     } else {
-        warning(paste0("hal did not fit for delta=", delta.outcome))
+        not.fit <- TRUE
     }
 
     if (!save.X) {#((delta.outcome==0 & fit.cr!="hal") | (fit.cens!="hal" & fit.cr!="hal" & delta.outcome==1) | delta.outcome==2) {
-        return(mat)
+        return(list(mat=mat, not.fit=not.fit))
     } else {
-        list(mat=mat, X=X)
+        list(mat=mat, X=X, not.fit=not.fit)
     }
 }
 

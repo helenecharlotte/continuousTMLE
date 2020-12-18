@@ -1,13 +1,15 @@
 poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A",
                            delta.outcome=1, cols.obs=cols.obs,
                            cut.covars=5, cut.time=10, cut.time.A=4,
-                           cut.L1.A=5, cut.L.interaction=5,
+                           cut.L.A=5, cut.L.interaction=5,
                            covars=c("L1", "L2", "L3"),
                            lambda.cv=NULL,
                            penalize.time=TRUE, adjust.penalization=TRUE,
                            lambda.cvs=seq(0, 0.003, length=51)[-1], 
                            V=10, verbose=TRUE
                            ) {
+
+    set.seed(19192)
 
     n <- nrow(dt)
     unique.times <- sort(unique(dt[, get(time.var)]))
@@ -63,8 +65,8 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A",
             fit.vv <- glmnet(x=X.obs, y=Y, lambda=lambda.cv,
                              family="poisson",
                              offset=offset,
-                             penalty.factor=penalty.factor)# ,
-            # maxit=1000)
+                             penalty.factor=penalty.factor,
+                             maxit=1000)
                       
             mat[id %in% test.set, fit.lambda.vv:=exp(predict(fit.vv, X[mat$id %in% test.set, cols.obs],
                                                              newoffset=0))]
