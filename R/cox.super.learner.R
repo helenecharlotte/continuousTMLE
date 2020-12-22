@@ -1,4 +1,5 @@
-cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE,
+cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE, time.var="time",
+                   verbose=FALSE,
                    outcome.models=list(mod1=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.9),
                                        mod2=c(Surv(time, delta==1)~A*L1.squared+L1*L2+L3, t0=NULL),
                                        mod3=c(Surv(time, delta==1)~A+L1.squared, t0=NULL),
@@ -11,34 +12,40 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE,
                                        )
                    ) {
 
+    set.seed(19192)
+
     n <- nrow(dt)
-    unique.times <- sort(unique(dt[, time]))
+    unique.times <- sort(unique(dt[, get(time.var)]))
     cv.split <- matrix(sample(1:n, size=n), ncol=V)
 
     if (any(method>=1)) {
     
         partial.loss.fun <- function(cox.fit, risk.set, t0=NULL) {
             risk.dt <- dt[id%in%risk.set][rev(order(time))]
+            tmp <- copy(dt)
+            tmp[, risk:=0]
+            tmp[id%in%risk.set, risk:=1]
             if (length(t0)>0) {
-                risk.dt2 <- risk.dt[time>t0]
-                risk.dt2[, time:=t0]
-                risk.dt <- rbind(risk.dt2, risk.dt)[order(id)]
-                risk.dt[, period:=1:.N, by="id"]
-                risk.dt[, max.period:=.N, by="id"] 
-                risk.dt <- risk.dt[rev(order(time))]
-
-                risk.dt[, fit.lp:=predict(cox.fit, type="lp", newdata=risk.dt)]
-                risk.dt[, term2:=c(1, cumsum(exp(fit.lp))[-.N]), by="period"]
-                return(sum(risk.dt[delta>0, delta*(period==max.period)*(fit.lp - log(term2))]))
+                tmp2 <- tmp[get(time.var)>t0]
+                tmp2[, (time.var):=t0]
+                tmp <- rbind(tmp2, tmp)[order(id)]
+                tmp[, period:=1:.N, by="id"]
+                tmp[, max.period:=.N, by="id"]
+                tmp <- tmp[rev(order(get(time.var)))]
+                tmp[, fit.lp:=predict(cox.fit, type="lp", newdata=tmp)]
+                tmp[, term2:=cumsum(risk*exp(fit.lp)), by="period"]
+                tmp[term2==0, term2:=1]
+                return(sum(tmp[risk==0, delta*(period==max.period)*(fit.lp - log(term2))]))
             } else {
                 if (any(class(cox.fit)=="coxnet")) {
-                    Xnew <- as.matrix(model.matrix(outcome.model, data=risk.dt))
-                    risk.dt[, fit.lp:=predict(cox.fit, type="link", newx=Xnew)]
+                    Xnew <- as.matrix(model.matrix(outcome.model, data=tmp))
+                    tmp[, fit.lp:=predict(cox.fit, type="link", newx=Xnew)]
                 } else {
-                    risk.dt[, fit.lp:=predict(cox.fit, type="lp", newdata=risk.dt)]
+                    tmp[, fit.lp:=predict(cox.fit, type="lp", newdata=tmp)]
                 }
-                risk.dt[, term2:=c(1, cumsum(exp(fit.lp))[-.N])]
-                return(sum(risk.dt[delta>0, delta*(fit.lp - log(term2))]))
+                tmp[, term2:=cumsum(risk*exp(fit.lp))]
+                tmp[term2==0, term2:=1]
+                return(sum(tmp[risk==0, delta*(fit.lp - log(term2))]))
             }
         }
    
@@ -104,6 +111,8 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE,
             sum(-unlist(lapply(outlist2, function(out) out[[mm]])))
         }))
     }
+
+    if (verbose) print(cve2)
     
     if (only.cox.sl) {
         print(cbind(names(outcome.models), cve2))

@@ -753,6 +753,9 @@ contmle <- function(dt,
 
     if (length(tau)>1 | one.step | (length(target)>1 & !iterative)) {
 
+        if (weighted.norm[1]==FALSE)
+            criteria <- max(unlist(init.ic))/(sqrt(n)*log(n)) else criteria <- 1/(sqrt(n)*log(n))
+
         if (verbose) print(init.fit)
         if (verbose) print(init.ic)
 
@@ -1013,10 +1016,12 @@ contmle <- function(dt,
                 Pn.eic.norm.prev <- Pn.eic.norm
             }
 
-            if (verbose) print(max(unlist(init.ic))/(sqrt(n)*log(n)))
+            if (verbose) print(criteria)
             if (verbose) print(Pn.eic.norm)
-           
-            if (Pn.eic.norm<=max(unlist(init.ic))/(sqrt(n)*log(n))) {
+
+            criteria
+            
+            if (Pn.eic.norm<=criteria) {
                 if (verbose) print(paste0("converged", " at ", step, "th step"))
                 break
             }

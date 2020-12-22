@@ -84,13 +84,14 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                                     lambda.cv=lambda.cv,
                                     lambda.cvs=lambda.cvs,
                                     penalize.time=penalize.time,
+                                    verbose=verbose,
                                     adjust.penalization=adjust.penalization,
                                     V=V)[1]
     }
 
     if (length(lambda.cv)>0) {
 
-        if (sl.poisson) print(paste0("Pick penalization parameter (CV): ", lambda.cv))
+        if (sl.poisson & verbose) print(paste0("Pick penalization parameter (CV): ", lambda.cv))
 
         mat[, RT:=sum(tdiff*(get(time.var)<=time.obs)), by=c("x", A.name)]
         mat[, D:=sum(event*(get(time.var)<=time.obs)), by=c("x", A.name)]
