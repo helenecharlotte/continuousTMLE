@@ -1026,6 +1026,32 @@ tau=0.5  -0.050664 0.001266594 0.04766 0.944 1.04061
 #+end_example
 
 
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")     
+source("./simulation-contmle/make.table.fun.R")     
+make.table.fun(setting=2, tau=0.5, target=1:3, cr3=TRUE, 
+               fit.outcome="sl", fit.cr="sl", fit.cens="sl", M=500, n=300, 
+               iterative=TRUE, competing.risk=TRUE,
+               censoring.informative=TRUE)     
+#+END_SRC
+
+#+begin_example
+[1] "Estimate ATE (n=300, M=500)"
+$F1
+        true.value         bias         sd  cov  rel.mse
+tau=0.5  -0.007538 -0.005419215 0.04986311 0.96 1.028335
+
+$F2
+        true.value         bias         sd   cov  rel.mse
+tau=0.5  -0.050232 -0.001210021 0.04834965 0.942 1.085933
+
+$F3
+        true.value         bias         sd   cov  rel.mse
+tau=0.5  -0.050664 0.0008989421 0.04883367 0.952 1.092358
+#+end_example
+
 
 
 [[https://github.com/helenecharlotte/continuousTMLE#continuous-time-tmle][Back to top]]
@@ -1071,11 +1097,11 @@ Unweighted inner product:
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory  
 source("./simulation-contmle/load.R")     
-source("./simulation-contmle/make.table.fun.R")     
-make.table.fun(setting=2, tau=c(0.35, 0.5), target=1:3, cr3=TRUE,
-               fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
-               iterative=FALSE, competing.risk=TRUE, 
-               censoring.informative=TRUE)   
+source("./simulation-contmle/summary.fun.R")     
+summary.fun(setting=2, tau=c(0.35, 0.5), target=1:3, cr3=TRUE,
+            fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
+            iterative=FALSE, competing.risk=TRUE, 
+            censoring.informative=TRUE)   
 #+END_SRC
 
 #+begin_example
@@ -1096,6 +1122,39 @@ tau=0.35  -0.039266 0.001747679 0.03911737 0.956 1.020954
 tau=0.5   -0.050453 0.001802615 0.04828533 0.946 1.197730
 #+end_example
 
+Inner product weighted by the standard error of the efficient
+influence function:
+
+#+ATTR_LATEX: :options otherkeywords={}, deletekeywords={}
+#+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
+# NOTE: you need to set the working directory  
+source("./simulation-contmle/load.R")      
+source("./simulation-contmle/summary.fun.R")      
+summary.fun(setting=2, tau=c(0.35, 0.5), target=1:3, cr3=TRUE,
+            fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
+            iterative=FALSE, competing.risk=TRUE, weighted.norm="sigma", 
+            censoring.informative=TRUE)   
+#+END_SRC
+
+
+#+begin_example
+[1] "Estimate ATE (n=300, M=500)"
+$F1
+         true.value         bias         sd   cov   rel.mse
+tau=0.35  -0.010336 -0.004998653 0.04087741 0.946 0.9756619
+tau=0.5   -0.006968 -0.005897489 0.04930002 0.956 1.0197444
+
+$F2
+         true.value           bias         sd   cov   rel.mse
+tau=0.35   -0.03870 -0.00006536651 0.03882904 0.946 0.9903413
+tau=0.5    -0.05009 -0.00044538029 0.04728481 0.948 1.0353016
+
+$F3
+         true.value        bias         sd   cov  rel.mse
+tau=0.35  -0.039266 0.001774791 0.03911735 0.956 1.017377
+tau=0.5   -0.050453 0.001816070 0.04829688 0.946 1.200516
+#+end_example
+
 
 
 Inner product weighted by covariance matrix:
@@ -1104,29 +1163,30 @@ Inner product weighted by covariance matrix:
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory  
 source("./simulation-contmle/load.R")      
-source("./simulation-contmle/make.table.fun.R")     
-make.table.fun(setting=2, tau=c(0.35, 0.5), target=1:3, cr3=TRUE,
-               fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
-               iterative=FALSE, competing.risk=TRUE, weighted.norm="Sigma", 
-               censoring.informative=TRUE)  
+source("./simulation-contmle/summary.fun.R")     
+summary.fun(setting=2, tau=c(0.35, 0.5), target=1:3, cr3=TRUE,
+            fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
+            iterative=FALSE, competing.risk=TRUE, weighted.norm="Sigma", 
+            censoring.informative=TRUE)    
 #+END_SRC
+
 
 #+begin_example
 [1] "Estimate ATE (n=300, M=500)"
 $F1
          true.value         bias         sd   cov   rel.mse
-tau=0.35  -0.010336 -0.004933618 0.04087752 0.948 0.9824014
-tau=0.5   -0.006968 -0.005922571 0.04930021 0.954 1.0203707
+tau=0.35  -0.010336 -0.004966047 0.04087734 0.946 0.9702045
+tau=0.5   -0.006968 -0.005930178 0.04930024 0.956 1.0156405
 
 $F2
-         true.value           bias         sd   cov   rel.mse
-tau=0.35   -0.03870 -0.00001796331 0.03882895 0.946 0.9977335
-tau=0.5    -0.05009 -0.00051372728 0.04728483 0.948 1.0381076
+         true.value             bias         sd   cov   rel.mse
+tau=0.35   -0.03870  0.0000009396989 0.03882890 0.948 0.9842499
+tau=0.5    -0.05009 -0.0004394671245 0.04728457 0.946 1.0341770
 
 $F3
          true.value        bias         sd   cov  rel.mse
-tau=0.35  -0.039266 0.001752358 0.03911742 0.956 1.024541
-tau=0.5   -0.050453 0.001854374 0.04833382 0.946 1.218507
+tau=0.35  -0.039266 0.001770374 0.03911734 0.956 1.014333
+tau=0.5   -0.050453 0.001720196 0.04827684 0.944 1.191874
 #+end_example
 
 
