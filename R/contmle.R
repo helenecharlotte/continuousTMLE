@@ -656,6 +656,7 @@ contmle <- function(dt,
                                    (length(a)==2)*init.fit[kk] -
                                    (length(a)==1)*(1-init.fit[kk]))^2
                 }
+                print(mean(ic.squared))
                 if (Sigma) return(sqrt(ic.squared)) else return(sqrt(mean(ic.squared)/n))
             })
             if (Sigma) {
@@ -669,7 +670,7 @@ contmle <- function(dt,
     }
 
     init.ic <- eval.ic(mat, target.index=outcome.index[target])
-
+   
     if (weighted.norm[1]=="Sigma") Sigma.inv <- solve(eval.ic(mat, target.index=outcome.index[target], Sigma=TRUE))
 
     if (FALSE) {
@@ -753,9 +754,6 @@ contmle <- function(dt,
 
     if (length(tau)>1 | one.step | (length(target)>1 & !iterative)) {
 
-        if (weighted.norm[1]==FALSE)
-            criteria <- max(unlist(init.ic))/(sqrt(n)*log(n)) else criteria <- 1/(sqrt(n)*log(n))
-
         if (verbose) print(init.fit)
         if (verbose) print(init.ic)
 
@@ -834,26 +832,34 @@ contmle <- function(dt,
 
         Pn.eic <- Pn.eic.fun(mat)
 
-        if (weighted.norm[1]=="sigma") {
-            Pn.eic.norm.fun <- function(x) {
-                return(sqrt(sum(unlist(x)^2/unlist(init.ic))))
-            }
-        } else if (weighted.norm[1]=="Sigma") {
-            Pn.eic.norm.fun <- function(x) {
-                return(c(sqrt(matrix(unlist(x), 1, length(unlist(x)))%*%Sigma.inv%*%
-                              matrix(unlist(x), length(unlist(x)), 1))))
-            }
-        } else {
-            Pn.eic.norm.fun <- function(x) {
-                return(sqrt(sum(unlist(x)^2)))
-            }
+        Pn.eic.norm.fun <- function(x2, x) {
+            return(sqrt(sum(unlist(x2)*unlist(x))))
         }
 
-        Pn.eic.norm.prev <- Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic)#sqrt(sum(c(Pn.eic)^2))
-           
+        if (weighted.norm[1]=="sigma") {
+            Pn.eic2 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]]/(init.ic[[kk]]^2*n))
+            if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- unlist(Pn.eic2)
+        } else if (weighted.norm[1]=="Sigma") {
+            Pn.eic2 <- as.numeric(matrix(unlist(Pn.eic), 1, length(unlist(Pn.eic)))%*%Sigma.inv)
+            Pn.eic2 <- lapply(1:length(target), function(kk) Pn.eic2[(1+(kk-1)*length(tau)):(kk*length(tau))])
+            if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- Pn.eic2[[1]]
+        } else {
+            Pn.eic2 <- Pn.eic
+        }
+
+        
+        #if (weighted.norm[1]==FALSE) {
+        #    criterion <-  (sqrt(n)*log(n))
+        #} else {
+        criterion <- sqrt(length(target)*length(tau))/(sqrt(n)*log(n))
+        #}
+
+        Pn.eic.norm.prev <- Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic2, Pn.eic)#sqrt(sum(c(Pn.eic)^2))
+
         if (verbose) print(Pn.eic.norm)
       
         for (step in 1:no.small.steps) {
+            
             if (cr) {
                 for (each in outcome.index) {
                     fit.delta <- estimation[[each]][["event"]]
@@ -870,7 +876,6 @@ contmle <- function(dt,
             } else {
                 mat[, fit.cox1.tmp:=fit.cox1]
                 for (kk in 1:length(tau)) {
-                    #mat[, (paste0("surv.tau", kk, ".tmp")):=get(paste0("surv.tau", kk))]
                     mat[, (paste0("Ht.lambda.", kk, ".tmp")):=get((paste0("Ht.lambda.", kk)))]
                 }
             }
@@ -887,7 +892,7 @@ contmle <- function(dt,
                                           get(paste0("delta", fit.delta, ".dx"))+
                                           (get(time.var)<=tau[kk])*Ht*(
                                               (get(paste0("Ht", fit.delta2,".lambda", fit.delta,".", kk)))*
-                                              Pn.eic[[paste0("F", fit.delta2)]][kk]
+                                              Pn.eic2[[paste0("F", fit.delta2)]][kk]
                                           )/Pn.eic.norm]
                             }
                         }
@@ -914,7 +919,7 @@ contmle <- function(dt,
                 for (kk in 1:length(tau)) {
                     mat[, delta.dx:=delta.dx+
                               (get(time.var)<=tau[kk])*
-                              Ht*get(paste0("Ht.lambda.", kk))*Pn.eic[kk]/Pn.eic.norm]
+                              Ht*get(paste0("Ht.lambda.", kk))*Pn.eic2[kk]/Pn.eic.norm]
                 }
             }
 
@@ -974,8 +979,19 @@ contmle <- function(dt,
         
             Pn.eic <- Pn.eic.fun(mat)
             if (verbose) print(Pn.eic)
+
+            if (weighted.norm[1]=="sigma") {
+                Pn.eic2 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]]/(init.ic[[kk]]^2*n))
+                if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- unlist(Pn.eic2)
+            } else if (weighted.norm[1]=="Sigma") {
+                Pn.eic2 <- as.numeric(matrix(unlist(Pn.eic), 1, length(unlist(Pn.eic)))%*%Sigma.inv)
+                Pn.eic2 <- lapply(1:length(target), function(kk) Pn.eic2[(1+(kk-1)*length(tau)):(kk*length(tau))])
+                if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- Pn.eic2[[1]]
+            } else {
+                Pn.eic2 <- Pn.eic
+            }  
             
-            Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic)
+            Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic2, Pn.eic)
             if (verbose) print(Pn.eic.norm)
 
             if (Pn.eic.norm.prev<=Pn.eic.norm) {
@@ -1001,27 +1017,43 @@ contmle <- function(dt,
                 } else {
                     mat[, fit.cox1.tmp:=fit.cox1]
                     for (kk in 1:length(tau)) {
-                        #mat[, (paste0("surv.tau", kk)):=get(paste0("surv.tau", kk, ".tmp"))]
                         mat[, (paste0("Ht.lambda.", kk)):=get((paste0("Ht.lambda.", kk, ".tmp")))]
                     }
                 }
 
                 Pn.eic <- Pn.eic.fun(mat)
                 if (verbose) print(Pn.eic)
-            
-                Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic)#sqrt(sum(Pn.eic^2))
+
+                if (weighted.norm[1]=="sigma") {
+                    Pn.eic2 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]]/(init.ic[[kk]]^2*n))
+                    if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- unlist(Pn.eic2)
+                } else if (weighted.norm[1]=="Sigma") {
+                    Pn.eic2 <- as.numeric(matrix(unlist(Pn.eic), 1, length(unlist(Pn.eic)))%*%Sigma.inv)
+                    Pn.eic2 <- lapply(1:length(target), function(kk) Pn.eic2[(1+(kk-1)*length(tau)):(kk*length(tau))])
+                    if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- Pn.eic2[[1]]
+                } else {
+                    Pn.eic2 <- Pn.eic
+                }  
+
+                Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic2, Pn.eic)#sqrt(sum(Pn.eic^2))
                 deps.size <- 0.5*deps.size#0.1*deps.size
 
             } else {
                 Pn.eic.norm.prev <- Pn.eic.norm
             }
 
-            if (verbose) print(criteria)
+            if (verbose) print(criterion)
             if (verbose) print(Pn.eic.norm)
 
-            criteria
+            if (weighted.norm[1]==FALSE) {
+                Pn.eic3 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]]/(init.ic[[kk]]^2*n))
+                if (length(names(Pn.eic))>0) names(Pn.eic3) <- names(Pn.eic) else Pn.eic3 <- unlist(Pn.eic3)
+                left.criterion <- Pn.eic.norm.fun(Pn.eic3, Pn.eic2)
+                } else {
+                    left.criterion <- Pn.eic.norm
+                }
             
-            if (Pn.eic.norm<=criteria) {
+            if (left.criterion<=criterion) {
                 if (verbose) print(paste0("converged", " at ", step, "th step"))
                 break
             }
