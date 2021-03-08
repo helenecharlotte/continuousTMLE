@@ -1,8 +1,10 @@
 sim.data2 <- function(n, setting=1, competing.risk=FALSE, no.cr=2,
                       censoring.informative=FALSE,
+                      no.effect.A=FALSE,
+                      randomize.A=TRUE,
                       m=sample(373211, 1)) {
 
-    betaA <- -0.15
+    if (!no.effect.A) betaA <- -0.15 else betaA <- 0
     betaL <- 1.1
     nu    <- 1.7
     eta   <- 0.7
@@ -20,13 +22,12 @@ sim.data2 <- function(n, setting=1, competing.risk=FALSE, no.cr=2,
         reversed.setting      <- FALSE
     }
  
-    randomize.A           <- TRUE
     no.censoring          <- FALSE
 
-    if (interaction.Atime) betaA <- -0.7
+    if (interaction.Atime & !no.effect.A) betaA <- -0.7
     
     if (reversed.setting) {
-        betaA <- 0.5
+        if (!no.effect.A) betaA <- 0.5
         t0 <- 0.7
     }
 
@@ -107,9 +108,9 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
         if (randomize.A) A <- rbinom(n, 1, plogis(qlogis(0.5))) else if (categorical)
                                                                     A <- rbinom(n, 1, plogis(0.4+0.3*L1)) else A <- rbinom(n, 1, plogis(0.4+0.3*L1-0.3*L2))
     } else {
-        if (randomize.A) A <- rbinom(n, 1, plogis(qlogis(0.5))) else A <- rbinom(n, 1, plogis(0.4-0.1*L1))
+        if (randomize.A) A <- rbinom(n, 1, plogis(qlogis(0.5))) else A <- rbinom(n, 1, plogis(0.4-0.3*L1-0.25*L2))
     }
-
+    
     if (length(intervention.A)>0 & is.numeric(intervention.A)) A <- intervention.A else if (length(intervention.A)>0 & is.function(intervention.A)) A <- rbinom(n, 1, intervention.A(cbind(L1,L2,L3)))
 
     if (interaction.AL & !interaction.Atime) {
@@ -225,16 +226,19 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
     }
 
     if (square.effect2 & !interaction.Atime) {
+        if (betaA==0) betaA2 <- 0.8 else betaA2 <- 0.4
         phiT2 <- function(t, A, L1, L2, L3) {
-            return(exp(+0.4+0.7*L1-0.4*A))
+            return(exp(+0.4+0.7*L1-betaA2*A))
         }
     } else if (square.effect1 & interaction.Atime) {
+        if (betaA==0) betaA2 <- 0.8 else betaA2 <- 0.3
         phiT2 <- function(t, A, L1, L2, L3) {
-            return(exp(-0.2+0.7*L1-0.4*L3+0.3*A))
+            return(exp(-0.2+0.7*L1-0.4*L3+betaA2*A))
         }
     } else {
+        if (betaA==0) betaA2 <- 0.8 else betaA2 <- 0.4
         phiT2 <- function(t, A, L1, L2, L3) {
-            return(exp(-1.4+0.7*L1-0.4*A))
+            return(exp(-1.4+0.7*L1-betaA2*A))
         }
     }
     

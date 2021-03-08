@@ -8,7 +8,7 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                         sl.poisson=TRUE, lambda.cv=NULL,
                         penalize.time=TRUE, adjust.penalization=TRUE, browse=FALSE,
                         lambda.cvs=seq(0, 0.0015, length=21)[-1],
-                        verbose=TRUE, V=10
+                        verbose=TRUE, V=10, maxit=1e3
                         ) {
 
     if (browse) browser()
@@ -26,6 +26,9 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
         mat <- merge(mat, dt[, c("id", c(covars)), with=FALSE], by="id")
         mat[, tdiff:=c(diff(get(time.var)),0), by=c("id", A.name)]
         mat[, event:=1*(get(time.var)==time.obs & delta.obs==delta.outcome)]
+
+        #-- convert all covariates to numeric;
+        mat[, (covars):=lapply(.SD, function(x) as.numeric(as.factor(x))), .SDcols=covars]
         
         #-- make model matrix
         X <- Matrix(
@@ -55,7 +58,7 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
         
         cols <- colnames(X)
         cols.A <- (1:length(cols))[-grep("A.obs", cols)]
-        cols.obs <- (1:length(cols))[cols!=A.name & !(substr(cols, 1, 2)==paste0(A.name, ":"))]
+        cols.obs <- (1:length(cols))[cols!=A.name & !(substr(cols, 1, nchar(A.name)+1)==paste0(A.name, ":"))]
 
         #-- THIS is the botleneck (and I could not improve with Rcpp); 
         x <- apply(X[, cols.obs], 1, function(x) paste0(x, collapse=","))
@@ -67,13 +70,13 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
         mat[, event:=1*(get(time.var)==time.obs & delta.obs==delta.outcome)]
         cols <- colnames(X)
         cols.A <- (1:length(cols))[-grep("A.obs", cols)]
-        cols.obs <- (1:length(cols))[cols!=A.name & !(substr(cols, 1, 2)==paste0(A.name, ":"))]
+        cols.obs <- (1:length(cols))[cols!=A.name & !(substr(cols, 1, nchar(A.name)+1)==paste0(A.name, ":"))]
     }
 
     #-- use sl to pick penalization
     if (sl.poisson) {
         lambda.cv <- poisson.hal.sl(mat=mat[get(A.name)==A.obs & get(time.var)<=time.obs], dt=dt,
-                                    time.var=time.var, A.name=A.name,
+                                    time.var=time.var, A.name=A.name, delta.var=delta.var,
                                     X=X[mat[, get(time.var)]<=mat$time.obs &
                                         mat[, get(A.name)]==mat$A.obs, ],
                                     delta.outcome=delta.outcome, cols.obs=cols.obs,
@@ -86,6 +89,7 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                                     penalize.time=penalize.time,
                                     verbose=verbose,
                                     adjust.penalization=adjust.penalization,
+                                    maxit=maxit,
                                     V=V)[1]
     }
 
@@ -100,9 +104,9 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
 
         tmp <- unique(mat[get(time.var)<=time.obs & (!reduce.A | A.obs==get(A.name)), c("RT", "D", "x"), with=FALSE])
 
-        #X.obs <- unique.matrix(X[mat[, get(time.var)<=time.obs &
-        #                               (!reduce.A | A.obs==get(A.name))], cols.obs])[tmp$RT>0,]
-        X.obs <- unique.matrix(X[mat$time<=mat$time.obs, cols.obs])[tmp$RT>0,]
+        X.obs <- unique.matrix(X[mat[, get(time.var)<=time.obs &
+                                       (!reduce.A | A.obs==get(A.name))], cols.obs])[tmp$RT>0,]
+        # X.obs <- unique.matrix(X[mat[, get(time.var)]<=mat$time.obs, cols.obs])[tmp$RT>0,]
         X.A <- Matrix(X[, cols.A], sparse=TRUE)
                     
         Y <- tmp[RT>0, D] 
@@ -115,36 +119,33 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
             penalty.factor <- rep(1, ncol(X.obs))
             penalty.factor[1:cut.time] <- 0
         }
-
         if (length(lambda.cv)>0) {
             fit <- glmnet(x=X.obs, y=Y, lambda=lambda.cv,
                           family="poisson",
                           offset=offset,
                           penalty.factor=penalty.factor,
-                          maxit=1000)
+                          maxit=maxit)
         } else {
             if (verbose) print("glmnet picks penalization")
             fit <- cv.glmnet(x=X.obs, y=Y, 
                              family="poisson",
                              offset=offset,
-                             penalty.factor=penalty.factor,
+                             #penalty.factor=penalty.factor,
                              maxit=1000)
             if (verbose) print(paste0("lambda=",fit$lambda.1se))
         }
 
         rm(X.obs)
-        
-        if (verbose) print(coef(fit))
-
-        mat[, (paste0("fit.lambda", delta.outcome)):=exp(predict(fit, X.A,
-                                                                 newoffset=0))]
-
-        rm(X.A)
-
-        mat[, (paste0("fit.lambda", delta.outcome)):=na.locf(get(paste0("fit.lambda", delta.outcome))), by=c("id", A.name)]
-        mat[, (paste0("fit.pois.dLambda", delta.outcome)):=get(paste0("fit.lambda", delta.outcome))*tdiff]
+       
+        if (verbose) print(coef(fit, s=lambda.cv))
 
         if (!(sum(abs(coef(fit)[,1]))==0)) {
+            mat[, (paste0("fit.lambda", delta.outcome)):=exp(predict(fit, X.A,
+                                                                     newoffset=0,
+                                                                     s=lambda.cv))]
+            mat[, (paste0("fit.lambda", delta.outcome)):=na.locf(get(paste0("fit.lambda", delta.outcome))), by=c("id", A.name)]
+            mat[, (paste0("fit.pois.dLambda", delta.outcome)):=get(paste0("fit.lambda", delta.outcome))*tdiff]
+
             if (delta.outcome>0) {
                 mat[, (paste0("dhaz", delta.outcome)):=get(paste0("fit.pois.dLambda", delta.outcome))]
                 mat[, (paste0("fit.cox", delta.outcome)):=1]
@@ -159,6 +160,8 @@ poisson.hal <- function(mat, dt, delta.outcome=1, X=NULL,
     } else {
         not.fit <- TRUE
     }
+
+    rm(X.A)
 
     if (!save.X) {#((delta.outcome==0 & fit.cr!="hal") | (fit.cens!="hal" & fit.cr!="hal" & delta.outcome==1) | delta.outcome==2) {
         return(list(mat=mat, not.fit=not.fit))

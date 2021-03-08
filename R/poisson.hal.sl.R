@@ -1,19 +1,20 @@
-poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A",
-                           delta.outcome=1, cols.obs=cols.obs,
+poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A", delta.var="delta",
+                           delta.outcome=1, cols.obs=cols.obs, 
                            cut.covars=5, cut.time=10, cut.time.A=4,
                            cut.L.A=5, cut.L.interaction=5,
                            covars=c("L1", "L2", "L3"),
                            lambda.cv=NULL,
                            penalize.time=TRUE, adjust.penalization=TRUE,
                            lambda.cvs=seq(0, 0.003, length=51)[-1], 
-                           V=10, verbose=TRUE
+                           V=10, verbose=TRUE,
+                           maxit=1e3
                            ) {
 
     set.seed(19192)
 
     n <- nrow(dt)
     unique.times <- sort(unique(dt[, get(time.var)]))
-    unique.T <- sort(unique(dt[delta==delta.outcome, get(time.var)]))
+    unique.T <- sort(unique(dt[get(delta.var)==delta.outcome, get(time.var)]))
     unique.Tdiff <- unique.T - c(0, unique.T[-length(unique.T)])
     cv.split <- matrix(sample(1:n, size=n), ncol=V)
 
@@ -66,7 +67,7 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A",
                              family="poisson",
                              offset=offset,
                              penalty.factor=penalty.factor,
-                             maxit=1000)
+                             maxit=maxit)
                       
             mat[id %in% test.set, fit.lambda.vv:=exp(predict(fit.vv, X[mat$id %in% test.set, cols.obs],
                                                              newoffset=0))]
@@ -74,12 +75,18 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A",
             mat[id %in% test.set, fit.pois.dLambda.vv:=fit.lambda.vv*tdiff]
             mat[id %in% test.set, fit.pois.Lambda.vv:=cumsum(fit.pois.dLambda.vv), by=c("id", A.name)]
 
-            if (sum(abs(coef(fit.vv)[,1]))==0) {
+            check <- try(sum(abs(coef(fit.vv)[,1]))==0)
+            
+            if (any(class(check)=="try-error")) {
                 return(Inf)
             } else {
-                return(lebesgue.log.like.loss.fun(dN=mat[id %in% test.set & get(time.var)==time.obs, 1*(delta.obs==delta.outcome)],
-                                                  lambda=mat[id %in% test.set & get(time.var)==time.obs, fit.lambda.vv],
-                                                  Lambda=mat[id %in% test.set & get(time.var)==time.obs, fit.pois.Lambda.vv]))
+                if (sum(abs(coef(fit.vv)[,1]))==0) {
+                    return(Inf)
+                } else {
+                    return(lebesgue.log.like.loss.fun(dN=mat[id %in% test.set & get(time.var)==time.obs, 1*(delta.obs==delta.outcome)],
+                                                      lambda=mat[id %in% test.set & get(time.var)==time.obs, fit.lambda.vv],
+                                                      Lambda=mat[id %in% test.set & get(time.var)==time.obs, fit.pois.Lambda.vv]))
+                }
             }
         })
     }

@@ -1063,11 +1063,11 @@ tau=0.5  -0.050664 0.0008989421 0.04883367 0.952 1.092358
 #+BEGIN_SRC R  :results output :exports both  :session *R* :cache yes  
 # NOTE: you need to set the working directory  
 source("./simulation-contmle/load.R")     
-source("./simulation-contmle/make.table.fun.R")     
-make.table.fun(setting=2, tau=0.5, target=1:3, cr3=TRUE,
-               fit.outcome="sl", fit.cr="sl", fit.cens="sl", M=500, n=1000, 
-               iterative=FALSE, competing.risk=TRUE,
-               censoring.informative=TRUE)   
+source("./simulation-contmle/summary.fun.R")     
+summary.fun(setting=2, tau=0.5, target=1:3, cr3=TRUE,
+            fit.outcome="sl", fit.cr="sl", fit.cens="sl", M=500, n=1000, 
+            iterative=FALSE, competing.risk=TRUE,
+            censoring.informative=TRUE)   
 #+END_SRC
 
 #+begin_example
@@ -1134,7 +1134,7 @@ source("./simulation-contmle/summary.fun.R")
 summary.fun(setting=2, tau=c(0.35, 0.5), target=1:3, cr3=TRUE,
             fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
             iterative=FALSE, competing.risk=TRUE, weighted.norm="sigma", 
-            censoring.informative=TRUE)    
+            censoring.informative=TRUE) 
 #+END_SRC
 
 
@@ -1168,7 +1168,6 @@ source("./simulation-contmle/summary.fun.R")
 summary.fun(setting=2, tau=c(0.35, 0.5), target=1:3, cr3=TRUE,
             fit.outcome="cox", fit.cr="cox", fit.cens="cox", M=500, n=300, 
             iterative=FALSE, competing.risk=TRUE, weighted.norm="Sigma", 
-            browse=FALSE,
             censoring.informative=TRUE)     
 #+END_SRC
 

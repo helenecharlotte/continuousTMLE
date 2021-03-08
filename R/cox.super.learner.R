@@ -1,4 +1,4 @@
-cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE, time.var="time",
+cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE, time.var="time", delta.var="delta",
                    verbose=FALSE,
                    outcome.models=list(mod1=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.9),
                                        mod2=c(Surv(time, delta==1)~A*L1.squared+L1*L2+L3, t0=NULL),
@@ -35,7 +35,7 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE, time.var="t
                 tmp[, fit.lp:=predict(cox.fit, type="lp", newdata=tmp)]
                 tmp[, term2:=cumsum(risk*exp(fit.lp)), by="period"]
                 tmp[term2==0, term2:=1]
-                return(sum(tmp[risk==0, delta*(period==max.period)*(fit.lp - log(term2))]))
+                return(sum(tmp[risk==0, get(delta.var)*(period==max.period)*(fit.lp - log(term2))]))
             } else {
                 if (any(class(cox.fit)=="coxnet")) {
                     Xnew <- as.matrix(model.matrix(outcome.model, data=tmp))
@@ -45,23 +45,24 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE, time.var="t
                 }
                 tmp[, term2:=cumsum(risk*exp(fit.lp))]
                 tmp[term2==0, term2:=1]
-                return(sum(tmp[risk==0, delta*(fit.lp - log(term2))]))
+                return(sum(tmp[risk==0, get(delta.var)*(fit.lp - log(term2))]))
             }
         }
    
         outlist2 <- list()
         
         for (vv in 1:V) {
-    
+
             test.set <- cv.split[,vv]#sample(1:n, floor(n/10))
             train.set <- dt[, id][!dt[, id] %in% test.set]
 
             outlist2[[vv]] <- lapply(outcome.models, function(outcome.model) {
+                if (length(names(outcome.model))==0) names(outcome.model) <- "no.name"
                 tryCatch(
                     if (length(outcome.model)==1 | names(outcome.model)[1]=="coxnet") {
                         if (any(names(outcome.model)=="coxnet")) {
                             X <- model.matrix(outcome.model[[1]], data=dt[id%in%train.set])
-                            y <- dt[id%in%train.set, Surv(time, delta==1)]
+                            y <- dt[id%in%train.set, Surv(get(time.var), get(delta.var)==1)]
                             train.fit <- glmnet(x=X, y=y, family="cox", maxit=1000,
                                                 lambda=outcome.model[[2]])
                         } else {
@@ -83,15 +84,21 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE, time.var="t
 
                         dt2[period==1, `:=`(tstart=0, tstop=(time<=t0)*time+(time>t0)*t0)]
                         dt2[period==2, `:=`(tstart=t0, tstop=time)]
-                        dt2[period==1 & !time.indicator, delta:=0]
+                        dt2[period==1 & !time.indicator, (delta.var):=0]
 
                         mod1 <- as.character(outcome.model[[1]])
+                        # mod2 <- paste0(gsub(substr(mod1[2], which(strsplit(mod1[2], "")[[1]]=="(")+1,
+                        #                            which(strsplit(mod1[2], "")[[1]]==",")-1), "tstart, tstop", mod1[2]),
+                        #                "~", 
+                        #                gsub(paste0("\\+", A.name), "", gsub(" ", "", paste0("I((period==1)&(", A.name, "==1))",
+                        #                                                                     " + I((period==2)&(", A.name, "==1))", " + ",
+                        #                                                                     mod1[3]))))
                         mod2 <- paste0(gsub(substr(mod1[2], which(strsplit(mod1[2], "")[[1]]=="(")+1,
-                                                   which(strsplit(mod1[2], "")[[1]]==",")-1), "tstart, tstop", mod1[2]),
+                                                   which(strsplit(mod1[2], "")[[1]]==",")-1), paste0("tstart", ", tstop"), mod1[2]),
                                        "~", 
-                                       gsub("\\+A", "", gsub(" ", "", paste0("I((period==1)&(", A.name, "==1))",
-                                                                             " + I((period==2)&(", A.name, "==1))", " + ",
-                                                                             mod1[3]))))
+                                       gsub(paste0("\\+", A.name, "\\+"), "", gsub(paste0("\\+", A.name, " "), "", gsub(" ", "", paste0("I((period","==1)&(", A.name, "==1))",
+                                                                                                                                        " + I((period", "==2)&(", A.name, "==1))", " + ",
+                                                                                                                                        paste0("+",mod1[3]))))))
 
                         train.fit <- coxph(formula(mod2), data=dt2[!time.indicator | period==1])
                         if (method==2) {
