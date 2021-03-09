@@ -56,7 +56,7 @@ contmle <- function(dt,
                     maxIter=10,
                     verbose=FALSE, verbose.sl=FALSE, check.sup=FALSE,
                     #-- for comparison; output kaplan-meier and hr; 
-                    output.km=FALSE, only.km=FALSE, only.cox.sl=FALSE,
+                    output.km=FALSE, only.km=FALSE, only.cox.sl=FALSE, output.RR=FALSE,
                     #-- models incorporated in super learner; 
                     sl.models=list(mod1=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.9),
                                    mod2=c(Surv(time, delta==1)~A*L1.squared+L1*L2+L3, t0=NULL),
@@ -658,12 +658,12 @@ contmle <- function(dt,
     #browser()
     
     if (cr) {
-        eval.ic <- function(mat, fit, target.index=outcome.index, Sigma=FALSE, tau.values=tau, survival=FALSE) {
+        eval.ic <- function(mat, fit, target.index=outcome.index, Sigma=FALSE, tau.values=tau, survival=FALSE, tau.all=tau) {
             outer <- lapply(target.index, function(each) {
                 fit.delta <- estimation[[each]][["event"]]
                 each.index <- (1:length(target.index))[target.index==each]
                 sapply(1:length(tau.values), function(kk) {
-                    k2 <- (1:length(tau))[tau==max(tau[tau<=tau.values[kk]])]
+                    k2 <- (1:length(tau.all))[tau.all==max(tau.all[tau.all<=tau.values[kk]])]
                     out <- 0
                     for (each2 in outcome.index) {
                         fit.delta2 <- estimation[[each2]][["event"]]
@@ -707,14 +707,15 @@ contmle <- function(dt,
             }
         }
     } else {
-        eval.ic <- function(mat, fit, target.index=1, Sigma=FALSE, tau.values=tau) {
+        eval.ic <- function(mat, fit, target.index=1, Sigma=FALSE, tau.values=tau, tau.all=tau) {
             outer <- sapply(1:length(tau.values), function(kk) {
-                k2 <- (1:length(tau))[tau==max(tau[tau<=tau.values[kk]])]
+                k2 <- (1:length(tau.all))[tau.all==max(tau.all[tau.all<=tau.values[kk]])]
+                by.vars <- "id"
                 out <- mat[, sum( (get(A.name)==A.obs) * (get(time.var)<=tau.values[kk]) *
                                   (get(time.var)<=time.obs) * Ht *
                                   get(paste0("Ht.lambda.", k2)) *
                                   ( (delta.obs==1 & get(time.var)==time.obs) -
-                                    dhaz1 * fit.cox1 )), by="id"]
+                                    dhaz1 * fit.cox1 )), by=by.vars]
                 if (treat.effect[1]=="stochastic") {
                     ic.squared <- (out[, 2][[1]] +
                                    rowSums(sapply(a, function(aa)
@@ -743,7 +744,7 @@ contmle <- function(dt,
     }
 
     init.ic <- eval.ic(mat, fit=init.fit, target.index=outcome.index[target])
-
+    
     if (weighted.norm[1]=="Sigma") {
         Sigma <- eval.ic(mat, init.fit, target.index=outcome.index[target], Sigma=TRUE)
         Sigma.inv <-  try(solve(Sigma))
@@ -794,11 +795,11 @@ contmle <- function(dt,
     #-- 12 -- TMLE:
 
     if (cr) {
-        eval.equation <- function(mat, eps=0, target.index=outcome.index, cr.index=outcome.index, tau.values=tau) {
+        eval.equation <- function(mat, eps=0, target.index=outcome.index, cr.index=outcome.index, tau.values=tau, tau.all=tau) {
             outer <- lapply(target.index, function(each) {
                 fit.delta <- estimation[[each]][["event"]]
                 sapply(1:length(tau.values), function(kk) {
-                    k2 <- (1:length(tau))[tau==max(tau[tau<=tau.values[kk]])]
+                    k2 <- (1:length(tau.all))[tau.all==max(tau.all[tau.all<=tau.values[kk]])]
                     out <- 0
                     for (each2 in cr.index) {
                         fit.delta2 <- estimation[[each2]][["event"]]
@@ -818,9 +819,9 @@ contmle <- function(dt,
             return(outer)
         }
     } else {
-        eval.equation <- function(mat, eps=0, target.index=1, cr.index=1, tau.values=tau) {
+        eval.equation <- function(mat, eps=0, target.index=1, cr.index=1, tau.values=tau, tau.all=tau) {
             sapply(1:length(tau.values), function(kk) {
-                k2 <- (1:length(tau))[tau==max(tau[tau<=tau.values[kk]])]
+                k2 <- (1:length(tau.all))[tau.all==max(tau.all[tau.all<=tau.values[kk]])]
                 out <- mat[(get(time.var)<=tau.values[kk]), sum( (get(A.name)==A.obs) *
                                                                  (get(time.var)<=time.obs) * Ht *
                                                                  get(paste0("Ht.lambda.", k2)) *
@@ -1003,7 +1004,6 @@ contmle <- function(dt,
                     }
                 }
             } else {
-                #if (step==2) browser()
                 mat[, delta.dx:=0]
                 for (kk in 1:length(tau)) {
                     mat[, delta.dx:=delta.dx+
@@ -1056,7 +1056,6 @@ contmle <- function(dt,
                     }
                 }
             } else {
-                #if (step==2) browser()
                 mat[, fit.cox1:=fit.cox1*exp(deps*delta.dx)]
                 mat[fit.cox1>500, fit.cox1:=500]
                 mat[, surv.t:=exp(-cumsum(dhaz1*fit.cox1)), by=c("id", A.name)]
@@ -1068,8 +1067,6 @@ contmle <- function(dt,
                     mat[surv.t==0, (paste0("Ht.lambda.", kk)):=1]
                 }
             }
-
-            #if (step==2) browser()
 
             Pn.eic <- Pn.eic.fun(mat)
             if (verbose) print(Pn.eic)
@@ -1226,6 +1223,46 @@ contmle <- function(dt,
                                        lhs=max(abs(unlist(Pn.eic4))),
                                        rhs=criterion/sqrt(length(target)*length(tau)))
                     tmle.list$convergenced.at.step <- step
+
+                    if (length(check.times.size)>0) {
+                        unique.times3 <- unique.times[unique.times<=max(tau)]
+                        set.seed(2444231)
+                        unique.times2 <- sort(unique.times3[sample(length(unique.times3), check.times.size)])
+
+                        ## print(unique.times2)
+                        ## print(tau)
+
+                        for (kk in 1:length(unique.times2)) {
+                            mat[, (paste0("surv.tau", kk)):=
+                                      surv.t[get(time.var)==max(get(time.var)[get(time.var)<=unique.times2[kk]])],
+                                by=c("id", A.name)]
+                            mat[surv.t>0, (paste0("Ht.lambda.", kk)):=get(paste0("surv.tau", kk)) / surv.t]
+                            mat[surv.t==0, (paste0("Ht.lambda.", kk)):=1]
+                        }
+
+                        all.fit <- sapply(1:length(unique.times2), function(kk) {
+                            mean(rowSums(sapply(a, function(aa)
+                            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
+                        })
+
+                        all.ic <- eval.ic(mat, all.fit, target.index=outcome.index[target], tau.values=unique.times2, tau=unique.times2)
+
+                        Pn.eic.all <- eval.equation(mat, 0, target.index=outcome.index[target1], tau.values=unique.times2, tau=unique.times2)
+        
+                        Pn.eic.all4 <- lapply(1:length(Pn.eic.all), function(kk) Pn.eic.all[[kk]]/(ifelse(any(unlist(all.ic)>0), all.ic[[kk]]+0.001, all.ic[[kk]])*sqrt(n)))
+                        check.sup.norm.all <- abs(unlist(Pn.eic.all4))<=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau)))
+
+                        tmle.list$check.sup.norm.all <- list(
+                            check.sup.norm.all=mean(check.sup.norm.all),
+                            lhs=max(abs(unlist(Pn.eic.all4))),
+                            rhs=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau))),
+                            Pn.eic=data.table(times=unique.times2,
+                                              Pn.eic=unlist(Pn.eic.all4),
+                                              tf=1*check.sup.norm.all))
+
+                    }
+
+                    
                     if (!push.criterion)
                         break else criterion <- criterion/sqrt(length(target)*length(tau))
                     second.round <- TRUE
@@ -1237,6 +1274,39 @@ contmle <- function(dt,
                                        lhs=max(abs(unlist(Pn.eic4))),
                                        rhs=criterion/sqrt(length(target)*length(tau)))
                     tmle.list$convergenced.at.step.second.round <- step
+                    
+                    if (length(check.times.size)>0) {
+
+                        for (kk in 1:length(unique.times2)) {
+                            mat[, (paste0("surv.tau", kk)):=
+                                      surv.t[get(time.var)==max(get(time.var)[get(time.var)<=unique.times2[kk]])],
+                                by=c("id", A.name)]
+                            mat[surv.t>0, (paste0("Ht.lambda.", kk)):=get(paste0("surv.tau", kk)) / surv.t]
+                            mat[surv.t==0, (paste0("Ht.lambda.", kk)):=1]
+                        }
+
+                        all.fit <- sapply(1:length(unique.times2), function(kk) {
+                            mean(rowSums(sapply(a, function(aa)
+                            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
+                        })
+
+                        all.ic <- eval.ic(mat, all.fit, target.index=outcome.index[target], tau.values=unique.times2, tau=unique.times2)
+
+                        Pn.eic.all <- eval.equation(mat, 0, target.index=outcome.index[target1], tau.values=unique.times2, tau=unique.times2)
+        
+                        Pn.eic.all4 <- lapply(1:length(Pn.eic.all), function(kk) Pn.eic.all[[kk]]/(ifelse(any(unlist(all.ic)>0), all.ic[[kk]]+0.001, all.ic[[kk]])*sqrt(n)))
+                        check.sup.norm.all <- abs(unlist(Pn.eic.all4))<=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau)))
+
+                        tmle.list$second.round.check.sup.norm.all <- list(
+                            check.sup.norm.all=mean(check.sup.norm.all),
+                            lhs=max(abs(unlist(Pn.eic.all4))),
+                            rhs=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau))),
+                            Pn.eic=data.table(times=unique.times2,
+                                              Pn.eic=unlist(Pn.eic.all4),
+                                              tf=1*check.sup.norm.all))
+
+                        }
+
                     break
                 }               
             }
@@ -1420,9 +1490,6 @@ contmle <- function(dt,
                         #update.est <- list(update.est)
                         names(update.est) <- paste0("F", target1)
                         if (length(target1)>1) {
-                            #browser()
-                            #mean(mat[A==1, unique(surv.tau1), by="id"][,2][[1]])
-                            #if (tt>tau[1]) browser()
                             update.ic <- sqrt(mean(rowSums(sapply(target1, function(target11) {
                                 unlist(eval.ic(mat, update.est, target.index=outcome.index[target11],
                                                tau.values=tt, survival=TRUE))
@@ -1499,8 +1566,12 @@ contmle <- function(dt,
     
     if (length(check.times.size)>0) {
         unique.times3 <- unique.times[unique.times<=max(tau)]
-        set.seed(1)
+        set.seed(2444231)
         unique.times2 <- sort(unique.times3[sample(length(unique.times3), check.times.size)])
+
+        ## print(unique.times2)
+        ## print(tau)
+
         for (kk in 1:length(unique.times2)) {
             mat[, (paste0("surv.tau", kk)):=
                       surv.t[get(time.var)==max(get(time.var)[get(time.var)<=unique.times2[kk]])],
@@ -1514,9 +1585,9 @@ contmle <- function(dt,
             (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
         })
 
-        all.ic <- eval.ic(mat, all.fit, target.index=outcome.index[target], tau.values=unique.times2)
+        all.ic <- eval.ic(mat, all.fit, target.index=outcome.index[target], tau.values=unique.times2, tau=unique.times2)
 
-        Pn.eic.all <- eval.equation(mat, 0, target.index=outcome.index[target1], tau.values=unique.times2)
+        Pn.eic.all <- eval.equation(mat, 0, target.index=outcome.index[target1], tau.values=unique.times2, tau=unique.times2)
         
         Pn.eic.all4 <- lapply(1:length(Pn.eic.all), function(kk) Pn.eic.all[[kk]]/(ifelse(any(unlist(all.ic)>0), all.ic[[kk]]+0.001, all.ic[[kk]])*sqrt(n)))
         check.sup.norm.all <- abs(unlist(Pn.eic.all4))<=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau)))
