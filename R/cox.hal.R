@@ -13,6 +13,7 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                     remove.zeros=TRUE,
                     penalize.time=TRUE, adjust.penalization=TRUE, browse=FALSE,
                     lambda.cvs=seq(0, 0.0015, length=21)[-1],
+                    cve.cox.hal=NULL,
                     verbose=TRUE, V=10
                     ) {
 
@@ -170,6 +171,7 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                                   exp(-get(paste0("chaz", delta.outcome, ".hal"))*
                                       get(paste0("fit.hal", delta.outcome)))]
                         mat[, (paste0("surv.t1.hal", delta.outcome)):=c(1, get(paste0("surv.t.hal", delta.outcome))[-.N]), by=c("id", A.name)]
+                        mat[, surv.C1:=get(paste0("surv.t1.hal", delta.outcome))]
                         mat[, Ht:=Ht*surv.C1/get(paste0("surv.t1.hal", delta.outcome))]
                     }
                     if  (cve.sl.pick!="" & verbose) print(paste0("use cox-hal rather than ensemble-cox, (cve(hal)=", round(cve.cox.hal,3), " versus cve(cox-sl)=", round(cve.sl.pick,3)))
@@ -184,6 +186,9 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
     } else {
         if (pick.lambda.grid) {
             return(c(FALSE))
+        } else if (pick.hal) {
+            return(list(lambda.cv=0,
+                        cve=Inf))
         }
         not.fit <- TRUE
     }

@@ -493,20 +493,12 @@ contmle <- function(dt,
             #if (tmp[, any(is.na(surv.C1))]) browser()
             if (tmp[, min(surv.C1)<cut.off.cens]) {
                 tmp[surv.C1<cut.off.cens, surv.C1:=cut.off.cens]
-                warning(paste0("there seems to be positivity issues; truncated at level ",
-                               cut.off.cens))
+                #warning(paste0("there seems to be positivity issues; truncated at level ",
+                #               cut.off.cens))
             }
             tmp[, Ht:=Ht/surv.C1]
         } 
     }))
-
-    if (mat[, min(surv.C1)==cut.off.cens]) {
-        not.fit.list[[length(not.fit.list)+1]] <-
-            paste0(paste0("there seems to be positivity issues; truncated ",
-                          mat[, sum(surv.C1==cut.off.cens)], 
-                          " observation(s), at level ",
-                          cut.off.cens))
-    }
 
     if (verbose) paste0("min of censoring weights: ", mat[, min(surv.C1)])
    
@@ -530,7 +522,7 @@ contmle <- function(dt,
                 lambda.cvs.1 <- lambda.cvs
             }
 
-            if (any(estimation[[each]]$fit=="cox.hal")) { #--- only testing.
+            if (any(estimation[[each]]$fit=="cox.hal") | any(estimation[[each]]$fit=="cox.hal.sl")) { #--- only testing.
                 if (hal.screening) { #--- first screening
                     covars1 <- suppressWarnings(
                         cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
@@ -568,45 +560,87 @@ contmle <- function(dt,
                             save.X=FALSE## count.hals<sum(any.hal)
                             ))
 
-                if (FALSE) {
-                    pick.hal <- suppressWarnings(
+                if (any(estimation[[each]]$fit=="cox.hal.sl")) {
+                    pick.list <- list()
+                    for (cut.L.interaction1 in c(0,3,5)) {
+                        for (cut.L.A1 in c(0,3,5)) {
+                            for (cut.covars1 in c(3,5,7,9)) {
+                                #pick.grid[jj, c("lambda.cv", "lambda.cve")] <-
+                                pick <- suppressWarnings(
+                                    cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                            time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                            verbose=verbose,
+                                            hal.screening=TRUE,
+                                            cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                            cut.covars=cut.covars1,
+                                            cut.time.A=cut.time.A, V=V,
+                                            cut.L.A=cut.L.A1,
+                                            pick.hal=TRUE,
+                                            cut.L.interaction=cut.L.interaction1,
+                                            covars=covars1,
+                                            sl.hal=(length(lambda.cvs.1)>0), 
+                                            lambda.cv=lambda.cv,
+                                            lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                                           min(1,init.lambda+init.lambda*0.5),
+                                                           length=5),#seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                            #    min(1,init.lambda+init.lambda*0.5),
+                                            #    length=lambda.grid.size),
+                                            penalize.time=penalize.time,
+                                            save.X=FALSE## count.hals<sum(any.hal)
+                                            ))
+                                if (pick$cve==Inf) {
+                                    break
+                                } else {
+                                    pick.list[[length(pick.list)+1]] <- unlist(c(pick, cut.covars=cut.covars1, cut.L.A=cut.L.A1,
+                                                                                 cut.L.interaction=cut.L.interaction1))
+                                }
+                            }
+                        }
+                    }
+                    pick.grid <- do.call("rbind", pick.list)
+                    pick.grid <- pick.grid[pick.grid[, "cve"]==min(pick.grid[, "cve"]),,drop=FALSE][1,]
+                    #cve.cox.hal <- pick.grid[["cve"]]
+                    if (verbose) print(pick.grid)
+                    mat <- suppressWarnings(
                         cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                                 time.var=time.var, A.name=A.name, delta.var=delta.var,
                                 verbose=verbose,
-                                hal.screening=TRUE,
+                                cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                cut.covars=pick.grid[["cut.covars"]], browse=FALSE,
+                                cut.time.A=cut.time.A, V=V,
+                                cut.L.A=pick.grid[["cut.L.A"]],
+                                cut.L.interaction=pick.grid[["cut.L.interaction"]],
+                                covars=covars1,
+                                remove.zeros=TRUE,
+                                #cve.cox.hal=cve.cox.hal,
+                                sl.hal=TRUE,#(length(lambda.cvs.1)>0), 
+                                lambda.cv=pick.grid[["lambda.cv"]],#lambda.cvs.1,
+                                lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                               min(1,init.lambda+init.lambda*0.5),
+                                               length=lambda.grid.size),
+                                penalize.time=penalize.time,
+                                save.X=FALSE## count.hals<sum(any.hal)
+                                ))
+                } else {
+                    mat <- suppressWarnings(
+                        cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                verbose=verbose,
                                 cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
                                 cut.covars=cut.covars, browse=FALSE,
                                 cut.time.A=cut.time.A, V=V,
                                 cut.L.A=cut.L.A,
-                                pick.hal=TRUE,
                                 cut.L.interaction=cut.L.interaction,
                                 covars=covars1,
+                                remove.zeros=TRUE,
                                 sl.hal=(length(lambda.cvs.1)>0), 
                                 lambda.cv=lambda.cv, lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
                                                                     min(1,init.lambda+init.lambda*0.5),
-                                                                    length=lambda.grid.size),
+                                                                    length=lambda.grid.size),#lambda.cvs.1,
                                 penalize.time=penalize.time,
                                 save.X=FALSE## count.hals<sum(any.hal)
                                 ))
                 }
-                mat <- suppressWarnings(
-                    cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
-                            time.var=time.var, A.name=A.name, delta.var=delta.var,
-                            verbose=verbose,
-                            cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
-                            cut.covars=cut.covars, browse=FALSE,
-                            cut.time.A=cut.time.A, V=V,
-                            cut.L.A=cut.L.A,
-                            cut.L.interaction=cut.L.interaction,
-                            covars=covars1,
-                            remove.zeros=TRUE,
-                            sl.hal=(length(lambda.cvs.1)>0), 
-                            lambda.cv=lambda.cv, lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
-                                                                min(1,init.lambda+init.lambda*0.5),
-                                                                length=lambda.grid.size),#lambda.cvs.1,
-                            penalize.time=penalize.time,
-                            save.X=FALSE## count.hals<sum(any.hal)
-                            ))
             } else {
                 mat <- suppressWarnings(
                     poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
@@ -638,6 +672,17 @@ contmle <- function(dt,
         mat <- mat[get(time.var)<=max(tau)]
 
     }
+
+    #-- report if censoring weights were truncated? 
+
+    if (mat[, min(surv.C1)==cut.off.cens]) {
+        not.fit.list[[length(not.fit.list)+1]] <-
+            paste0(paste0("there seems to be positivity issues; truncated ",
+                          sum(mat[get(time.var)<=time.obs, sum(unique(surv.C1==cut.off.cens)), by="id"]), 
+                          " observation(s), at level ",
+                          cut.off.cens))
+    }
+
 
     #-- 9 -- compute clever covariates:
 
