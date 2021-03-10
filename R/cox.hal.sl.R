@@ -3,7 +3,7 @@ cox.hal.sl <- function(mat2, dt, X=NULL, time.var="time", A.name="A",
                        cut.covars=5, cut.time=10, cut.time.A=4,
                        cut.L.A=5, cut.L.interaction=5,
                        covars=c("L1", "L2", "L3"),
-                       lambda.cv=NULL,
+                       lambda.cv=NULL, 
                        penalize.time=TRUE, adjust.penalization=TRUE,
                        lambda.cvs=seq(0, 0.003, length=51)[-1], 
                        V=10, verbose=TRUE
@@ -28,17 +28,6 @@ cox.hal.sl <- function(mat2, dt, X=NULL, time.var="time", A.name="A",
         tmp[term2==0, term2:=1]
         return(sum(tmp[risk==0, (delta.obs==delta.outcome)*
                                 (fit.lp - log(term2))]))
-        #test.dt <- mat2[!id%in%risk.set]
-        #risk.dt <- mat2[id%in%risk.set]#[rev(order(time))]
-        #Xnew <- X[mat2$id %in% risk.set,][, cols.obs]#[rev(order(risk.dt$time)),]
-
-        
-        
-        #risk.dt[, fit.lp:=predict(cox.fit, type="link", newx=Xnew)]
-        #risk.dt <- risk.dt[rev(order(time))]
-        #risk.dt[, term2:=c(1, cumsum(exp(fit.lp))[-.N])]
-        #return(sum(risk.dt[(delta.obs==delta.outcome)>0, (delta.obs==delta.outcome)*
-        #                                                 (fit.lp - log(term2))]))
     }
 
     for (vv in 1:V) {
@@ -85,6 +74,7 @@ cox.hal.sl <- function(mat2, dt, X=NULL, time.var="time", A.name="A",
     if (all(unique(cve.hal)==Inf)) {
         return(NULL)
     } else {
-        return(lambda.cvs[cve.hal==min(cve.hal)])
+        return(list(lambda.cv=lambda.cvs[cve.hal==min(cve.hal)][1],
+                    cve=min(cve.hal)))
     }
 }

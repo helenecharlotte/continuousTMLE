@@ -13,7 +13,7 @@ contmle <- function(dt,
                     #-- when there are competing risks, what is the target?
                     target=1,
                     #-- use poisson-based or cox-based hal?
-                    cox.hal=FALSE, #DO NOT CHANGE.
+                    hal.screening=FALSE, 
                     #-- use iterative or one-step tmle; (for competing risks, one-step is default)
                     one.step=FALSE, deps.size=0.1, no.small.steps=500,
                     push.criterion=FALSE,
@@ -168,6 +168,9 @@ contmle <- function(dt,
     if (length(grep("cut.", covars))>0) covars <- covars[-grep("cut.", covars)]
 
     covars <- covars[covars!="1"]
+    for (covar in covars) {
+        if (dt[, length(unique(get(covar)))]==1) covars <- covars[covars!=covar]
+    }
 
     if (verbose) print(covars)
     
@@ -241,7 +244,7 @@ contmle <- function(dt,
             if (verbose) print(paste0("use sl for ", fit.name))
 
             dt.tmp <- copy(dt)
-            dt.tmp[, (delta.var):=(get(delta.var))==fit.delta]
+            dt.tmp[, (delta.var):=1*((get(delta.var))==fit.delta)]
 
             set.seed(1)
             sl.pick <- suppressWarnings(
@@ -249,7 +252,9 @@ contmle <- function(dt,
                        only.cox.sl=only.cox.sl,
                        method=sl.method, V=V,
                        verbose=verbose,
-                       outcome.models=sl.models)[1])
+                       outcome.models=sl.models))
+            cve.sl.pick <- sl.pick[[2]]
+            sl.pick <- sl.pick[[1]]
 
             rm(dt.tmp)
         
@@ -276,6 +281,7 @@ contmle <- function(dt,
         } else {
             
             sl.pick <- ""
+            cve.sl.pick <- ""
             
             if (fit[1] %in% c("km")) { #-- later for hal or if uses km
                 tmp.model <- as.character(fit.model)
@@ -286,6 +292,7 @@ contmle <- function(dt,
         }
 
         estimation[[each]]$sl.pick <- sl.pick
+        estimation[[each]]$cve.sl.pick <- cve.sl.pick
 
         #-- changepoint?
         if (length(fit.changepoint)>0 & length(dt2)==0) {
@@ -418,8 +425,8 @@ contmle <- function(dt,
     }))
 
     #-- hal?
-    any.hal <- unlist(lapply(estimation, function(each) length(grep("hal", each[["fit"]][1]))>0))
-    
+    any.hal <- unlist(lapply(estimation, function(each) length(grep("hal", each[["fit"]]))>0))
+        
     if (!any(any.hal)) {
         bhaz.cox <- bhaz.cox[get(time.var)<=max(tau)]
     }
@@ -509,6 +516,10 @@ contmle <- function(dt,
         count.hals <- 1
         
         for (each in (1:length(estimation))[any.hal]) { 
+
+            #-- initialize covariates
+            covars1 <- covars
+            
             fit.delta <- estimation[[each]][["event"]]
             fit.name <- names(estimation)[each]
 
@@ -518,16 +529,35 @@ contmle <- function(dt,
                 lambda.cvs.1 <- lambda.cvs
             }
 
-            if (estimation[[each]]$fit=="cox.hal") { #--- only testing. 
+            if (any(estimation[[each]]$fit=="cox.hal")) { #--- only testing.
+                if (hal.screening) { #--- first screening
+                    covars1 <- suppressWarnings(
+                        cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                verbose=verbose,
+                                hal.screening=TRUE,
+                                cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                cut.covars=cut.covars, browse=FALSE,
+                                cut.time.A=0, V=V,
+                                cut.L.A=0,
+                                cut.L.interaction=0,
+                                covars=covars1,
+                                sl.hal=(length(lambda.cvs.1)>0), 
+                                lambda.cv=lambda.cv, lambda.cvs=lambda.cvs.1,
+                                penalize.time=penalize.time,
+                                save.X=count.hals<sum(any.hal)))
+                    if (verbose) print(paste0("variables picked by screening: ", paste0(covars1, collapse=", ")))
+                }
                 mat <- suppressWarnings(
                     cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                             time.var=time.var, A.name=A.name, delta.var=delta.var,
                             verbose=verbose,
+                            cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
                             cut.covars=cut.covars, browse=FALSE,
                             cut.time.A=cut.time.A, V=V,
                             cut.L.A=cut.L.A,
                             cut.L.interaction=cut.L.interaction,
-                            covars=covars,
+                            covars=covars1,
                             sl.hal=(length(lambda.cvs.1)>0), 
                             lambda.cv=lambda.cv, lambda.cvs=lambda.cvs.1,
                             penalize.time=penalize.time,

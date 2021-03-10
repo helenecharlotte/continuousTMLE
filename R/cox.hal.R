@@ -2,8 +2,10 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                     time.var="time", A.name="A", delta.var="delta", 
                     cut.covars=5,
                     cut.time.A=4,
+                    cve.sl.pick="",
                     cut.L.A=5, cut.L.interaction=5,
                     covars=c("L1", "L2", "L3"),
+                    hal.screening=FALSE,
                     save.X=FALSE,
                     sl.hal=FALSE, lambda.cv=NULL,
                     penalize.time=TRUE, adjust.penalization=TRUE, browse=FALSE,
@@ -33,19 +35,19 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
             model.matrix(formula(paste0(
                 "Surv(", time.var, ", delta.obs==", delta.outcome, ")~",
                 paste0("-1+", A.name, "+A.obs+",
-                       paste0(sapply(covars, function(covar)
+                       ifelse(cut.L.A>0, paste0(paste0(sapply(covars, function(covar)
                            paste0(paste0("A.obs:", indicator.fun(mat2, covar, cut.L.A)), collapse="+")),
-                           collapse="+"), "+",
-                       paste0(sapply(covars, function(covar)
+                           collapse="+"), "+"), ""),
+                       ifelse(cut.L.A>0, paste0(paste0(sapply(covars, function(covar)
                            paste0(paste0(A.name, ":", indicator.fun(mat2, covar, cut.L.A)), collapse="+")),
-                           collapse="+"), "+",
-                       paste0(sapply(1:(length(covars)-1), function(cc) {
+                           collapse="+"), "+"), ""),
+                       ifelse(cut.L.interaction>0, paste0(paste0(sapply(1:(length(covars)-1), function(cc) {
                            paste0(sapply((cc+1):length(covars), function(cc2) {
                                paste0(apply(expand.grid(indicator.fun(mat2, covars[cc], cut.L.interaction),
                                                         indicator.fun(mat2, covars[cc2], cut.L.interaction)), 1,
                                             function(x) paste0(x, collapse=":")), collapse="+")
                            }), collapse="+")
-                       }), collapse="+"), "+", 
+                       }), collapse="+"), "+"), ""), 
                        paste0(sapply(covars, function(covar) paste0(indicator.fun(mat2, covar, cut.covars), collapse="+")),
                               collapse="+")
                        ))), 
@@ -76,7 +78,9 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                                 lambda.cvs=lambda.cvs,
                                 penalize.time=penalize.time,
                                 adjust.penalization=adjust.penalization,
-                                V=V)[1]
+                                V=V)
+        cve.cox.hal <- lambda.cv[["cve"]]
+        lambda.cv <- lambda.cv[["lambda.cv"]]
     }
 
     if (length(lambda.cv)>0) {
@@ -103,46 +107,56 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
             if (verbose) print(paste0("lambda=", fit$lambda.1se))
         }
 
-        basehaz <- glmnet_basesurv(mat2[A.obs==get(A.name), time.obs],
-                                   mat2[A.obs==get(A.name), delta.obs==delta.outcome],
-                                   predict(fit, X.obs, type="link"), centered=TRUE)
-        basehaz2 <- data.table(time=c(0, basehaz$time),
-                               hazard=c(0, basehaz$cumulative_base_hazard))
-        setnames(basehaz2, "time", time.var)
-        mat <- merge(mat, basehaz2,
-                     by=time.var, all.x=TRUE)
-        mat[, hazard:=na.locf(hazard), by="id"]
-        setnames(mat, "hazard", paste0("chaz", delta.outcome, ".hal"))
-
-        rm(X.obs)
-
-        if (verbose) print(coef(fit))
-
-        # mat[id==1 & time<=1.2, plot(chaz1.hal, chaz1)]
-        
-        #-- predict; 
-        mat2[, (paste0("fit.hal", delta.outcome)):=exp(predict(fit, X.A, type="link"))]
-
-        #-- merge to mat;
-        mat <- merge(mat, mat2[, c("id", A.name, paste0("fit.hal", delta.outcome)), with=FALSE],
-                     by=c("id", A.name))
-
-        rm(X.A)
-
-        if (!(sum(abs(coef(fit)[,1]))==0)) {
-            if (delta.outcome>0) {
-                mat[, (paste0("dhaz", delta.outcome)):=
-                          c(0, diff(get(paste0("chaz", delta.outcome, ".hal")))), by=c("id", A.name)]
-                mat[, (paste0("fit.cox", delta.outcome)):=get(paste0("fit.hal", delta.outcome))]
-            } else {
-                mat[, (paste0("surv.t.hal", delta.outcome)):=
-                          exp(-get(paste0("chaz", delta.outcome, ".hal"))*
-                              get(paste0("fit.hal", delta.outcome)))]
-                mat[, (paste0("surv.t1.hal", delta.outcome)):=c(1, get(paste0("surv.t.hal", delta.outcome))[-.N]), by=c("id", A.name)]
-                mat[, Ht:=Ht*surv.C1/get(paste0("surv.t1.hal", delta.outcome))]
-            }
+        if (hal.screening) {
+            return(covars[sapply(covars, function(covar) length(grep(covar, coef(fit)@Dimnames[[1]][coef(fit)@i+1]))>0)])
         } else {
-            not.fit <- TRUE
+            basehaz <- glmnet_basesurv(mat2[A.obs==get(A.name), time.obs],
+                                       mat2[A.obs==get(A.name), delta.obs==delta.outcome],
+                                       predict(fit, X.obs, type="link"), centered=TRUE)
+            basehaz2 <- data.table(time=c(0, basehaz$time),
+                                   hazard=c(0, basehaz$cumulative_base_hazard))
+            setnames(basehaz2, "time", time.var)
+            mat <- merge(mat, basehaz2,
+                         by=time.var, all.x=TRUE)
+            mat[, hazard:=na.locf(hazard), by="id"]
+            setnames(mat, "hazard", paste0("chaz", delta.outcome, ".hal"))
+
+            rm(X.obs)
+
+            if (verbose) print(coef(fit))
+       
+            #-- predict; 
+            mat2[, (paste0("fit.hal", delta.outcome)):=exp(predict(fit, X.A, type="link"))]
+
+            #-- merge to mat;
+            mat <- merge(mat, mat2[, c("id", A.name, paste0("fit.hal", delta.outcome)), with=FALSE],
+                         by=c("id", A.name))
+
+            rm(X.A)
+
+            if (cve.sl.pick!="") use.hal <- cve.cox.hal<cve.sl.pick else use.hal <- TRUE
+
+            if (use.hal) {
+                if (!(sum(abs(coef(fit)[,1]))==0)) {
+                    if (delta.outcome>0) {
+                        mat[, (paste0("dhaz", delta.outcome)):=
+                                  c(0, diff(get(paste0("chaz", delta.outcome, ".hal")))), by=c("id", A.name)]
+                        mat[, (paste0("fit.cox", delta.outcome)):=get(paste0("fit.hal", delta.outcome))]
+                    } else {
+                        mat[, (paste0("surv.t.hal", delta.outcome)):=
+                                  exp(-get(paste0("chaz", delta.outcome, ".hal"))*
+                                      get(paste0("fit.hal", delta.outcome)))]
+                        mat[, (paste0("surv.t1.hal", delta.outcome)):=c(1, get(paste0("surv.t.hal", delta.outcome))[-.N]), by=c("id", A.name)]
+                        mat[, Ht:=Ht*surv.C1/get(paste0("surv.t1.hal", delta.outcome))]
+                    }
+                    if  (cve.sl.pick!="" & verbose) print(paste0("use cox-hal rather than ensemble-cox, (cve(hal)=", round(cve.cox.hal,3), " versus cve(cox-sl)=", round(cve.sl.pick,3)))
+                } else {
+                    not.fit <- TRUE
+                }
+            } else {
+                not.fit <- FALSE
+                if (verbose) print(paste0("use ensemble-cox rather than cox-hal, (cve(hal)=", round(cve.cox.hal,3), " versus cve(cox-sl)=", round(cve.sl.pick,3)))
+            }
         }
     } else {
         not.fit <- TRUE
@@ -166,5 +180,5 @@ indicator.fun <- function(mat, xvar, xcut, type="obs") {
                            mat[, max(get(xvar))],
                            length=xcut)[-c(1,xcut)], 2)
     }
-    return(paste0("(", xvar, ">=", xgrid, ")"))
+    return(paste0("(", xvar, ">=", unique(xgrid), ")"))
 }
