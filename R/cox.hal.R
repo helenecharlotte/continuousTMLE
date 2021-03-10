@@ -8,6 +8,7 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                     hal.screening=FALSE,
                     save.X=FALSE,
                     sl.hal=FALSE, lambda.cv=NULL,
+                    pick.lambda.grid=FALSE,
                     penalize.time=TRUE, adjust.penalization=TRUE, browse=FALSE,
                     lambda.cvs=seq(0, 0.0015, length=21)[-1],
                     verbose=TRUE, V=10
@@ -16,7 +17,7 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
     if (browse) browser()
 
     if (is.list(mat) & !is.data.table(mat)) {
-        X <- mat[["X"]]
+        if ("X" %in% names(mat)) X <- mat[["X"]]
         mat <- mat[["mat"]]
     }
 
@@ -41,7 +42,7 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                        ifelse(cut.L.A>0, paste0(paste0(sapply(covars, function(covar)
                            paste0(paste0(A.name, ":", indicator.fun(mat2, covar, cut.L.A)), collapse="+")),
                            collapse="+"), "+"), ""),
-                       ifelse(cut.L.interaction>0, paste0(paste0(sapply(1:(length(covars)-1), function(cc) {
+                       ifelse(length(covars)>1 & cut.L.interaction>0, paste0(paste0(sapply(1:(length(covars)-1), function(cc) {
                            paste0(sapply((cc+1):length(covars), function(cc2) {
                                paste0(apply(expand.grid(indicator.fun(mat2, covars[cc], cut.L.interaction),
                                                         indicator.fun(mat2, covars[cc2], cut.L.interaction)), 1,
@@ -91,6 +92,7 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
         Y <- mat2[(!reduce.A | A.obs==get(A.name)), Surv(time.obs, delta.obs==delta.outcome)]
         X.obs <- X[(!reduce.A | mat2[,A.obs==get(A.name)]), cols.obs]
         X.A <- X[, cols.A]
+        rm(X)
 
         penalty.factor <- rep(1, ncol(X.obs))
         penalty.factor[1] <- 0
@@ -105,6 +107,10 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                              family="cox", penalty.factor=penalty.factor,
                              maxit=1000)
             if (verbose) print(paste0("lambda=", fit$lambda.1se))
+        }
+
+        if (pick.lambda.grid) {
+            return(c((!(sum(abs(coef(fit)[,1]))==0))*lambda.cv))
         }
 
         if (hal.screening) {
@@ -159,10 +165,14 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
             }
         }
     } else {
+        if (pick.lambda.grid) {
+            return(c(FALSE))
+        }
         not.fit <- TRUE
     }
 
     if (!save.X) {#((delta.outcome==0 & fit.cr!="hal") | (fit.cens!="hal" & fit.cr!="hal" & delta.outcome==1) | delta.outcome==2) {
+        rm(X)
         return(list(mat=mat, not.fit=not.fit))
     } else {
         list(mat=mat, X=X, not.fit=not.fit)

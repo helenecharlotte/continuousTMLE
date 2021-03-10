@@ -1,4 +1,4 @@
-cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE, time.var="time", delta.var="delta",
+cox.sl <- function(dt, V=5, A.name="A", method=3, only.cox.sl=FALSE, time.var="time", delta.var="delta",
                    verbose=FALSE,
                    outcome.models=list(mod1=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.9),
                                        mod2=c(Surv(time, delta==1)~A*L1.squared+L1*L2+L3, t0=NULL),
@@ -43,6 +43,7 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE, time.var="t
                 } else {
                     tmp[, fit.lp:=predict(cox.fit, type="lp", newdata=tmp)]
                 }
+                tmp <- tmp[rev(order(get(time.var)))]
                 tmp[, term2:=cumsum(risk*exp(fit.lp))]
                 tmp[term2==0, term2:=1]
                 return(sum(tmp[risk==0, get(delta.var)*(fit.lp - log(term2))]))
@@ -127,7 +128,8 @@ cox.sl <- function(dt, V=5, A.name="A", method=2, only.cox.sl=FALSE, time.var="t
             method2=(names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])])))
     }
 
-    return(names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])])
+    return(list(pick=names(outcome.models)[cve2==min(cve2[abs(cve2)<Inf])][1],
+                cve=min(cve2[abs(cve2)<Inf])))
 }
 
 

@@ -46,6 +46,7 @@ contmle <- function(dt,
                     #-- specify grid over which to pick penalization in hal by cross-validation; 
                     #lambda.cvs=seq(0.00000000001, 0.1, length=50),
                     lambda.cvs=seq(0.0000001, 0.01, length=50),#seq(0, 0.008, length=51)[-1],
+                    lambda.grid.size=50,
                     #-- penalize time indicators in hal? 
                     penalize.time=FALSE,
                     #-- pick grid for indicators in hal;
@@ -543,11 +544,29 @@ contmle <- function(dt,
                                 cut.L.interaction=0,
                                 covars=covars1,
                                 sl.hal=(length(lambda.cvs.1)>0), 
-                                lambda.cv=lambda.cv, lambda.cvs=lambda.cvs.1,
+                                lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),#lambda.cvs.1,
                                 penalize.time=penalize.time,
-                                save.X=count.hals<sum(any.hal)))
+                                save.X=FALSE## count.hals<sum(any.hal)
+                                ))
                     if (verbose) print(paste0("variables picked by screening: ", paste0(covars1, collapse=", ")))
                 }
+                init.lambda <- suppressWarnings(
+                    cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                            time.var=time.var, A.name=A.name, delta.var=delta.var,
+                            verbose=verbose,
+                            hal.screening=TRUE,
+                            cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                            cut.covars=cut.covars, browse=FALSE,
+                            cut.time.A=cut.time.A, V=V,
+                            cut.L.A=cut.L.A,
+                            pick.lambda.grid=TRUE,
+                            cut.L.interaction=cut.L.interaction,
+                            covars=covars1,
+                            sl.hal=(length(lambda.cvs.1)>0), 
+                            lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),
+                            penalize.time=penalize.time,
+                            save.X=FALSE## count.hals<sum(any.hal)
+                            ))
                 mat <- suppressWarnings(
                     cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                             time.var=time.var, A.name=A.name, delta.var=delta.var,
@@ -559,9 +578,12 @@ contmle <- function(dt,
                             cut.L.interaction=cut.L.interaction,
                             covars=covars1,
                             sl.hal=(length(lambda.cvs.1)>0), 
-                            lambda.cv=lambda.cv, lambda.cvs=lambda.cvs.1,
+                            lambda.cv=lambda.cv, lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                                                min(1,init.lambda+init.lambda*0.5),
+                                                                length=lambda.grid.size),#lambda.cvs.1,
                             penalize.time=penalize.time,
-                            save.X=count.hals<sum(any.hal)))
+                            save.X=FALSE## count.hals<sum(any.hal)
+                            ))
             } else {
                 mat <- suppressWarnings(
                     poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
