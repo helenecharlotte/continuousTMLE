@@ -10,7 +10,7 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                     sl.hal=FALSE, lambda.cv=NULL,
                     pick.lambda.grid=FALSE,
                     pick.hal=FALSE,
-                    remove.zeros=FALSE,
+                    remove.zeros=TRUE,
                     penalize.time=TRUE, adjust.penalization=TRUE, browse=FALSE,
                     lambda.cvs=seq(0, 0.0015, length=21)[-1],
                     verbose=TRUE, V=10
