@@ -567,6 +567,28 @@ contmle <- function(dt,
                             penalize.time=penalize.time,
                             save.X=FALSE## count.hals<sum(any.hal)
                             ))
+
+                if (FALSE) {
+                    pick.hal <- suppressWarnings(
+                        cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                verbose=verbose,
+                                hal.screening=TRUE,
+                                cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                cut.covars=cut.covars, browse=FALSE,
+                                cut.time.A=cut.time.A, V=V,
+                                cut.L.A=cut.L.A,
+                                pick.hal=TRUE,
+                                cut.L.interaction=cut.L.interaction,
+                                covars=covars1,
+                                sl.hal=(length(lambda.cvs.1)>0), 
+                                lambda.cv=lambda.cv, lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                                                    min(1,init.lambda+init.lambda*0.5),
+                                                                    length=lambda.grid.size),
+                                penalize.time=penalize.time,
+                                save.X=FALSE## count.hals<sum(any.hal)
+                                ))
+                }
                 mat <- suppressWarnings(
                     cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                             time.var=time.var, A.name=A.name, delta.var=delta.var,
@@ -577,6 +599,7 @@ contmle <- function(dt,
                             cut.L.A=cut.L.A,
                             cut.L.interaction=cut.L.interaction,
                             covars=covars1,
+                            remove.zeros=TRUE,
                             sl.hal=(length(lambda.cvs.1)>0), 
                             lambda.cv=lambda.cv, lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
                                                                 min(1,init.lambda+init.lambda*0.5),

@@ -9,6 +9,8 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                     save.X=FALSE,
                     sl.hal=FALSE, lambda.cv=NULL,
                     pick.lambda.grid=FALSE,
+                    pick.hal=FALSE,
+                    remove.zeros=FALSE,
                     penalize.time=TRUE, adjust.penalization=TRUE, browse=FALSE,
                     lambda.cvs=seq(0, 0.0015, length=21)[-1],
                     verbose=TRUE, V=10
@@ -53,6 +55,16 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                               collapse="+")
                        ))), 
                 data=mat2), sparse=FALSE)
+
+        if (remove.zeros) {
+            remove.cols <- colnames(X)[!sapply(1:ncol(X), function(jj) sum(X[,jj])>=(nrow(dt))^{1/3})]
+            remove.cols <- unique(c(remove.cols, gsub("A.obs", A.name, remove.cols)))
+            if (length(remove.cols)>0) {
+                X <- X[, !(colnames(X)%in%remove.cols)]
+                if (verbose) print(paste0("remove indicators: ", paste0(remove.cols, collapse=", ")))
+            }
+        }
+        #  X <- X[,(1:ncol(X))[sapply(1:ncol(X), function(jj) sum(X[,jj])>=(nrow(dt))^{1/3})]]
         
         cols <- colnames(X)
         cols.A <- (1:length(cols))[-grep("A.obs", cols)]
@@ -113,6 +125,11 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
             return(c((!(sum(abs(coef(fit)[,1]))==0))*lambda.cv))
         }
 
+        if (pick.hal) {
+            return(list(lambda.cv=(!(sum(abs(coef(fit)[,1]))==0))*lambda.cv,
+                        cve=cve.cox.hal))
+        }
+        
         if (hal.screening) {
             return(covars[sapply(covars, function(covar) length(grep(covar, coef(fit)@Dimnames[[1]][coef(fit)@i+1]))>0)])
         } else {
