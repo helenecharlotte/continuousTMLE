@@ -58,11 +58,15 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                 data=mat2), sparse=FALSE)
 
         if (remove.zeros) {
-            remove.cols <- colnames(X)[!sapply(1:ncol(X), function(jj) sum(X[,jj])>=(nrow(dt))^{1/3})]
+            remove.cols <- colnames(X)[substr(colnames(X),1,2)!="A:" & colnames(X)!="A"]
+            remove.cols <- remove.cols[!sapply(remove.cols, function(col) sum(X[,col])>=(nrow(dt))^{1/3})]
             remove.cols <- unique(c(remove.cols, gsub("A.obs", A.name, remove.cols)))
             if (length(remove.cols)>0) {
+                #remove.cols <- remove.cols[remove.cols!="A.obs" & remove.cols!=A.name]
+                #if (length(remove.cols)>0) {                
                 X <- X[, !(colnames(X)%in%remove.cols)]
                 if (verbose) print(paste0("remove indicators: ", paste0(remove.cols, collapse=", ")))
+                #}
             }
         }
         #  X <- X[,(1:ncol(X))[sapply(1:ncol(X), function(jj) sum(X[,jj])>=(nrow(dt))^{1/3})]]
@@ -79,10 +83,12 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
 
     #-- use sl to pick penalization
     if (sl.hal) {
-        lambda.cv <- cox.hal.sl(mat2=mat2[get(A.name)==A.obs & get(time.var)<=time.obs], dt=dt,
+        if (length(mat2[, unique(get(A.name))])>1) reduce.A <- TRUE else reduce.A <- FALSE
+        lambda.cv <- cox.hal.sl(mat2=mat2[(!reduce.A | A.obs==get(A.name)) &
+                                          get(time.var)<=time.obs], dt=dt,
                                 time.var=time.var, A.name=A.name,
                                 X=X[mat2[, get(time.var)]<=mat2$time.obs &
-                                    mat2[, get(A.name)]==mat2$A.obs, ],
+                                    (mat2[, get(A.name)]==mat2$A.obs | !reduce.A), ],
                                 delta.outcome=delta.outcome, cols.obs=cols.obs,
                                 cut.covars=cut.covars, cut.time=cut.time,
                                 cut.time.A=cut.time.A,
@@ -105,18 +111,18 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
         Y <- mat2[(!reduce.A | A.obs==get(A.name)), Surv(time.obs, delta.obs==delta.outcome)]
         X.obs <- X[(!reduce.A | mat2[,A.obs==get(A.name)]), cols.obs]
         X.A <- X[, cols.A]
-        rm(X)
+        rm(X)  
 
         penalty.factor <- rep(1, ncol(X.obs))
         penalty.factor[1] <- 0
 
         if (length(lambda.cv)>0) {
-            fit <- glmnet(x=as.matrix(X.obs), y=Y, lambda=0.02,#lambda.cv,
+            fit <- glmnet(x=as.matrix(X.obs), y=Y, lambda=lambda.cv,
                           family="cox", penalty.factor=penalty.factor,
                           maxit=1000)
         } else {
             if (verbose) print("glmnet picks penalization")
-            fit <- cv.glmnet(x=X.obs, y=Y,
+            fit <- cv.glmnet(x=as.matrix(X.obs), y=Y,
                              family="cox", penalty.factor=penalty.factor,
                              maxit=1000)
             if (verbose) print(paste0("lambda=", fit$lambda.1se))
@@ -134,8 +140,8 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
         if (hal.screening) {
             return(covars[sapply(covars, function(covar) length(grep(covar, coef(fit)@Dimnames[[1]][coef(fit)@i+1]))>0)])
         } else {
-            basehaz <- glmnet_basesurv(mat2[A.obs==get(A.name), time.obs],
-                                       mat2[A.obs==get(A.name), delta.obs==delta.outcome],
+            basehaz <- glmnet_basesurv(mat2[(!reduce.A | A.obs==get(A.name)), time.obs],
+                                       mat2[(!reduce.A | A.obs==get(A.name)), delta.obs==delta.outcome],
                                        predict(fit, X.obs, type="link"), centered=TRUE)
             basehaz2 <- data.table(time=c(0, basehaz$time),
                                    hazard=c(0, basehaz$cumulative_base_hazard))
@@ -150,7 +156,7 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
             if (verbose) print(coef(fit))
        
             #-- predict; 
-            mat2[, (paste0("fit.hal", delta.outcome)):=exp(predict(fit, X.A, type="link"))]
+            mat2[, (paste0("fit.hal", delta.outcome)):=exp(predict(fit, X.A, type="link", s=lambda.cv))]
 
             #-- merge to mat;
             mat <- merge(mat, mat2[, c("id", A.name, paste0("fit.hal", delta.outcome)), with=FALSE],
@@ -159,7 +165,7 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
             rm(X.A)
 
             if (cve.sl.pick!="") use.hal <- cve.cox.hal<cve.sl.pick else use.hal <- TRUE
-
+           
             if (use.hal) {
                 if (!(sum(abs(coef(fit)[,1]))==0)) {
                     if (delta.outcome>0) {
@@ -171,8 +177,8 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                                   exp(-get(paste0("chaz", delta.outcome, ".hal"))*
                                       get(paste0("fit.hal", delta.outcome)))]
                         mat[, (paste0("surv.t1.hal", delta.outcome)):=c(1, get(paste0("surv.t.hal", delta.outcome))[-.N]), by=c("id", A.name)]
-                        mat[, surv.C1:=get(paste0("surv.t1.hal", delta.outcome))]
                         mat[, Ht:=Ht*surv.C1/get(paste0("surv.t1.hal", delta.outcome))]
+                        mat[, surv.C1:=get(paste0("surv.t1.hal", delta.outcome))]
                     }
                     if  (cve.sl.pick!="" & verbose) print(paste0("use cox-hal rather than ensemble-cox, (cve(hal)=", round(cve.cox.hal,3), " versus cve(cox-sl)=", round(cve.sl.pick,3)))
                 } else {

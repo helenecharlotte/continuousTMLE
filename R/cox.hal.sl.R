@@ -31,7 +31,7 @@ cox.hal.sl <- function(mat2, dt, X=NULL, time.var="time", A.name="A",
     }
 
     for (vv in 1:V) {
-    
+
         test.set <- cv.split[,vv]#sample(1:n, floor(n/10))
         train.set <- dt[, id][!dt[, id] %in% test.set]
 
@@ -51,6 +51,7 @@ cox.hal.sl <- function(mat2, dt, X=NULL, time.var="time", A.name="A",
             train.fit <- glmnet(x=as.matrix(X.obs), y=Y, family="cox", maxit=1000,
                                 penalty.factor=penalty.factor, 
                                 lambda=lambda.cv)
+            #if (verbose) print(coef(train.fit))
             if (sum(abs(coef(train.fit)[,1]))==0) {
                 return(-Inf)
             } else {
