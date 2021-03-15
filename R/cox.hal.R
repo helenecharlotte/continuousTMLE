@@ -5,7 +5,11 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                     cve.sl.pick="",
                     cut.L.A=5, cut.L.interaction=5,
                     covars=c("L1", "L2", "L3"),
-                    hal.screening=FALSE,
+                    covarsA=covars,
+                    covars2=as.matrix(expand.grid(covars, covars)),
+                    hal.screening1=FALSE,
+                    hal.screeningA=FALSE,
+                    hal.screening2=FALSE,
                     save.X=FALSE,
                     sl.hal=FALSE, lambda.cv=NULL,
                     pick.lambda.grid=FALSE,
@@ -38,22 +42,21 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
         X <- Matrix(
             model.matrix(formula(paste0(
                 "Surv(", time.var, ", delta.obs==", delta.outcome, ")~",
-                paste0("-1+", A.name, "+A.obs+",
-                       ifelse(cut.L.A>0, paste0(paste0(sapply(covars, function(covar)
+                paste0("-1+", A.name, "+A.obs",
+                       ifelse(cut.L.A>0 & length(covarsA)>0, paste0("+", paste0(paste0(sapply(covarsA, function(covar)
                            paste0(paste0("A.obs:", indicator.fun(mat2, covar, cut.L.A)), collapse="+")),
-                           collapse="+"), "+"), ""),
-                       ifelse(cut.L.A>0, paste0(paste0(sapply(covars, function(covar)
+                           collapse="+"), "+")), ""),
+                       ifelse(cut.L.A>0 & length(covarsA)>0, paste0("+", paste0(paste0(sapply(covarsA, function(covar)
                            paste0(paste0(A.name, ":", indicator.fun(mat2, covar, cut.L.A)), collapse="+")),
-                           collapse="+"), "+"), ""),
-                       ifelse(length(covars)>1 & cut.L.interaction>0, paste0(paste0(sapply(1:(length(covars)-1), function(cc) {
-                           paste0(sapply((cc+1):length(covars), function(cc2) {
-                               paste0(apply(expand.grid(indicator.fun(mat2, covars[cc], cut.L.interaction),
-                                                        indicator.fun(mat2, covars[cc2], cut.L.interaction)), 1,
-                                            function(x) paste0(x, collapse=":")), collapse="+")
-                           }), collapse="+")
-                       }), collapse="+"), "+"), ""), 
-                       paste0(sapply(covars, function(covar) paste0(indicator.fun(mat2, covar, cut.covars), collapse="+")),
-                              collapse="+")
+                           collapse="+"), "+")), ""),
+                       ifelse(length(covars2)>1 & cut.L.interaction>0, paste0("+", paste0(apply(covars2, 1, function(row2) {
+                           if (row2[1]!=row2[2]) {
+                               return(paste0(paste0(indicator.fun(mat2, row2[1], cut.L.interaction), ":",
+                                                    indicator.fun(mat2, row2[2], cut.L.interaction), collapse="+"), "+"))
+                           } else return("")
+                       }), collapse="")), ""), 
+                       ifelse(length(covars)>0, paste0("+", paste0(sapply(covars, function(covar) paste0(indicator.fun(mat2, covar, cut.covars), collapse="+")),
+                                                                   collapse="+")), "")
                        ))), 
                 data=mat2), sparse=FALSE)
 
@@ -137,8 +140,22 @@ cox.hal <- function(mat, dt, delta.outcome=1, X=NULL,
                         cve=cve.cox.hal))
         }
         
-        if (hal.screening) {
+        if (hal.screening1) {
             return(covars[sapply(covars, function(covar) length(grep(covar, coef(fit)@Dimnames[[1]][coef(fit)@i+1]))>0)])
+        } else if (hal.screeningA) {
+            return(covarsA[sapply(covarsA, function(covar) length(grep(paste0(":", covar), coef(fit)@Dimnames[[1]][coef(fit)@i+1]))>0)])
+        } else if (hal.screening2) {
+            return(covars2[apply(covars2, 1, function(row2) {
+                if (row2[1]!=row2[2]) {
+                    (length(grep(row2[1], grep(paste0(":", row2[2]), coef(fit)@Dimnames[[1]][coef(fit)@i+1], value=TRUE)))>0)
+                } else return(FALSE)
+            }),])
+            ## return(covars2 <- do.call("rbind", sapply(covars2, function(covar) {
+            ##     tmp <- grep(paste0(":", covar), coef(fit)@Dimnames[[1]][coef(fit)@i+1], value=TRUE)
+            ##     covars2.out <- covars2[sapply(covars2, function(covar2) length(grep(covar2, tmp, value=TRUE))>0)]
+            ##     if (length(covars2.out)>1) return(covars2.out)
+            ##     #return(length(tmp[substr(tmp, 1, 5)!="A.obs"])>0)
+            ## })))
         } else {
             basehaz <- glmnet_basesurv(mat2[(!reduce.A | A.obs==get(A.name)), time.obs],
                                        mat2[(!reduce.A | A.obs==get(A.name)), delta.obs==delta.outcome],

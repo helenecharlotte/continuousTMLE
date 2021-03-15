@@ -523,14 +523,14 @@ contmle <- function(dt,
             }
 
             if (any(estimation[[each]]$fit=="cox.hal") | any(estimation[[each]]$fit=="cox.hal.sl")) { #--- only testing.
-                # if (each==2) browser()
-      #          browser()
+                #if (each==2) browser()
+                #          browser()
                 if (hal.screening) { #--- first screening
                     covars1 <- suppressWarnings(
                         cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                                 time.var=time.var, A.name=A.name, delta.var=delta.var,
                                 verbose=verbose,
-                                hal.screening=TRUE,
+                                hal.screening1=TRUE,
                                 cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
                                 cut.covars=cut.covars, browse=FALSE,
                                 cut.time.A=0, V=V,
@@ -543,80 +543,276 @@ contmle <- function(dt,
                                 save.X=FALSE## count.hals<sum(any.hal)
                                 ))
                     if (verbose & length(covars1)>0) print(paste0("variables picked by screening: ", paste0(covars1, collapse=", ")))
-                    if (length(covars1)==0) {
-                        covars1 <- covars
-                        cut.covars <- 0
-                    }
+                    #if (length(covars1)==0) {
+                    #    covars1 <- covars
+                    #    cut.covars <- 0
+                    #}
                 }
                
                 if (any(estimation[[each]]$fit=="cox.hal.sl")) {
-                    pick.list <- list()
-                    for (cut.L.interaction1 in c(0,3,5,10)) {
-                        for (cut.L.A1 in c(0,3,5,8)) {
-                            for (cut.covars1 in c(3,5,7,9,13)) {
-                                #pick.grid[jj, c("lambda.cv", "lambda.cve")] <-
-                                pick <- suppressWarnings(
-                                    cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
-                                            time.var=time.var, A.name=A.name, delta.var=delta.var,
-                                            verbose=verbose,
-                                            hal.screening=TRUE,
-                                            cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
-                                            cut.covars=cut.covars1,
-                                            cut.time.A=cut.time.A, V=V,
-                                            cut.L.A=cut.L.A1,
-                                            pick.hal=TRUE,
-                                            cut.L.interaction=cut.L.interaction1,
-                                            covars=covars1,
-                                            sl.hal=(length(lambda.cvs.1)>0), 
-                                            lambda.cv=lambda.cv,
-                                            lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),#seq(max(0.00001,init.lambda-init.lambda*0.5),
-                                            #    min(1,init.lambda+init.lambda*0.5),
-                                            #    length=5),#seq(max(0.00001,init.lambda-init.lambda*0.5),
-                                            #    min(1,init.lambda+init.lambda*0.5),
-                                            #    length=lambda.grid.size),
-                                            penalize.time=penalize.time,
-                                            save.X=FALSE## count.hals<sum(any.hal)
-                                            ))
-                                if (pick$cve==Inf) {
-                                    break
-                                } else {
-                                    pick.list[[length(pick.list)+1]] <- unlist(c(pick, cut.covars=cut.covars1, cut.L.A=cut.L.A1,
-                                                                                 cut.L.interaction=cut.L.interaction1))
-                                }
+
+                    covarsA <- suppressWarnings(
+                        cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                verbose=verbose,
+                                hal.screeningA=TRUE,
+                                cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                cut.covars=cut.covars, browse=FALSE,
+                                V=V,
+                                cut.L.A=cut.L.A,
+                                cut.L.interaction=0,
+                                covars=covars1,
+                                sl.hal=(length(lambda.cvs.1)>0), 
+                                lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),#lambda.cvs.1,
+                                penalize.time=penalize.time,
+                                save.X=FALSE## count.hals<sum(any.hal)
+                                ))
+
+                    covars2 <- suppressWarnings(
+                        cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                verbose=verbose,
+                                hal.screening2=TRUE,
+                                cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                cut.covars=cut.covars, browse=FALSE,
+                                V=V,
+                                cut.L.A=cut.L.A,
+                                cut.L.interaction=3,
+                                covars=covars1,
+                                covarsA=covarsA,
+                                sl.hal=(length(lambda.cvs.1)>0), 
+                                lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),#lambda.cvs.1,
+                                penalize.time=penalize.time,
+                                save.X=FALSE## count.hals<sum(any.hal)
+                                ))
+
+                    if (length(covars1)>0) {
+                        pick.list <- list()
+                        for (cut.covars1 in c(3,5,7,9,13)) {
+                            pick <- suppressWarnings(
+                                cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                        time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                        verbose=verbose,
+                                        cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                        covars=covars1,
+                                        covarsA=covarsA,
+                                        covars2=covars2,
+                                        cut.covars=cut.covars1,
+                                        cut.time.A=cut.time.A, V=V,
+                                        cut.L.A=cut.L.A,
+                                        pick.hal=TRUE,
+                                        cut.L.interaction=cut.L.interaction,
+                                        sl.hal=(length(lambda.cvs.1)>0), 
+                                        lambda.cv=lambda.cv,
+                                        lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),#seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                        #    min(1,init.lambda+init.lambda*0.5),
+                                        #    length=5),#seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                        #    min(1,init.lambda+init.lambda*0.5),
+                                        #    length=lambda.grid.size),
+                                        penalize.time=penalize.time,
+                                        save.X=FALSE## count.hals<sum(any.hal)
+                                        ))
+                            if (pick$cve==Inf) {
+                                break
+                            } else {
+                                pick.list[[length(pick.list)+1]] <- unlist(c(pick, cut.covars=cut.covars1))
                             }
                         }
+                        pick.grid <- do.call("rbind", pick.list)
+                        pick.grid <- pick.grid[pick.grid[, "cve"]==min(pick.grid[, "cve"]),,drop=FALSE][1,]
+                        cut.covars1 <- pick.grid[["cut.covars"]]
+                    } else {
+                        cut.L.covars1 <- 0
                     }
-                    pick.grid <- do.call("rbind", pick.list)
-                    pick.grid <- pick.grid[pick.grid[, "cve"]==min(pick.grid[, "cve"]),,drop=FALSE][1,]
-                    #cve.cox.hal <- pick.grid[["cve"]]
-                    if (verbose) print(pick.grid)
+
+                    if (length(covarsA)>0) {
+                        pick.list <- list()
+                        for (cut.L.A1 in c(3,5,8)) {
+                            pick <- suppressWarnings(
+                                cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                        time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                        verbose=verbose,
+                                        cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                        covars=covars1,
+                                        covarsA=covarsA,
+                                        covars2=covars2,
+                                        cut.covars=cut.covars1,
+                                        cut.time.A=cut.time.A, V=V,
+                                        cut.L.A=cut.L.A1,
+                                        pick.hal=TRUE,
+                                        cut.L.interaction=cut.L.interaction,
+                                        sl.hal=(length(lambda.cvs.1)>0), 
+                                        lambda.cv=lambda.cv,
+                                        lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),#seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                        #    min(1,init.lambda+init.lambda*0.5),
+                                        #    length=5),#seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                        #    min(1,init.lambda+init.lambda*0.5),
+                                        #    length=lambda.grid.size),
+                                        penalize.time=penalize.time,
+                                        save.X=FALSE## count.hals<sum(any.hal)
+                                        ))
+                            if (pick$cve==Inf) {
+                                break
+                            } else {
+                                pick.list[[length(pick.list)+1]] <- unlist(c(pick, cut.L.A=cut.L.A1))
+                            }
+                        }
+                        pick.grid <- do.call("rbind", pick.list)
+                        pick.grid <- pick.grid[pick.grid[, "cve"]==min(pick.grid[, "cve"]),,drop=FALSE][1,]
+                        cut.L.A1 <- pick.grid[["cut.L.A"]]
+                    } else {
+                        cut.L.A1 <- 0
+                    }
+
+                    if (length(covars2)>0) {
+                        pick.list <- list()
+                        for (cut.L.interaction1 in c(3,5,8)) {
+                            pick <- suppressWarnings(
+                                cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                        time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                        verbose=verbose,
+                                        cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                        covars=covars1,
+                                        covarsA=covarsA,
+                                        covars2=covars2,
+                                        cut.covars=cut.covars1,
+                                        cut.time.A=cut.time.A, V=V,
+                                        cut.L.A=cut.L.A1,
+                                        pick.hal=TRUE,
+                                        cut.L.interaction=cut.L.interaction1,
+                                        sl.hal=(length(lambda.cvs.1)>0), 
+                                        lambda.cv=lambda.cv,
+                                        lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),#seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                        #    min(1,init.lambda+init.lambda*0.5),
+                                        #    length=5),#seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                        #    min(1,init.lambda+init.lambda*0.5),
+                                        #    length=lambda.grid.size),
+                                        penalize.time=penalize.time,
+                                        save.X=FALSE## count.hals<sum(any.hal)
+                                        ))
+                            if (pick$cve==Inf) {
+                                break
+                            } else {
+                                pick.list[[length(pick.list)+1]] <- unlist(c(pick, cut.L.interaction=cut.L.interaction1))
+                            }
+                        }
+                        pick.grid <- do.call("rbind", pick.list)
+                        pick.grid <- pick.grid[pick.grid[, "cve"]==min(pick.grid[, "cve"]),,drop=FALSE][1,]
+                        cut.L.interaction1 <- pick.grid[["cut.L.interaction"]]
+                    } else {
+                        cut.L.interaction1 <- 0
+                    }
+
+                    init.lambda <- suppressWarnings(
+                        cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                verbose=verbose,
+                                cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                cut.covars=cut.covars1,#max(cut.covars, 15), browse=FALSE,
+                                V=V,
+                                pick.lambda.grid=TRUE,
+                                cut.L.A=cut.L.A1,
+                                cut.L.interaction=cut.L.interaction1,
+                                covars=covars1,
+                                covarsA=covarsA,
+                                covars2=covars2,
+                                remove.zeros=TRUE,
+                                #cve.cox.hal=cve.cox.hal,
+                                sl.hal=TRUE,#(length(lambda.cvs.1)>0), 
+                                lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),
+                                penalize.time=penalize.time,
+                                save.X=FALSE## count.hals<sum(any.hal)
+                                ))
                     if (verbose) print(paste0("final cox.hal model for ", fit.name))
                     mat <- suppressWarnings(
                         cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                                 time.var=time.var, A.name=A.name, delta.var=delta.var,
                                 verbose=verbose,
                                 cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
-                                cut.covars=pick.grid[["cut.covars"]], browse=FALSE,
-                                cut.time.A=cut.time.A, V=V,
-                                cut.L.A=pick.grid[["cut.L.A"]],
-                                cut.L.interaction=pick.grid[["cut.L.interaction"]],
+                                cut.covars=cut.covars1,
+                                V=V,
+                                cut.L.A=cut.L.A1,
+                                cut.L.interaction=cut.L.interaction1,
                                 covars=covars1,
+                                covarsA=covarsA,
+                                covars2=covars2,
                                 remove.zeros=TRUE,
                                 #cve.cox.hal=cve.cox.hal,
                                 sl.hal=TRUE,#(length(lambda.cvs.1)>0), 
-                                lambda.cv=pick.grid[["lambda.cv"]],#lambda.cvs.1,
-                                lambda.cvs=seq(max(0.00001,pick.grid[["lambda.cv"]]-pick.grid[["lambda.cv"]]*0.5),
-                                               min(1,pick.grid[["lambda.cv"]]+pick.grid[["lambda.cv"]]*0.5),
-                                               length=lambda.grid.size),
+                                lambda.cv=lambda.cv, lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                                                    min(1,init.lambda+init.lambda*0.5),
+                                                                    length=lambda.grid.size),#lambda.cvs.1,
                                 penalize.time=penalize.time,
                                 save.X=FALSE## count.hals<sum(any.hal)
                                 ))
+
+                    if (FALSE) {
+                        pick.list <- list()
+                        for (cut.L.interaction1 in c(0,3,5,10)) {
+                            for (cut.L.A1 in c(0,3,5,8)) {
+                                for (cut.covars1 in c(3,5,7,9,13)) {
+                                    #pick.grid[jj, c("lambda.cv", "lambda.cve")] <-
+                                    pick <- suppressWarnings(
+                                        cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                                time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                                verbose=verbose,
+                                                cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                                cut.covars=cut.covars1,
+                                                cut.time.A=cut.time.A, V=V,
+                                                cut.L.A=cut.L.A1,
+                                                pick.hal=TRUE,
+                                                cut.L.interaction=cut.L.interaction1,
+                                                covars=covars1,
+                                                sl.hal=(length(lambda.cvs.1)>0), 
+                                                lambda.cv=lambda.cv,
+                                                lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),#seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                                #    min(1,init.lambda+init.lambda*0.5),
+                                                #    length=5),#seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                                #    min(1,init.lambda+init.lambda*0.5),
+                                                #    length=lambda.grid.size),
+                                                penalize.time=penalize.time,
+                                                save.X=FALSE## count.hals<sum(any.hal)
+                                                ))
+                                    if (pick$cve==Inf) {
+                                        break
+                                    } else {
+                                        pick.list[[length(pick.list)+1]] <- unlist(c(pick, cut.covars=cut.covars1, cut.L.A=cut.L.A1,
+                                                                                     cut.L.interaction=cut.L.interaction1))
+                                    }
+                                }
+                            }
+                        }
+                        pick.grid <- do.call("rbind", pick.list)
+                        pick.grid <- pick.grid[pick.grid[, "cve"]==min(pick.grid[, "cve"]),,drop=FALSE][1,]
+                        #cve.cox.hal <- pick.grid[["cve"]]
+                        if (verbose) print(pick.grid)
+                        if (verbose) print(paste0("final cox.hal model for ", fit.name))
+                        mat <- suppressWarnings(
+                            cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                    time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                    verbose=verbose,
+                                    cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
+                                    cut.covars=pick.grid[["cut.covars"]], browse=FALSE,
+                                    cut.time.A=cut.time.A, V=V,
+                                    cut.L.A=pick.grid[["cut.L.A"]],
+                                    cut.L.interaction=pick.grid[["cut.L.interaction"]],
+                                    covars=covars1,
+                                    remove.zeros=TRUE,
+                                    #cve.cox.hal=cve.cox.hal,
+                                    sl.hal=TRUE,#(length(lambda.cvs.1)>0), 
+                                    lambda.cv=pick.grid[["lambda.cv"]],#lambda.cvs.1,
+                                    lambda.cvs=seq(max(0.00001,pick.grid[["lambda.cv"]]-pick.grid[["lambda.cv"]]*0.5),
+                                                   min(1,pick.grid[["lambda.cv"]]+pick.grid[["lambda.cv"]]*0.5),
+                                                   length=lambda.grid.size),
+                                    penalize.time=penalize.time,
+                                    save.X=FALSE## count.hals<sum(any.hal)
+                                    ))
+                    }
                 } else {
                     init.lambda <- suppressWarnings(
                         cox.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                                 time.var=time.var, A.name=A.name, delta.var=delta.var,
                                 verbose=verbose,
-                                hal.screening=TRUE,
                                 cve.sl.pick=estimation[[each]][["cve.sl.pick"]],
                                 cut.covars=cut.covars, browse=FALSE,
                                 cut.time.A=cut.time.A, V=V,
@@ -657,7 +853,7 @@ contmle <- function(dt,
                         poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                                     time.var=time.var, A.name=A.name, delta.var=delta.var,
                                     verbose=verbose,
-                                    hal.screening=TRUE,
+                                    hal.screening1=TRUE,
                                     cut.covars=cut.covars, cut.time=0, browse=FALSE,
                                     cut.time.A=0, V=V,
                                     cut.L.A=0,
@@ -685,7 +881,7 @@ contmle <- function(dt,
                     poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                                 time.var=time.var, A.name=A.name, delta.var=delta.var,
                                 verbose=verbose,
-                                hal.screening=TRUE,
+                                hal.screening1=TRUE,
                                 cut.covars=cut.covars, browse=FALSE,
                                 cut.time.A=cut.time.A, V=V,
                                 cut.time=cut.time,
@@ -703,7 +899,7 @@ contmle <- function(dt,
                                poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                                            time.var=time.var, A.name=A.name, delta.var=delta.var,
                                            verbose=verbose,
-                                           hal.screening=TRUE,
+                                           hal.screening1=TRUE,
                                            cut.covars=cut.covars, browse=FALSE,
                                            cut.time.A=cut.time.A, V=V,
                                            cut.L.A=cut.L.A,
