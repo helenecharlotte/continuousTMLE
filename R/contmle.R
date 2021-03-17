@@ -80,9 +80,9 @@ contmle <- function(dt,
                                    )) {
 
     if (verbose) verbose.sl <- TRUE
-   
-    not.fit.list <- list()
     
+    not.fit.list <- list()
+   
     #-- names of time variable and event (delta) variable; 
     time.var <- gsub("Surv\\(", "", unlist(strsplit(as.character(estimation[[1]][["model"]])[2], ","))[1])
     delta.var <- gsub(" ", "",
@@ -329,7 +329,7 @@ contmle <- function(dt,
                 fit.cox <- glmnet(x=X, y=y, family="cox", maxit=1000,
                                   lambda=fit.penalty)
             } else {
-                fit.cox <- coxph(as.formula(deparse(fit.model)), data=dt)
+                fit.cox <- coxph(as.formula(paste0(deparse(fit.model), collapse="")), data=dt)
             }
         }
 
@@ -377,7 +377,7 @@ contmle <- function(dt,
     #-- Xc -- get censoring survival one time-point back: 
 
     bhaz.cox[, chaz0.1:=c(0, chaz0[-.N])]
-
+    
     #-- Y -- output Kaplan-Meier and/or crude HR?
     
     if (output.km) {
@@ -848,14 +848,17 @@ contmle <- function(dt,
             } else {
                 if (hal.screening) { #--- first screening
                     print(paste0("EACH = ", each))
-                    # if (each==2) browser()
+                    #if (each==3) browser()
+                    #if (each==2) browser()
+                    #browser()
                     covars1 <- suppressWarnings(
                         poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
                                     time.var=time.var, A.name=A.name, delta.var=delta.var,
                                     verbose=verbose,
                                     hal.screening1=TRUE,
-                                    cut.covars=cut.covars, cut.time=0, browse=FALSE,
-                                    cut.time.A=0, V=V,
+                                    cut.covars=cut.covars,
+                                    cut.time=3, browse=FALSE,
+                                    cut.time.A=3, V=V,
                                     cut.L.A=0,
                                     cut.L.interaction=0,
                                     covars=covars1,
@@ -866,72 +869,147 @@ contmle <- function(dt,
                                     save.X=FALSE## count.hals<sum(any.hal)
                                     ))
                     if (verbose & length(covars1)>0) print(paste0("variables picked by screening: ", paste0(covars1, collapse=", ")))
-                    if (length(covars1)==0) {
-                        covars1 <- covars
-                        cut.covars <- 0
-                        cut.L.interaction <- 0
-                        cut.L.A <- 0
-                    }
-                }
-                #penalize.time <- TRUE
 
-                print(paste0("EACH = ", each))
-                
-                init.lambda <- suppressWarnings(
-                    poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
-                                time.var=time.var, A.name=A.name, delta.var=delta.var,
-                                verbose=verbose,
-                                hal.screening1=TRUE,
-                                cut.covars=cut.covars, browse=FALSE,
-                                cut.time.A=cut.time.A, V=V,
-                                cut.time=cut.time,
-                                cut.L.A=cut.L.A,
-                                pick.lambda.grid=TRUE,
-                                cut.L.interaction=cut.L.interaction,
-                                covars=covars1,
-                                sl.poisson=(length(lambda.cvs.1)>0), 
-                                lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),
-                                penalize.time=penalize.time,
-                                save.X=FALSE## count.hals<sum(any.hal)
-                                ))
-                
-                if (FALSE) init.lambda <- suppressWarnings(
-                               poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
-                                           time.var=time.var, A.name=A.name, delta.var=delta.var,
-                                           verbose=verbose,
-                                           hal.screening1=TRUE,
-                                           cut.covars=cut.covars, browse=FALSE,
-                                           cut.time.A=cut.time.A, V=V,
-                                           cut.L.A=cut.L.A,
-                                           pick.lambda.grid=TRUE,
-                                           cut.L.interaction=cut.L.interaction,
-                                           covars=covars1,
-                                           sl.poisson=(length(lambda.cvs.1)>0), 
-                                           lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),
-                                           penalize.time=penalize.time,
-                                           save.X=FALSE## count.hals<sum(any.hal)
-                                           ))
+                    if (length(covars1)>0) {
+                        covarsA <- suppressWarnings(
+                            poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                        time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                        verbose=verbose,
+                                        hal.screeningA=TRUE,
+                                        cut.covars=cut.covars, cut.time=3, browse=FALSE,
+                                        cut.time.A=3, V=V,
+                                        cut.L.A=cut.L.A,
+                                        cut.L.interaction=0,
+                                        covars=covars1,
+                                        sl.poisson=(length(lambda.cvs.1)>0), 
+                                        lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),#lambda.cvs.1,
+                                        penalize.time=penalize.time,
+                                        maxit=maxit,
+                                        save.X=FALSE## count.hals<sum(any.hal)
+                                        ))
+                    } else covarsA <- covars1
 
-                print(paste0("EACH = ", each))
+                    if (length(covars1)>0) {
+                        covars2 <- suppressWarnings(
+                            poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                        time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                        verbose=verbose,
+                                        hal.screening2=TRUE,
+                                        cut.covars=cut.covars, cut.time=3, browse=FALSE,
+                                        cut.time.A=3, V=V,
+                                        cut.L.A=cut.L.A,
+                                        cut.L.interaction=3,
+                                        covars=covars1,
+                                        covarsA=covarsA,
+                                        sl.poisson=(length(lambda.cvs.1)>0), 
+                                        lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),#lambda.cvs.1,
+                                        penalize.time=penalize.time,
+                                        maxit=maxit,
+                                        save.X=FALSE## count.hals<sum(any.hal)
+                                        ))
+                    } else covars2 <- covars1
+                    
+                    init.lambda <- suppressWarnings(
+                        poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                    time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                    verbose=verbose,
+                                    hal.screening1=TRUE,
+                                    cut.covars=cut.covars, browse=FALSE,
+                                    cut.time.A=cut.time.A, V=V,
+                                    cut.time=cut.time,
+                                    cut.L.A=cut.L.A,
+                                    pick.lambda.grid=TRUE,
+                                    cut.L.interaction=cut.L.interaction,
+                                    covars=covars1,
+                                    covarsA=covarsA,
+                                    covars2=covars2,
+                                    sl.poisson=(length(lambda.cvs.1)>0), 
+                                    lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),
+                                    penalize.time=penalize.time,
+                                    save.X=FALSE## count.hals<sum(any.hal)
+                                    ))
 
-                mat <- suppressWarnings(
-                    poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
-                                time.var=time.var, A.name=A.name, delta.var=delta.var,
-                                verbose=verbose,
-                                cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
-                                cut.time.A=cut.time.A, V=V,
-                                cut.L.A=cut.L.A,
-                                cut.L.interaction=cut.L.interaction,
-                                covars=covars1,
-                                sl.poisson=(length(lambda.cvs.1)>0), 
-                                lambda.cv=lambda.cv, lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
-                                                                    min(1,init.lambda+init.lambda*0.5),
-                                                                    length=lambda.grid.size),#lambda.cvs.1,
-                                penalize.time=penalize.time,
-                                maxit=maxit,
-                                save.X=FALSE## count.hals<sum(any.hal)
-                                ))
+                    mat <- suppressWarnings(
+                        poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                    time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                    verbose=verbose,
+                                    cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
+                                    cut.time.A=cut.time.A, V=V,
+                                    cut.L.A=cut.L.A,
+                                    cut.L.interaction=cut.L.interaction,
+                                    covars=covars1,
+                                    covarsA=covarsA,
+                                    covars2=covars2,
+                                    sl.poisson=(length(lambda.cvs.1)>0), 
+                                    lambda.cv=lambda.cv, lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                                                        min(1,init.lambda+init.lambda*0.5),
+                                                                        length=lambda.grid.size),#lambda.cvs.1,
+                                    penalize.time=penalize.time,
+                                    maxit=maxit,
+                                    save.X=FALSE## count.hals<sum(any.hal)
+                                    ))
+
+                        
+                } else {
+                    #penalize.time <- TRUE
+
+                    print(paste0("EACH = ", each))
                 
+                    init.lambda <- suppressWarnings(
+                        poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                    time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                    verbose=verbose,
+                                    hal.screening1=TRUE,
+                                    cut.covars=cut.covars, browse=FALSE,
+                                    cut.time.A=cut.time.A, V=V,
+                                    cut.time=cut.time,
+                                    cut.L.A=cut.L.A,
+                                    pick.lambda.grid=TRUE,
+                                    cut.L.interaction=cut.L.interaction,
+                                    covars=covars1,
+                                    sl.poisson=(length(lambda.cvs.1)>0), 
+                                    lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),
+                                    penalize.time=penalize.time,
+                                    save.X=FALSE## count.hals<sum(any.hal)
+                                    ))
+                
+                    if (FALSE) init.lambda <- suppressWarnings(
+                                   poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                               time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                               verbose=verbose,
+                                               hal.screening1=TRUE,
+                                               cut.covars=cut.covars, browse=FALSE,
+                                               cut.time.A=cut.time.A, V=V,
+                                               cut.L.A=cut.L.A,
+                                               pick.lambda.grid=TRUE,
+                                               cut.L.interaction=cut.L.interaction,
+                                               covars=covars1,
+                                               sl.poisson=(length(lambda.cvs.1)>0), 
+                                               lambda.cv=lambda.cv, lambda.cvs=c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),
+                                               penalize.time=penalize.time,
+                                               save.X=FALSE## count.hals<sum(any.hal)
+                                               ))
+
+                    print(paste0("EACH = ", each))
+
+                    mat <- suppressWarnings(
+                        poisson.hal(mat=mat, delta.outcome=fit.delta, dt=dt,
+                                    time.var=time.var, A.name=A.name, delta.var=delta.var,
+                                    verbose=verbose,
+                                    cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
+                                    cut.time.A=cut.time.A, V=V,
+                                    cut.L.A=cut.L.A,
+                                    cut.L.interaction=cut.L.interaction,
+                                    covars=covars1,
+                                    sl.poisson=(length(lambda.cvs.1)>0), 
+                                    lambda.cv=lambda.cv, lambda.cvs=seq(max(0.00001,init.lambda-init.lambda*0.5),
+                                                                        min(1,init.lambda+init.lambda*0.5),
+                                                                        length=lambda.grid.size),#lambda.cvs.1,
+                                    penalize.time=penalize.time,
+                                    maxit=maxit,
+                                    save.X=FALSE## count.hals<sum(any.hal)
+                                    ))
+                }                
             }
 
             if (mat[["not.fit"]]) {
@@ -1239,6 +1317,15 @@ contmle <- function(dt,
             unlist(eval.ic(mat, init.fit, target.index=outcome.index[target11],
                            tau.values=tt, survival=TRUE))
         }))^2)/n)
+    }
+
+    if (check.sup & weighted.norm[1]=="Sigma") {
+        print("-----")
+        print(c(matrix(eval.equation(mat, eps=0), nrow=1)%*%Sigma.inv%*%matrix(eval.equation(mat, eps=0), ncol=1)))
+        print(c(matrix(eval.equation(mat, eps=0), nrow=1)%*%diag(1/(init.ic^2*n))%*%matrix(eval.equation(mat, eps=0), ncol=1)))
+        print(nrow(Sigma.inv)*c(matrix(eval.equation(mat, eps=0), nrow=1)%*%Sigma.inv%*%matrix(eval.equation(mat, eps=0), ncol=1))>=
+              c(matrix(eval.equation(mat, eps=0), nrow=1)%*%diag(1/(init.ic^2*n))%*%matrix(eval.equation(mat, eps=0), ncol=1)))
+        print("-----")
     }
 
     #----------------------------------------
@@ -1623,46 +1710,7 @@ contmle <- function(dt,
                                        lhs=max(abs(unlist(Pn.eic4))),
                                        rhs=criterion/sqrt(length(target)*length(tau)))
                     tmle.list$convergenced.at.step <- step
-
-                    if (length(check.times.size)>0) {
-                        unique.times3 <- unique.times[unique.times<=max(tau)]
-                        set.seed(2444231)
-                        unique.times2 <- sort(unique.times3[sample(length(unique.times3), check.times.size)])
-
-                        ## print(unique.times2)
-                        ## print(tau)
-
-                        for (kk in 1:length(unique.times2)) {
-                            mat[, (paste0("surv.tau", kk)):=
-                                      surv.t[get(time.var)==max(get(time.var)[get(time.var)<=unique.times2[kk]])],
-                                by=c("id", A.name)]
-                            mat[surv.t>0, (paste0("Ht.lambda.", kk)):=get(paste0("surv.tau", kk)) / surv.t]
-                            mat[surv.t==0, (paste0("Ht.lambda.", kk)):=1]
-                        }
-
-                        all.fit <- sapply(1:length(unique.times2), function(kk) {
-                            mean(rowSums(sapply(a, function(aa)
-                            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
-                        })
-
-                        all.ic <- eval.ic(mat, all.fit, target.index=outcome.index[target], tau.values=unique.times2, tau=unique.times2)
-
-                        Pn.eic.all <- eval.equation(mat, 0, target.index=outcome.index[target1], tau.values=unique.times2, tau=unique.times2)
-        
-                        Pn.eic.all4 <- lapply(1:length(Pn.eic.all), function(kk) Pn.eic.all[[kk]]/(ifelse(any(unlist(all.ic)>0), all.ic[[kk]]+0.001, all.ic[[kk]])*sqrt(n)))
-                        check.sup.norm.all <- abs(unlist(Pn.eic.all4))<=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau)))
-
-                        tmle.list$check.sup.norm.all <- list(
-                            check.sup.norm.all=mean(check.sup.norm.all),
-                            lhs=max(abs(unlist(Pn.eic.all4))),
-                            rhs=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau))),
-                            Pn.eic=data.table(times=unique.times2,
-                                              Pn.eic=unlist(Pn.eic.all4),
-                                              tf=1*check.sup.norm.all))
-
-                    }
-
-                    
+                   
                     if (!push.criterion)
                         break else criterion <- criterion/sqrt(length(target)*length(tau))
                     second.round <- TRUE
@@ -1674,39 +1722,6 @@ contmle <- function(dt,
                                        lhs=max(abs(unlist(Pn.eic4))),
                                        rhs=criterion/sqrt(length(target)*length(tau)))
                     tmle.list$convergenced.at.step.second.round <- step
-                    
-                    if (length(check.times.size)>0) {
-
-                        for (kk in 1:length(unique.times2)) {
-                            mat[, (paste0("surv.tau", kk)):=
-                                      surv.t[get(time.var)==max(get(time.var)[get(time.var)<=unique.times2[kk]])],
-                                by=c("id", A.name)]
-                            mat[surv.t>0, (paste0("Ht.lambda.", kk)):=get(paste0("surv.tau", kk)) / surv.t]
-                            mat[surv.t==0, (paste0("Ht.lambda.", kk)):=1]
-                        }
-
-                        all.fit <- sapply(1:length(unique.times2), function(kk) {
-                            mean(rowSums(sapply(a, function(aa)
-                            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
-                        })
-
-                        all.ic <- eval.ic(mat, all.fit, target.index=outcome.index[target], tau.values=unique.times2, tau=unique.times2)
-
-                        Pn.eic.all <- eval.equation(mat, 0, target.index=outcome.index[target1], tau.values=unique.times2, tau=unique.times2)
-        
-                        Pn.eic.all4 <- lapply(1:length(Pn.eic.all), function(kk) Pn.eic.all[[kk]]/(ifelse(any(unlist(all.ic)>0), all.ic[[kk]]+0.001, all.ic[[kk]])*sqrt(n)))
-                        check.sup.norm.all <- abs(unlist(Pn.eic.all4))<=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau)))
-
-                        tmle.list$second.round.check.sup.norm.all <- list(
-                            check.sup.norm.all=mean(check.sup.norm.all),
-                            lhs=max(abs(unlist(Pn.eic.all4))),
-                            rhs=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau))),
-                            Pn.eic=data.table(times=unique.times2,
-                                              Pn.eic=unlist(Pn.eic.all4),
-                                              tf=1*check.sup.norm.all))
-
-                        }
-
                     break
                 }               
             }
@@ -1963,7 +1978,44 @@ contmle <- function(dt,
         tmle.list[[length(tmle.list)+1]] <- not.fit.list
         names(tmle.list)[length(tmle.list)] <- "messages"
     }
-    
+ 
+    if (simultaneous.ci) {
+        Sigma <- eval.ic(mat, init.fit, target.index=outcome.index[target], Sigma=TRUE)+0.000001
+        rho <- matrix(0, nrow=nrow(Sigma), ncol=ncol(Sigma))
+        for (j1 in 1:nrow(rho)) {
+            for (j2 in 1:nrow(rho)) {
+                rho[j1,j2] <- Sigma[j1,j2] / sqrt(Sigma[j1,j1]*Sigma[j2,j2])
+            }
+        }
+        generate.max <- list()
+        for (mm in 1:10000) {
+            Z0 <- rnorm(nrow(rho))
+            #Z <- sqrtm(rho)%*%Z0
+            Z <-  try(mvrnorm(n=1, rep(0, nrow(rho)), rho, tol=1e-6, empirical=FALSE))
+            if (any(class(Z)=="try-error")) {
+                generate.max[[mm]] <- NA
+                warning("NA in Sigma; cannot estimate q95")
+                break
+            } else {
+                generate.max[[mm]] <- max(Z)
+            }
+        }
+        if (length(generate.max)==10000) {
+            q.max.95 <- quantile(unlist(generate.max), p=0.95)
+            tmle.list$q.max.95 <- q.max.95
+        }
+    }
+
+    if (FALSE) {
+        mean(mat[A==1, unique(surv.tau1), by="id"][,2][[1]])
+        1-sum(unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.est",])))
+        sqrt(sum(unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.se",]^2))))
+        update.ic <- sqrt(mean(rowSums(sapply(1:length(outcome.index), function(target11) {
+            unlist(eval.ic(mat, unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.est",])), target.index=outcome.index[target11],
+                           tau.values=tau, survival=TRUE))
+        }))^2)/n)#[[1]]
+    }
+  
     if (length(check.times.size)>0) {
         unique.times3 <- unique.times[unique.times<=max(tau)]
         set.seed(2444231)
@@ -2000,43 +2052,6 @@ contmle <- function(dt,
                               Pn.eic=unlist(Pn.eic.all4),
                               tf=1*check.sup.norm.all))
 
-    }
-
-    if (simultaneous.ci) {
-        Sigma <- eval.ic(mat, init.fit, target.index=outcome.index[target], Sigma=TRUE)+0.000001
-        rho <- matrix(0, nrow=nrow(Sigma), ncol=ncol(Sigma))
-        for (j1 in 1:nrow(rho)) {
-            for (j2 in 1:nrow(rho)) {
-                rho[j1,j2] <- Sigma[j1,j2] / sqrt(Sigma[j1,j1]*Sigma[j2,j2])
-            }
-        }
-        generate.max <- list()
-        for (mm in 1:10000) {
-            Z0 <- rnorm(nrow(rho))
-            #Z <- sqrtm(rho)%*%Z0
-            Z <-  try(mvrnorm(n=1, rep(0, nrow(rho)), rho, tol=1e-6, empirical=FALSE))
-            if (any(class(Z)=="try-error")) {
-                generate.max[[mm]] <- NA
-                warning("NA in Sigma; cannot estimate q95")
-                break
-            } else {
-                generate.max[[mm]] <- max(Z)
-            }
-        }
-        if (length(generate.max)==10000) {
-            q.max.95 <- quantile(unlist(generate.max), p=0.95)
-            tmle.list$q.max.95 <- q.max.95
-        }
-    }
-
-    if (FALSE) {
-        mean(mat[A==1, unique(surv.tau1), by="id"][,2][[1]])
-        1-sum(unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.est",])))
-        sqrt(sum(unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.se",]^2))))
-        update.ic <- sqrt(mean(rowSums(sapply(1:length(outcome.index), function(target11) {
-            unlist(eval.ic(mat, unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.est",])), target.index=outcome.index[target11],
-                           tau.values=tau, survival=TRUE))
-        }))^2)/n)#[[1]]
     }
     
     return(tmle.list)    

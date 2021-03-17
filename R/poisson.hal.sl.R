@@ -4,6 +4,7 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A", delta.v
                            cut.L.A=5, cut.L.interaction=5,
                            covars=c("L1", "L2", "L3"),
                            lambda.cv=NULL,
+                           browse=FALSE,
                            penalize.time=TRUE, adjust.penalization=TRUE,
                            lambda.cvs=seq(0, 0.003, length=51)[-1], 
                            V=10, verbose=TRUE,
@@ -27,6 +28,8 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A", delta.v
         return(-sum(log(lambda)*dN - exp(-Lambda)))
     }
 
+    if (browse) browser()
+
     for (vv in 1:V) {
     
         test.set <- cv.split[,vv]#sample(1:n, floor(n/10))
@@ -36,12 +39,12 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A", delta.v
         #---- 2. compute cve for hal
         #----------------------------
 
-        if (verbose) print(paste0("v=", vv, "/", V))
+        #if (verbose) print(paste0("v=", vv, "/", V))
 
         mat.train <- mat[id %in% train.set]
 
         mat.train[, RT:=sum(tdiff*(get(time.var)<=time.obs)), by=c("x", A.name)]
-        mat.train[, D:=sum(event*(get(time.var)<=time.obs)), by=c("x", A.name)]
+        mat.train[, D:=sum(event.poisson.hal*(get(time.var)<=time.obs)), by=c("x", A.name)]
 
         if (length(mat[, unique(get(A.name))])>1) reduce.A <- TRUE else reduce.A <- FALSE
 
@@ -59,24 +62,28 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A", delta.v
         } else {
             #print("no penalization of coefficients for time indicators (main effects)")
             penalty.factor <- rep(1, ncol(X.obs))
-            penalty.factor[1:cut.time] <- 0
+            penalty.factor[1:max(cut.time,1)] <- 0
         }
 
         outlist.hal[[vv]] <- lapply(lambda.cvs, function(lambda.cv) {
-            fit.vv <- glmnet(x=X.obs, y=Y, lambda=lambda.cv,
+
+            fit.vv <- glmnet(x=X.obs, y=Y, lambda=unique(sort(c(c(0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001),
+                                                                lambda.cvs))),
                              family="poisson",
                              offset=offset,
                              penalty.factor=penalty.factor,
                              maxit=maxit)
-                      
+
+            #if (verbose) print(coef(fit.vv, s=lambda.cv))
+
             mat[id %in% test.set, fit.lambda.vv:=exp(predict(fit.vv, X[mat$id %in% test.set, cols.obs],
-                                                             newoffset=0))]
+                                                             newoffset=0, s=lambda.cv))]
 
             mat[id %in% test.set, fit.pois.dLambda.vv:=fit.lambda.vv*tdiff]
             mat[id %in% test.set, fit.pois.Lambda.vv:=cumsum(fit.pois.dLambda.vv), by=c("id", A.name)]
-
-            check <- try(sum(abs(coef(fit.vv)[,1]))==0)
-            
+ 
+            check <- try(sum(abs(coef(fit.vv, s=lambda.cv)[,1]))==0)
+             
             if (any(class(check)=="try-error")) {
                 return(Inf)
             } else {
