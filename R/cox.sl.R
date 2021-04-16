@@ -7,16 +7,16 @@ cox.sl <- function(loss.fun, dt, V=5, seed=19192, method.risk=c("test","train","
                                    mod4=list(Surv(time, delta==1)~A+L1.squared),
                                    mod5=list(Surv(time, delta==1)~A*L1+L2+L3),
                                    mod6=list(Surv(time, delta==1)~A*L1.squared+L2+L3))) {
-    
+
     if (length(delta.var)==0) {
         form <- as.character(cox.models[[1]][[1]])[2]
         delta <- str_split(form, ",", simplify=TRUE)[,2]
         if (length(grep("==", delta))>0) {
             delta.var <- gsub(" ", "", str_split(delta, "==", simplify=TRUE)[,1])
-            if (length(delta.var)==0) delta.value <- as.numeric(gsub(")", "", str_split(delta, "==", simplify=TRUE)[,2]))
+            if (length(delta.value)==0) delta.value <- as.numeric(gsub(")", "", str_split(delta, "==", simplify=TRUE)[,2]))
         } else {
             delta.var <- gsub(" ", "", gsub(")", "", delta))
-            if (length(delta.var)==0) delta.value <- 1
+            if (length(delta.value)==0) delta.value <- 1
         }
     }
 
