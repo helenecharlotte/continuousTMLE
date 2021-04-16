@@ -2,6 +2,7 @@ sim.data2 <- function(n, setting=1, competing.risk=FALSE, no.cr=2,
                       censoring.informative=FALSE,
                       no.effect.A=FALSE,
                       randomize.A=TRUE,
+                      print.forms=FALSE,
                       m=sample(373211, 1)) {
 
     if (!no.effect.A) betaA <- -0.15 else betaA <- 0
@@ -39,6 +40,7 @@ sim.data2 <- function(n, setting=1, competing.risk=FALSE, no.cr=2,
                     censoring=!no.censoring,
                     square.effect2=square.effect2,
                     square.effect1=square.effect1,
+                    print.forms=print.forms,
                     reversed.setting=reversed.setting,
                     interaction.Atime=interaction.Atime))
     
@@ -58,6 +60,7 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
                      square.effect2=FALSE,
                      square.effect1=FALSE,
                      new=FALSE,
+                     print.forms=FALSE,
                      censoring.informative=TRUE, censoring.high=FALSE, 
                      categorical=TRUE, intervention.A=NULL, tau=2,
                      cvot.setting=FALSE, reversed.setting=FALSE
@@ -250,6 +253,14 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
     
     lambdaT3 <- function(t, A, L1, L2, L3, eta, nu) {
         return(phiT3(t, A, L1, L2, L3)*eta*nu*t^{nu-1})
+    }
+
+    if (print.forms) {
+        print("Outcome hazard form: ")
+        print(phiT)
+        print(paste0("betaA=", betaA))
+        print("Censoring hazard form: ")
+        print(phiC)
     }
 
 

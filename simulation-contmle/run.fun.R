@@ -4,26 +4,41 @@ run.fun <- function(competing.risk=FALSE,
                     M=1000,
                     n=1000,
                     verbose=FALSE,
+                    check.sup=FALSE,
+                    use.observed.times=FALSE, length.times=length(tau), check.times.size=NULL,
                     one.step=FALSE,
+                    push.criterion=FALSE,
+                    simultaneous.ci=FALSE,
                     iterative=FALSE,
                     get.truth=FALSE,
                     target=1, 
                     setting=1,
+                    print.forms=FALSE,
+                    add.noise=NULL, 
                     misspecify.outcome=FALSE,
                     censoring.informative=FALSE,
+                    no.effect.A=FALSE,
+                    randomize.A=TRUE,
                     fit.outcome="cox",
                     fit.cens="cox",
                     fit.cr="cox",
+                    cox.hal=FALSE,
+                    cut.covars=8,
+                    hal.screening=FALSE,
+                    return.data=NULL,
+                    V=10, lambda.cvs=seq(0.0000001, 0.01, length=50),
                     weighted.norm=FALSE,
                     save.output=TRUE,
                     cr3=FALSE,
-                    no_cores=1) {
+                    browse=FALSE,
+                    pi.star.fun=function(L) 0,
+                    no_cores=1, override.nc=FALSE) {
 
-    if (fit.cens=="hal" | fit.outcome=="hal") {
-        no_cores <- 5
-    }
+    if (any(fit.cens=="hal") | any(fit.outcome=="hal") | any(fit.cr=="hal") & n>500) {
+        if (!override.nc) no_cores <- 5
+    } 
 
-    betaA <- -0.15
+    if (!no.effect.A) betaA <- -0.15 else betaA <- 0
     betaL <- 1.1
     nu    <- 1.7
     eta   <- 0.7
@@ -41,7 +56,6 @@ run.fun <- function(competing.risk=FALSE,
         reversed.setting      <- FALSE#FALSE#TRUE
     }
  
-    randomize.A           <- TRUE
     no.censoring          <- FALSE
 
     misspecify.cens    <- FALSE
@@ -50,11 +64,11 @@ run.fun <- function(competing.risk=FALSE,
     ## a bit of reprocessing
     #-------------------------------------------------------------------------------------------#
 
-    if (interaction.Atime) betaA <- -0.7
+    if (interaction.Atime & !no.effect.A) betaA <- -0.7
     change.point <- NULL
     
     if (reversed.setting) {
-        betaA <- 0.5
+        if (!no.effect.A) betaA <- 0.5
         t0 <- 0.7
     }
 
@@ -110,6 +124,21 @@ run.fun <- function(competing.risk=FALSE,
         }
     }
 
+    #--- "back-up models" for hal; 
+
+    if (fit.cens[1]=="hal") {
+        cens.model <- Surv(time, delta==0)~A#A+L1+L2+L3
+    }
+
+    if (fit.outcome[1]=="hal") {
+        outcome.model <- Surv(time, delta==1)~A##A+L1+L2+L3
+        change.point <- NULL
+    }
+
+    if (fit.cr[1]=="hal") {
+        cr.model <- Surv(time, delta==2)~A+L1+L2+L3
+    }
+
     
     #-------------------------------------------------------------------------------------------#
     ## get the true value of target parameter(s)
@@ -128,6 +157,7 @@ run.fun <- function(competing.risk=FALSE,
                             reversed.setting=reversed.setting,
                             square.effect2=square.effect2,
                             square.effect1=square.effect1,
+                            print.forms=print.forms,
                             interaction.Atime=interaction.Atime)
         psi0.A0 <- sim.data(1e6, betaA=betaA, betaL=betaL, nu=nu, eta=eta,
                             categorical=FALSE, competing.risk=competing.risk, cr.both=TRUE,
@@ -136,6 +166,7 @@ run.fun <- function(competing.risk=FALSE,
                             reversed.setting=reversed.setting,
                             square.effect2=square.effect2,
                             square.effect1=square.effect1,
+                            print.forms=print.forms,
                             interaction.Atime=interaction.Atime)
 
         psi0 <- psi0.A1[,-1, drop=FALSE] - psi0.A0[,-1, drop=FALSE]
@@ -146,9 +177,13 @@ run.fun <- function(competing.risk=FALSE,
         saveRDS(psi0.save,
                 file=paste0("./simulation-contmle/output/",
                             "save-psi0",
+                            ifelse(no.effect.A, "-no-effect-A", ""),
                             ifelse(competing.risk, "-competingrisk", ""),
                             ifelse(competing.risk & cr3, "-cr3", ""), 
-                            paste0("-tau", tau, collapse=""), 
+                            ifelse(length(tau)>10,
+                                   paste0("-tau", length(tau),
+                                          paste0("-tau", round(tau,3)[1:3], collapse="")),
+                                   paste0("-tau", round(tau,3), collapse="")), 
                             ifelse(square.effect2, "-squareL2unif", ""),
                             ifelse(square.effect1, "-squareL1unif", ""),
                             ifelse(interaction.Atime, "-interactionAtime", ""),
@@ -159,6 +194,31 @@ run.fun <- function(competing.risk=FALSE,
 
     }
 
+    if (length(return.data)>0) {
+        dt <- sim.data(n, betaA=betaA, betaL=betaL, nu=nu, eta=eta, t0=t0,
+                       seed=return.data+100, no.cr=ifelse(cr3, 3, 2),
+                       competing.risk=competing.risk,
+                       categorical=FALSE, randomize.A=randomize.A,
+                       censoring.informative=censoring.informative,
+                       censoring=!no.censoring,
+                       square.effect2=square.effect2,
+                       square.effect1=square.effect1,
+                       print.forms=print.forms,
+                       reversed.setting=reversed.setting,
+                       interaction.Atime=interaction.Atime)
+
+        if (length(add.noise)>0) {
+
+            if (!is.numeric(add.noise)) add.noise <- 10            
+
+            L.noise <- matrix(sapply(1:add.noise, function(jj) rnorm(nrow(dt), mean=jj/add.noise, sd=0.2)), nrow=nrow(dt))
+            dt <- cbind(dt, L.noise)
+            
+        }
+
+        return(dt)         
+    }
+    
     #-------------------------------------------------------------------------------------------#
     ## repeat simulations (parallelize)
     #-------------------------------------------------------------------------------------------#
@@ -176,6 +236,7 @@ run.fun <- function(competing.risk=FALSE,
                                       censoring=!no.censoring,
                                       square.effect2=square.effect2,
                                       square.effect1=square.effect1,
+                                      print.forms=print.forms,
                                       reversed.setting=reversed.setting,
                                       interaction.Atime=interaction.Atime)
 
@@ -188,19 +249,45 @@ run.fun <- function(competing.risk=FALSE,
                        }
 
                        #dt[, delta:=1*(delta==3)+3*(delta==1)+2*(delta==2)]
+                       # dt[, delta:=1*(delta==0)+0*(delta==1)]
                        #target <- 1
 
+                       if (browse) browser()
+
+                       if (length(add.noise)>0) {
+
+                           if (!is.numeric(add.noise)) add.noise <- 10            
+
+                           L.noise <- matrix(sapply(1:add.noise, function(jj) rnorm(nrow(dt), mean=jj/add.noise, sd=0.2)), nrow=nrow(dt))
+                           dt <- cbind(dt, L.noise)
+
+                           outcome.model <- as.formula(paste0(paste0(outcome.model[2],
+                                                                     outcome.model[1],
+                                                                     outcome.model[3], "+",
+                                                                     paste0(paste0("V", 1:10), collapse="+"))))
+                           
+                       }
+                       
                        out <- list("est"=contmle(dt, sl.method=3,
-                                                 deps.size=0.1, V=10,
+                                                 deps.size=0.1, V=V,
                                                  no.small.steps=500,
                                                  weighted.norm=weighted.norm,
-                                                 one.step=one.step, 
+                                                 one.step=one.step,
+                                                 push.criterion=push.criterion,
+                                                 simultaneous.ci=simultaneous.ci,
                                                  target=target, iterative=iterative,
                                                  treat.effect=treat.effect,
-                                                 pi.star.fun=function(L) 0, 
-                                                 tau=tau, 
+                                                 pi.star.fun=pi.star.fun, 
+                                                 tau=tau,
+                                                 cut.covars=cut.covars,
+                                                 hal.screening=hal.screening,
+                                                 lambda.cvs=lambda.cvs,
                                                  output.km=TRUE,
                                                  verbose=verbose,
+                                                 check.sup=check.sup,
+                                                 use.observed.times=use.observed.times,
+                                                 length.times=length.times,
+                                                 check.times.size=check.times.size,
                                                  estimation=list("outcome"=list(fit=fit.outcome,
                                                                                 model=outcome.model,
                                                                                 changepoint=change.point),
@@ -214,19 +301,12 @@ run.fun <- function(competing.risk=FALSE,
                                                                             model=Surv(time, delta==3)~A+L1+L2+L3,
                                                                             changepoint=NULL)
                                                                  ),
-                                                 sl.models=list(
-                                                     mod1=c(Surv(time, delta==1)~A+L1+L2+L3, changepoint=c(0.3, 0.7)),
-                                                     mod2=c(Surv(time, delta==1)~A+L2.squared+L1*L2+L3, changepoint=NULL),
-                                                     mod3=c(Surv(time, delta==1)~A+L1.squared+L1*L2+L3, changepoint=c(0.3, 0.7)),
-                                                     mod4=c(Surv(time, delta==1)~A+L2.squared, changepoint=c(0.3, 0.7)),
-                                                     mod5=c(Surv(time, delta==1)~A+L1.squared, changepoint=c(0.3, 0.7)),
-                                                     mod6=c(Surv(time, delta==1)~A+L1.squared+L2+L3, changepoint=c(0.3, 0.7)),
-                                                     mod7=c(Surv(time, delta==1)~A+L2.squared, changepoint=NULL),
-                                                     mod8=c(Surv(time, delta==1)~A+L1.squared, changepoint=NULL),
-                                                     mod9=c(Surv(time, delta==1)~A+L1+L2+L3, changepoint=NULL),
-                                                     mod10=c(Surv(time, delta==1)~A*L1+L2+L3, changepoint=NULL),
-                                                     mod11=c(Surv(time, delta==1)~A*L1.squared+L2+L3, changepoint=NULL)
-                                                 )))
+                                                 sl.models=list(mod1=list(Surv(time, delta==1)~A+L1+L2+L3),
+                                                                mod2=list(Surv(time, delta==1)~A+L1.squared+L2+L3),
+                                                                mod3=list(Surv(time, delta==1)~L2.squared+A+L1.squared+L2+L3),
+                                                                mod4=list(Surv(time, delta==1)~A+L1.squared),
+                                                                mod5=list(Surv(time, delta==1)~A*L1+L2+L3),
+                                                                mod6=list(Surv(time, delta==1)~A*L1.squared+L2+L3))))
                        print(paste0("m=", m))
                        names(out) <- paste0("m=", m)
                        print(out)
@@ -237,18 +317,32 @@ run.fun <- function(competing.risk=FALSE,
 
     stopImplicitCluster()
 
-
     if (save.output) {
         saveRDS(out,
                 file=paste0("./simulation-contmle/output/",
                             "outlist-contmle",
+                            ifelse(no.effect.A, "-no-effect-A", ""),
+                            ifelse(competing.risk, "-competingrisk", ""),
+                            ifelse(competing.risk & cr3, "-cr3", ""),
+                            ifelse(is.character(weighted.norm), paste0("-", weighted.norm), ""),
+                            paste0("-effect-", ifelse(treat.effect%in%c("ate","both"), "ate", paste0("A", treat.effect))),
+                            "-M", M, ".rds"))
+        saveRDS(out,
+                file=paste0("./simulation-contmle/output/",
+                            "outlist-contmle",
+                            ifelse(no.effect.A, "-no-effect-A", ""),
                             ifelse(competing.risk, "-competingrisk", ""),
                             ifelse(competing.risk & cr3, "-cr3", ""), 
-                            paste0("-tau", tau, collapse=""), 
+                            ifelse(use.observed.times, paste0("-use-observed-times-length", length.times),
+                            ifelse(length(tau)>10 | (max(tau)>1.2 & length(tau)==10),
+                                   paste0("-tau", length(tau),
+                                          paste0("-tau", round(tau,3)[1:3], collapse="")),
+                                   paste0("-tau", round(tau,3), collapse=""))), 
                             paste0("-effect-", ifelse(treat.effect%in%c("ate","both"), "ate", paste0("A", treat.effect))),
                             ifelse(n!=1000, paste0("-n", n), ""),
                             ifelse(one.step, "-onestep", ""),
-                            ifelse(competing.risk & iterative & length(tau)==1, "-iterative", ""),
+                            ifelse(!competing.risk & iterative & length(tau)>1, "-iterative", ""),
+                            ifelse(competing.risk & (iterative & length(target)>1) & length(tau)==1, "-iterative", ""),
                             ifelse(is.character(weighted.norm), paste0("-", weighted.norm), ""),
                             ifelse(competing.risk, paste0("-target", target, collapse="-"), ""),
                             ifelse(square.effect2, "-squareL2unif", ""),
@@ -258,11 +352,12 @@ run.fun <- function(competing.risk=FALSE,
                             ifelse(randomize.A, "-randomizeA", ""),
                             ifelse(censoring.informative, "-informativeCensoring", ""),
                             ifelse(no.censoring, "-noCensoring", ""),
-                            ifelse(misspecify.outcome, "-misspecify-outcome", ""),
-                            ifelse(misspecify.cens, "-misspecify-cens", ""),
-                            paste0("-outcome-fit", fit.outcome),
-                            paste0("-censoring-fit", fit.cens),
-                            ifelse(competing.risk, paste0("-cr-fit", fit.cr), ""), 
+                            ifelse(all(fit.outcome=="cox") & misspecify.outcome, "-misspecify-outcome", ""),
+                            ifelse((any(fit.outcome=="hal") | any(fit.cens=="hal") | any(fit.cr=="hal")) & cox.hal, "-cox-hal", ""),
+                            ifelse(all(fit.cens=="cox") & misspecify.cens, "-misspecify-cens", ""),
+                            paste0("-outcome-fit", paste0(fit.outcome, collapse="")),
+                            paste0("-censoring-fit", paste0(fit.cens, collapse="")),
+                            ifelse(competing.risk, paste0("-cr-fit", paste0(fit.cr, collapse="")), ""), 
                             "-M", M, ".rds"))
     } else {
         return(out)
