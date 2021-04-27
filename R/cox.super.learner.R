@@ -35,6 +35,7 @@ cox.sl <- function(dt, V=5, A.name="A", method=3, only.cox.sl=FALSE, time.var="t
                 tmp[, fit.lp:=predict(cox.fit, type="lp", newdata=tmp)]
                 tmp[, term2:=cumsum(risk*exp(fit.lp)), by="period"]
                 tmp[term2==0, term2:=1]
+                #return(sum(tmp[risk==0, get(delta.var)*(period==max.period)*(fit.lp - log(term2))]))
                 return(sum(tmp[risk==0, get(delta.var)*(period==max.period)*(fit.lp - log(term2))]))
             } else {
                 if (any(class(cox.fit)=="coxnet")) {
@@ -47,6 +48,7 @@ cox.sl <- function(dt, V=5, A.name="A", method=3, only.cox.sl=FALSE, time.var="t
                 tmp[, term2:=cumsum(risk*exp(fit.lp))]
                 tmp[term2==0, term2:=1]
                 return(sum(tmp[risk==0, get(delta.var)*(fit.lp - log(term2))]))
+                #return(sum(tmp[risk==0, get(delta.var)*(fit.lp - log(term2))]))
             }
         }
    

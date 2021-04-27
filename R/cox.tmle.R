@@ -3,7 +3,7 @@ cox.tmle <- function(dt,
                      cr.model=Surv(time, delta==2)~A+L1, competing.risk=NULL, 
                      change.point=NULL, mod.period1="*L3", mod.period2="*L3",
                      tau=c(1.2),
-                     km.cens=FALSE, SL.method=2,
+                     km.cens=FALSE, sl.method=2,
                      cens.model=Surv(time, delta==0)~L1+L2+L3+A*L1,
                      treat.model=A~L1+L2+L3,
                      treat.effect=c("1", "0", "both", "stochastic"),
@@ -13,18 +13,20 @@ cox.tmle <- function(dt,
                      lambda.cvs=seq(0, 0.008, length=51)[-1], 
                      cut.covars=5, cut.time=10, cut.time.A=4,
                      covars=c("L1", "L2", "L3"),
+                     save.for.plot=FALSE, V=10,
                      one.step=FALSE, deps.size=0.001, no.small.steps=100, # FIXME: test again!
                      penalize.time=TRUE, adjust.penalization=TRUE,
                      poisson.cens=FALSE, cut.L1.A=5, cut.L.interaction=5, 
                      maxIter=5, verbose=TRUE, browse=FALSE, browse2=FALSE,
+                     save.hals.for.plotting=FALSE,
                      browse3=FALSE, browse4=FALSE,
                      only.cox=FALSE, only.cox.sl=FALSE,
-                     SL=FALSE, SL.cens=FALSE, SL.poisson=FALSE,
-                     SL.outcome.models=list(mod1=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.9),
+                     sl=FALSE, sl.cens=FALSE, sl.poisson=FALSE,
+                     sl.outcome.models=list(mod1=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.9),
                                             mod1a=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.2765),
                                             mod2=c(Surv(time, delta==1)~A*L1.squared+L1*L2+L3, t0=NULL),
                                             mod3=c(Surv(time, delta==1)~A+L1.squared, t0=NULL),
-                                            #mod4=c(Surv(time, delta==1)~A+L1+L2+L3, t0=1.2),
+                                            mod4=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.7),
                                             mod5=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.3),
                                             mod6=c(Surv(time, delta==1)~A+L1+L2+L3, t0=NULL),
                                             mod7=c(Surv(time, delta==1)~A+L3.squared, t0=NULL),
@@ -34,9 +36,8 @@ cox.tmle <- function(dt,
                                             mod10=c(Surv(time, delta==1)~L1+L2+L3+A*L1, t0=NULL),
                                             mod11=c(Surv(time, delta==1)~1, t0=NULL),
                                             mod12=c(Surv(time, delta==1)~A+L1+L2+L3, t0=0.192018),
-                                            #mod13=c(Surv(time, delta==1)~A+L1+L2+L3+I((period==2)&(L3>=0.5)), t0=0.192018),
-                                            #mod13=c(Surv(time, delta==1)~A+L1+L2+L3+I((period==2)&(L3>=0.5)), t0=0.192018*1.2),
-                                            #mod14=c(Surv(time, delta==1)~A+L1+L2+L3+I((period==2)&(L3>=0.5)), t0=0.9),
+                                            mod13=c(Surv(time, delta==1)~A+L1+L2.squared+L3, t0=0.7),
+                                            mod14=c(Surv(time, delta==1)~A+L1+L2.squared+L3, t0=0.9),
                                             mod15=c(Surv(time, delta==1)~A*L3+L1+L2, t0=0.2765),
                                             mod16=c(Surv(time, delta==1)~A*L3+L1+L2, t0=0.9),
                                             mod17=c(Surv(time, delta==1)~A*L3+L1+L2, t0=NULL)
@@ -96,11 +97,11 @@ cox.tmle <- function(dt,
         cens.km <- data.table(km.fit[, c("time", "surv")])
     }
 
-    if (SL.cens) { #-- cox-SL
+    if (sl.cens) { #-- cox-sl
 
-        print("use SL for censoring")
+        print("use sl for censoring")
 
-        SL.cens.outcome.models <- lapply(SL.outcome.models, function(mod) {
+        sl.cens.outcome.models <- lapply(sl.outcome.models, function(mod) {
             mod1 <- as.character(mod[[1]])
             return(c(as.formula(paste0(gsub("1", "0", mod1[2]), mod1[1], mod1[3])), t0=mod[2][[1]]))
         })
@@ -108,12 +109,12 @@ cox.tmle <- function(dt,
         dtcens <- copy(dt)
         dtcens[, delta:=1-delta]
 
-        SL.pick <- cox.sl(dtcens, tau=tau, A.name=A.name,
-                          outcome.models=SL.cens.outcome.models)
+        sl.pick <- cox.sl(dtcens, tau=tau, A.name=A.name, V=V,
+                          outcome.models=sl.cens.outcome.models)
 
-        SL.model <- SL.cens.outcome.models[[SL.pick]]
+        sl.model <- sl.cens.outcome.models[[sl.pick]]
 
-        cens.model <- SL.model[[1]]
+        cens.model <- sl.model[[1]]
 
         print(paste0("model picked for censoring: ", cens.model))
 
@@ -139,28 +140,28 @@ cox.tmle <- function(dt,
 
     #-- 3 -- estimate outcome distribution:
 
-    if (SL) { #-- cox-SL
+    if (sl) { #-- cox-sl
 
-        print("use SL")
+        print("use sl")
 
-        if (only.cox.sl) SL.method <- c(1,2)
-        SL.pick <- cox.sl(dt, tau=tau, A.name=A.name, only.cox.sl=only.cox.sl,
-                          method=SL.method, covars=covars,
-                          outcome.models=SL.outcome.models)
-        if (only.cox.sl) return(SL.pick)
+        #if (only.cox.sl) sl.method <- c(1,2)
+        sl.pick <- cox.sl(dt, tau=tau, A.name=A.name, only.cox.sl=only.cox.sl,
+                          method=sl.method, covars=covars, V=V,
+                          outcome.models=sl.outcome.models)
+        if (only.cox.sl) return(sl.pick)
         
-        SL.model <- SL.outcome.models[[SL.pick]]
+        sl.model <- sl.outcome.models[[sl.pick]]
 
-        if (length(SL.model)>1) {
-            print(paste0("model picked: ", outcome.model <- SL.model[[1]]))
-            print(paste0("model picked: ", change.point <- SL.model[[2]]))
+        if (length(sl.model)>1) {
+            print(paste0("model picked: ", outcome.model <- sl.model[[1]]))
+            print(paste0("model picked: ", change.point <- sl.model[[2]]))
         } else {
-            print(paste0("model picked: ", outcome.model <- SL.model[[1]]))
+            print(paste0("model picked: ", outcome.model <- sl.model[[1]]))
         }
 
     }
 
-    #-- Apply either specified model or the one picked by SL
+    #-- Apply either specified model or the one picked by sl
     
     if (length(change.point)>0) { #-- if there is a change-point:
 
@@ -194,8 +195,11 @@ cox.tmle <- function(dt,
         fit.cr.cox <- coxph(as.formula(deparse(cr.model)), #outcome.model,
                             data=dt)
     }
+
+    #print("cr model")
+    #print(fit.cr.cox)
     
-    if (verbose) print(fit.cox)
+    #if (verbose) print(fit.cr.cox)
 
     if (only.cox) return()
     
@@ -229,7 +233,7 @@ cox.tmle <- function(dt,
     }
 
     #-- 6 -- get baseline hazard:
-
+    
     bhaz.cox <- rbind(data.table(time=0, hazard=0),
                       merge(data.table(time=unique.times),
                             setDT(basehaz(fit.cox, centered=centered)),
@@ -243,6 +247,15 @@ cox.tmle <- function(dt,
                           by="time", all.x=TRUE)
         setnames(bhaz.cox, "hazard", "cr.chaz")
         bhaz.cox[, cr.dhaz:=c(0, diff(cr.chaz))]
+
+        if (length(change.point)>0) {
+            bhaz.cox <- rbind(bhaz.cox,
+                              data.table(time=change.point, dhaz=0, cr.dhaz=0, chaz=0, cr.chaz=0),
+                              data.table(time=tau, dhaz=0, cr.dhaz=0, chaz=0, cr.chaz=0))[order(time)]
+            bhaz.cox[, period:=(time<=change.point)*1+(time>change.point)*2]
+            bhaz.cox[, chaz:=cumsum(dhaz), by="period"]
+            bhaz.cox[, cr.chaz:=cumsum(cr.dhaz)]
+        }
     }
     
     #-- 6b -- add censoring baseline hazard:
@@ -255,9 +268,19 @@ cox.tmle <- function(dt,
         bhaz.cox[, cens.dhaz:=c(0, diff(cens.chaz))]
 
         if (length(change.point)>0) {
-            bhaz.cox <- rbind(bhaz.cox,
-                              data.table(time=change.point, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0),
-                              data.table(time=tau, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0))[order(time)]
+            if (competing.risk) {
+                bhaz.cox <- rbind(bhaz.cox,
+                                  data.table(time=change.point, dhaz=0,
+                                             cr.dhaz=0, cr.chaz=0,
+                                             cens.dhaz=0, chaz=0, cens.chaz=0, period=1),
+                                  data.table(time=tau, dhaz=0,
+                                             cr.dhaz=0, cr.chaz=0,
+                                             cens.dhaz=0, chaz=0, cens.chaz=0, period=tau))[order(time)]
+            } else {
+                bhaz.cox <- rbind(bhaz.cox,
+                                  data.table(time=change.point, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0),
+                                  data.table(time=tau, dhaz=0, cens.dhaz=0, chaz=0, cens.chaz=0))[order(time)]
+            }
             bhaz.cox[, period:=(time<=change.point)*1+(time>change.point)*2]
             bhaz.cox[, chaz:=cumsum(dhaz), by="period"]
             bhaz.cox[, cens.chaz:=cumsum(cens.dhaz)]
@@ -267,6 +290,10 @@ cox.tmle <- function(dt,
 
         bhaz.cox[, cens.chaz.1:=c(0, cens.chaz[-.N])]
     }
+
+    #print(bhaz.cox)
+    #print(unique(bhaz.cox[, summary(cr.dhaz)]))
+    #print(unique(bhaz.cox[, summary(cens.dhaz)]))
     
     #-- 7 -- dublicate bhaz.cox; for each treatment option:
 
@@ -305,6 +332,7 @@ cox.tmle <- function(dt,
         setnames(cens.km, "surv", "surv.cens")
         dt.a <- merge(dt.a, cens.km)
     }
+
 
     mat <- do.call("rbind", lapply(1:n, function(i) {
         tmp <- cbind(id=i, mat.cox)
@@ -364,33 +392,62 @@ cox.tmle <- function(dt,
         mat[, surv.tau:=surv.t[time==max(time[time<=tau])], by=c("id", "A")]
     }
     
-    if (browse) browser()
-
     #-- 10 -- poisson used for initial:
 
+    if (browse) browser()
+
     if (poisson.initial) {
-        mat <- poisson.hal(mat=mat, dt=dt, outcome.model=outcome.model,
-                           change.point=change.point, X=NULL, delta.outcome=1, verbose=verbose,
+
+        if (save.hals.for.plotting) {
+            save.hals <- do.call("rbind", lapply(lambda.cvs, function(lambda.cv) {
+                mat1 <- poisson.hal(mat=mat, dt=dt, X=NULL, delta.outcome=1, verbose=verbose,
+                                    cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
+                                    cut.time.A=cut.time.A, V=V,
+                                    cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
+                                    covars=covars,
+                                    #poisson.cens=poisson.cens,
+                                    fit.cens=ifelse(poisson.cens, "hal", "cox"),
+                                    sl.poisson=FALSE, 
+                                    lambda.cv=lambda.cv, #lambda.cvs=lambda.cvs,
+                                    penalize.time=penalize.time, adjust.penalization=adjust.penalization)
+                mat1[, lambda.cv:=lambda.cv]
+                return(mat1[id==1, c("A", "L1", "L2", "L3", "time", "fit.lambda", "lambda.cv"), with=FALSE])
+            }))
+
+            saveRDS(save.hals,
+                    file=paste0("./simulation-cox-tmle/output/",
+                                "outlist-different-hals",
+                                length(lambda.cvs), 
+                                ifelse(competing.risk, "-competingrisk", ""), 
+                                "-tau", tau, 
+                                ifelse(interaction.AL, "-interactionAL", ""),
+                                ifelse(interaction.Atime, "-interactionAtime", ""),
+                                ifelse(square.effect, "-squareL2", ""),
+                                ifelse(square.effect2, "-squareL2unif", ""),
+                                ".rds"))
+            return()
+        }
+           
+        mat <- poisson.hal(mat=mat, dt=dt, X=NULL, delta.outcome=1, verbose=verbose,
                            cut.covars=cut.covars, cut.time=cut.time, browse=FALSE,
-                           cut.time.A=cut.time.A,
+                           cut.time.A=cut.time.A, V=V,
                            cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
                            covars=covars,
-                           poisson.cens=poisson.cens,
-                           SL.poisson=SL.poisson, 
+                           fit.cens=ifelse(poisson.cens, "hal", "cox"),
+                           sl.poisson=sl.poisson, 
                            lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
                            penalize.time=penalize.time, adjust.penalization=adjust.penalization)
 
         #-- 10a -- poisson used for censoring distribution:
 
         if (poisson.cens) {
-            mat <- poisson.hal(mat=mat[["mat"]], dt=dt, outcome.model=outcome.model,
-                               change.point=change.point, X=mat[["X"]], delta.outcome=0, verbose=verbose,
+            mat <- poisson.hal(mat=mat[["mat"]], dt=dt, X=mat[["X"]], delta.outcome=0, verbose=verbose,
                                cut.covars=cut.covars, cut.time=cut.time,
-                               cut.time.A=cut.time.A, browse=FALSE,
+                               cut.time.A=cut.time.A, browse=FALSE, V=V,
                                cut.L1.A=cut.L1.A, cut.L.interaction=cut.L.interaction,
                                covars=covars,
-                               poisson.cens=poisson.cens,
-                               SL.poisson=SL.poisson, 
+                               fit.cens=ifelse(poisson.cens, "hal", ""),
+                               sl.poisson=sl.poisson, 
                                lambda.cv=lambda.cv, lambda.cvs=lambda.cvs,
                                penalize.time=penalize.time, adjust.penalization=adjust.penalization)
         }
@@ -427,6 +484,8 @@ cox.tmle <- function(dt,
             (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-surv.tau[1], by="id"][,2][[1]]))))
         }
     }
+
+   
 
     if (treat.effect[1]=="stochastic") {
         if (competing.risk) {
@@ -612,7 +671,22 @@ cox.tmle <- function(dt,
             
     }
     
-    if (!one.step) { # iterative tmle 
+    if (!one.step) { # iterative tmle
+
+        if (save.for.plot) {
+
+            saveRDS(merge(mat[, mean(surv.t), by=c("time", "A")],
+                          mat[id==1 & A==A.obs, (surv.t), by=c("time", "A")], by=c("time", "A")),
+                    file=paste0("./simulation-cox-tmle/output/",
+                                "outlist-initial-fitted",
+                                ifelse(competing.risk, "-competingrisk", ""), 
+                                "-tau", tau, 
+                                ifelse(interaction.AL, "-interactionAL", ""),
+                                ifelse(interaction.Atime, "-interactionAtime", ""),
+                                ifelse(square.effect, "-squareL2", ""),
+                                ifelse(square.effect2, "-squareL2unif", ""),
+                                ".rds"))
+        }
     
         for (iter in 1:maxIter) {
 
@@ -718,6 +792,22 @@ cox.tmle <- function(dt,
                 break
             }
         }
+
+            if (save.for.plot) {
+                saveRDS(merge(mat[, mean(surv.t), by=c("time", "A")],
+                              mat[id==1 & A==A.obs, (surv.t), by=c("time", "A")], by=c("time", "A")),
+                        file=paste0("./simulation-cox-tmle/output/",
+                                    "outlist-tmle-fitted",
+                                    ifelse(competing.risk, "-competingrisk", ""), 
+                                    "-tau", tau, 
+                                    ifelse(interaction.AL, "-interactionAL", ""),
+                                    ifelse(interaction.Atime, "-interactionAtime", ""),
+                                    ifelse(square.effect, "-squareL2", ""),
+                                    ifelse(square.effect2, "-squareL2unif", ""),
+                                    ".rds"))
+            }
+
+        
     }
 
     return(tmle.list)    

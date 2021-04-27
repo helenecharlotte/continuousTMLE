@@ -111,7 +111,11 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
         if (randomize.A) A <- rbinom(n, 1, plogis(qlogis(0.5))) else if (categorical)
                                                                     A <- rbinom(n, 1, plogis(0.4+0.3*L1)) else A <- rbinom(n, 1, plogis(0.4+0.3*L1-0.3*L2))
     } else {
-        if (randomize.A) A <- rbinom(n, 1, plogis(qlogis(0.5))) else A <- rbinom(n, 1, plogis(0.4-0.3*L1-0.25*L2))
+        if (randomize.A) A <- rbinom(n, 1, plogis(qlogis(0.5))) else A <- rbinom(n, 1, plogis(-0.9-0.3*L1-1.5*(L2<0.2)))
+        if (print.forms & !randomize.A) {
+            print("treatment model:")
+            print("(-0.9-0.3*L1-0.2*(L2<0.2))")
+        }
     }
     
     if (length(intervention.A)>0 & is.numeric(intervention.A)) A <- intervention.A else if (length(intervention.A)>0 & is.function(intervention.A)) A <- rbinom(n, 1, intervention.A(cbind(L1,L2,L3)))
@@ -259,8 +263,18 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
         print("Outcome hazard form: ")
         print(phiT)
         print(paste0("betaA=", betaA))
+        if (length(t0)>0) print(paste0("t0=", t0))
         print("Censoring hazard form: ")
         print(phiC)
+        if (competing.risk) {
+            print("Cause-2 hazard form: ")
+            print(phiT2)
+            print(paste0("betaA2=", betaA2))
+            if (no.cr>2) {
+                print("Cause-3 hazard form: ")
+                print(phiT3)
+            }
+        }
     }
 
 

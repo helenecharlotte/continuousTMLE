@@ -44,7 +44,7 @@ run.fun <- function(competing.risk=FALSE,
     eta   <- 0.7
     t0    <- 0.9
     
-    if (setting==1) {
+    if (setting==1 | setting==3) {
         square.effect1        <- TRUE#FALSE#FALSE#TRUE
         square.effect2        <- FALSE#TRUE#TRUE#FALSE
         interaction.Atime     <- TRUE#FALSE#FALSE#TRUE
@@ -70,6 +70,11 @@ run.fun <- function(competing.risk=FALSE,
     if (reversed.setting) {
         if (!no.effect.A) betaA <- 0.5
         t0 <- 0.7
+    }
+
+    if (setting==3) {
+        betaA <- 0.5
+        t0 <- 0.8
     }
 
     if (square.effect2) {
@@ -177,6 +182,7 @@ run.fun <- function(competing.risk=FALSE,
         saveRDS(psi0.save,
                 file=paste0("./simulation-contmle/output/",
                             "save-psi0",
+                            ifelse(setting==3, "-setting3", ""),
                             ifelse(no.effect.A, "-no-effect-A", ""),
                             ifelse(competing.risk, "-competingrisk", ""),
                             ifelse(competing.risk & cr3, "-cr3", ""), 
@@ -321,6 +327,7 @@ run.fun <- function(competing.risk=FALSE,
         saveRDS(out,
                 file=paste0("./simulation-contmle/output/",
                             "outlist-contmle",
+                            ifelse(setting==3, "-setting3", ""),
                             ifelse(no.effect.A, "-no-effect-A", ""),
                             ifelse(competing.risk, "-competingrisk", ""),
                             ifelse(competing.risk & cr3, "-cr3", ""),
@@ -330,6 +337,7 @@ run.fun <- function(competing.risk=FALSE,
         saveRDS(out,
                 file=paste0("./simulation-contmle/output/",
                             "outlist-contmle",
+                            ifelse(setting==3, "-setting3", ""),
                             ifelse(no.effect.A, "-no-effect-A", ""),
                             ifelse(competing.risk, "-competingrisk", ""),
                             ifelse(competing.risk & cr3, "-cr3", ""), 

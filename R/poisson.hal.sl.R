@@ -14,9 +14,7 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A", delta.v
     set.seed(19192)
 
     n <- nrow(dt)
-    unique.times <- sort(unique(dt[, get(time.var)]))
-    unique.T <- sort(unique(dt[get(delta.var)==delta.outcome, get(time.var)]))
-    unique.Tdiff <- unique.T - c(0, unique.T[-length(unique.T)])
+    
     cv.split <- matrix(sample(1:n, size=n), ncol=V)
 
     outlist.hal <- list()
@@ -25,7 +23,8 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A", delta.v
         if (any(dN==0 & lambda==0)) {
             lambda[dN==0 & lambda==0] <- 1
         }
-        return(-sum(log(lambda)*dN - exp(-Lambda)))
+        #return(-sum(log(lambda)*dN - exp(-Lambda)))
+        return(-sum(log(lambda)*dN - Lambda))
     }
 
     if (browse) browser()
@@ -43,16 +42,12 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A", delta.v
 
         mat.train <- mat[id %in% train.set]
 
-        mat.train[, RT:=sum(tdiff*(get(time.var)<=time.obs)), by=c("x", A.name)]
-        mat.train[, D:=sum(event.poisson.hal*(get(time.var)<=time.obs)), by=c("x", A.name)]
+        mat.train[, RT:=sum(tdiff), by=c("x")]
+        mat.train[, D:=sum(event.poisson.hal), by=c("x")]
 
-        if (length(mat[, unique(get(A.name))])>1) reduce.A <- TRUE else reduce.A <- FALSE
+        tmp.train <- unique(mat.train[, c("RT", "D", "x"), with=FALSE])
 
-        tmp.train <- unique(mat.train[get(time.var)<=time.obs & (!reduce.A | A.obs==get(A.name)),
-                                      c("RT", "D", "x"), with=FALSE])
-
-        X.obs <- unique.matrix(X[mat$id %in% train.set,][mat.train[, get(time.var)]<=mat.train$time.obs,
-                                                         cols.obs])[tmp.train$RT>0,]
+        X.obs <- unique.matrix(X[mat$id %in% train.set,])[tmp.train$RT>0,]
 
         Y <- tmp.train[RT>0, D] 
         offset <- tmp.train[RT>0, log(RT)]
@@ -74,13 +69,14 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A", delta.v
                              penalty.factor=penalty.factor,
                              maxit=maxit)
 
+            #if (verbose) print(paste0("lambda=", lambda.cv))
             #if (verbose) print(coef(fit.vv, s=lambda.cv))
 
-            mat[id %in% test.set, fit.lambda.vv:=exp(predict(fit.vv, X[mat$id %in% test.set, cols.obs],
+            mat[id %in% test.set, fit.lambda.vv:=exp(predict(fit.vv, X[mat$id %in% test.set,],
                                                              newoffset=0, s=lambda.cv))]
 
             mat[id %in% test.set, fit.pois.dLambda.vv:=fit.lambda.vv*tdiff]
-            mat[id %in% test.set, fit.pois.Lambda.vv:=cumsum(fit.pois.dLambda.vv), by=c("id", A.name)]
+            mat[id %in% test.set, fit.pois.Lambda.vv:=cumsum(fit.pois.dLambda.vv), by=c("id")]
  
             check <- try(sum(abs(coef(fit.vv, s=lambda.cv)[,1]))==0)
              
@@ -90,9 +86,9 @@ poisson.hal.sl <- function(mat, dt, X=NULL, time.var="time", A.name="A", delta.v
                 if (sum(abs(coef(fit.vv)[,1]))==0) {
                     return(Inf)
                 } else {
-                    return(lebesgue.log.like.loss.fun(dN=mat[id %in% test.set & get(time.var)==time.obs, 1*(delta.obs==delta.outcome)],
-                                                      lambda=mat[id %in% test.set & get(time.var)==time.obs, fit.lambda.vv],
-                                                      Lambda=mat[id %in% test.set & get(time.var)==time.obs, fit.pois.Lambda.vv]))
+                    return(lebesgue.log.like.loss.fun(dN=mat[id %in% test.set & obs.tgrid==1, dN],
+                                                      lambda=mat[id %in% test.set & obs.tgrid==1, fit.lambda.vv],
+                                                      Lambda=mat[id %in% test.set & obs.tgrid==1, fit.pois.Lambda.vv]))
                 }
             }
         })

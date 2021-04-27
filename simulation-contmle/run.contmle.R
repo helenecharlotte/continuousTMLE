@@ -28,8 +28,10 @@ library(foreach)
 library(doParallel)
 library(survival)
 library(riskRegression)
+library(prodlim)
 library(Matrix)
 library(coefplot)
+library(hdnom)
 
 numextract <- function(string){ 
     as.numeric(str_extract(string, "\\-*\\d+\\.*\\d*"))
@@ -58,18 +60,19 @@ if (system("echo $USER",intern=TRUE)%in%c("jhl781")){
 ## source relevant scripts
 #-------------------------------------------------------------------------------------------#
 
-source("./R/sim.data.continuous.R")
-source("./R/contmle.R")
-source("./R/cox.super.learner.R")
-source("./R/poisson.hal.R")
-source("./R/poisson.hal.sl.R")
+#source("./R/sim.data.continuous.R")
+source("/home/helene/research/phd/berkeley/backups-continuousTMLE/dec-3/R/sim.data.continuous.R")
+source("/home/helene/research/phd/berkeley/backups-continuousTMLE/nov-27/R/contmle.R")
+source("/home/helene/research/phd/berkeley/backups-continuousTMLE/nov-27/R/cox.super.learner.R")
+source("/home/helene/research/phd/berkeley/backups-continuousTMLE/nov-27/R/poisson.hal.R")
+source("/home/helene/research/phd/berkeley/backups-continuousTMLE/nov-27/R/poisson.hal.sl.R")
 
 #-------------------------------------------------------------------------------------------#
 ## set parameters for simulations
 #-------------------------------------------------------------------------------------------#
 
 #M <- 503; 504; 505; 507
-M         <- 500#1000#1001#600#5#501#1000#10#500#500#500#500#500#508#100#506#25#503#501#25#100#5#100#100#500#500
+M         <- 500#500#1000#1001#600#5#501#1000#10#500#500#500#500#500#508#100#506#25#503#501#25#100#5#100#100#500#500
 n         <- 1000
 get.truth <- FALSE#FALSE
 
@@ -82,10 +85,23 @@ t0    <- 0.9
 treat.effect <- "both"
 tau          <- 1.2
 
-square.effect1        <- TRUE#FALSE#TRUE
-square.effect2        <- FALSE#TRUE#FALSE
-interaction.Atime     <- TRUE#FALSE#TRUE
-reversed.setting      <- TRUE#FALSE#TRUE
+
+if (TRUE) {
+    square.effect1        <- TRUE#FALSE#FALSE#TRUE
+    square.effect2        <- FALSE#TRUE#TRUE#FALSE
+    interaction.Atime     <- TRUE#FALSE#FALSE#TRUE
+    reversed.setting      <- TRUE#FALSE#FALSE#TRUE
+} else {
+    square.effect1        <- FALSE#FALSE#TRUE
+    square.effect2        <- TRUE#TRUE#FALSE
+    interaction.Atime     <- FALSE#FALSE#TRUE
+    reversed.setting      <- FALSE#FALSE#TRUE
+}
+
+## square.effect1        <- TRUE#FALSE#TRUE
+## square.effect2        <- FALSE#TRUE#FALSE
+## interaction.Atime     <- TRUE#FALSE#TRUE
+## reversed.setting      <- TRUE#FALSE#TRUE
 competing.risk        <- FALSE#TRUE#FALSE
 randomize.A           <- TRUE
 censoring.informative <- TRUE
@@ -349,7 +365,7 @@ out <- foreach(m=1:M, .errorhandling="pass"
 
                    print(dt[, table(time<=tau, delta, A)])
 
-                   return(list("est"=contmle(dt,
+                   return(list("est"=contmle(dt, sl.method=3, #only.cox.sl=TRUE,
                                              change.point=change.point,
                                              outcome.model=outcome.model,
                                              cens.model=cens.model,
@@ -360,6 +376,7 @@ out <- foreach(m=1:M, .errorhandling="pass"
                                              fit.cens=fit.cens,
                                              treat.effect=treat.effect,
                                              tau=tau,
+                                             #deps.size=0.01,
                                              cut.time=10, V=5,#10,
                                              cut.time.A=10,
                                              cut.covars=8, cut.L1.A=8,#3,
@@ -379,7 +396,8 @@ out <- foreach(m=1:M, .errorhandling="pass"
                                                             mod7=c(Surv(time, delta==1)~A+L1+L2+L3, t0=NULL),
                                                             mod8c=c(Surv(time, delta==1)~A*L1+L2+L3, t0=NULL),
                                                             mod9c=c(Surv(time, delta==1)~A*L1.squared+L2+L3, t0=NULL),
-                                                            mod10=c(Surv(time, delta==1)~A+L1.squared, t0=0.7)
+                                                            mod10=c(Surv(time, delta==1)~A+L1.squared, t0=0.7)#,
+                                                            #mod10.coxnet=c(coxnet=Surv(time, delta==1)~A+L1.squared, penalty=seq(0.00001, 0.01, length=10))
                                                             ))))
 
                }
