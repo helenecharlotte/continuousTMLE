@@ -1,7 +1,7 @@
 #' contmle
 #'
-#' @param dt \[data.table\] comprised of (t) time-to-event, (J) outcome, (A) intervention, (L) covariates, (ID) id
-#' @param estimation \[list\] of outcome models:
+#' @param dt \[data.table\] comprised of (t) time-to-event \[numeric\], (J) event type \[integer\] where censoring events = 0, (A) intervention \[numeric\], (L) covariates, (ID) id
+#' @param estimation named \[list\] of models: one for each target outcome event \[j\], one for censoring \[0\], and one for treatment assignment \[A\]
 #' @param target \[numeric: 1\] . Which event(s) to target
 #' @param hal.screening \[logical: F\] use poisson-based (T/F?) or cox-based hal (T/F?)
 #' @param one.step \[logical: F\] use one-step tmle (T) or iterative TMLE (F). Defaults to TRUE if competing risks are present)
@@ -49,12 +49,19 @@
 #'
 #' @examples
 contmle <- function(dt,
+                    time.var = NULL,
+                    delta.var = NULL,
+                    A.var = NULL,
+                    id.var = NULL,
                     #-- outcome model;
                     estimation = list("outcome" = list(fit = c("sl", "sl", "hal", "km"),
-                                                       model = Surv(time, delta == 1) ~ A,                                                    changepoint = NULL),
+                                                       model = Surv(time, delta == 1) ~ A + .,
+                                                       changepoint = NULL),
                                       "cens" = list(fit = c("sl", "sl", "hal", "km"),
-                                                    model = Surv(time, delta == 0) ~ A,
-                                                    changepoint = NULL)
+                                                    model = Surv(time, delta == 0) ~ A + .,
+                                                    changepoint = NULL),
+                                      "treat" = list(fit = c("sl", "glm"),
+                                                     model = A ~ .)
                     ), # should add treatmodel to this estimation list
                     #-- when there are competing risks, what is the target?
                     target = 1,
@@ -69,9 +76,9 @@ contmle <- function(dt,
                     #-- treatment model;
                     treat.model = A ~ L1 + L2 + L3,
                     #-- cut-off for truncation of censoring weights;
-                    cut.off.cens=1e-3,
+                    cut.off.cens = 1e-3,
                     #-- target cause-specific hazards separately or together in one-step tmle;
-                    separate.cr=FALSE, #DO NOT CHANGE.
+                    separate.cr = FALSE, #DO NOT CHANGE.
                     #-- use weighted norm in multivariate one-step;
                     weighted.norm = c(FALSE, "sigma", "Sigma"),
                     #-- treatment effect of interest;
@@ -81,9 +88,9 @@ contmle <- function(dt,
                     #-- time-point(s) of interest;
                     tau = c(1.2),
                     #-- increasing grid? ;
-                    use.observed.times=FALSE,
-                    length.times=length(tau),
-                    check.times.size=NULL,#100,
+                    use.observed.times = FALSE,
+                    length.times = length(tau),
+                    check.times.size = NULL,#100,
                     #-- pick super learning loss (should not change this);
                     sl.method = 3, #DO NOT CHANGE.
                     #-- number of folds in cross-validation;
@@ -93,70 +100,105 @@ contmle <- function(dt,
                     maxit = 1e3,
                     #-- specify grid over which to pick penalization in hal by cross-validation;
                     #lambda.cvs=seq(0.00000000001, 0.1, length=50),
-                    init.lambda.cvs = c(sapply(1:5, function(jjj) (9:1)/(10^jjj))),
-                    lambda.cvs = seq(0.0000001, 0.01, length = 50),#seq(0, 0.008, length=51)[-1],
+                    init.lambda.cvs = c(sapply(1:5, function(jjj) (9:1) / (10^jjj))),
+                    lambda.cvs = seq(0.0000001, 0.01, length = 50), #seq(0, 0.008, length=51)[-1],
                     lambda.grid.size = 50,
                     #-- penalize time indicators in hal?
-                    penalize.time=FALSE,
+                    penalize.time = FALSE,
                     #-- pick grid for indicators in hal;
-                    cut.covars=8, cut.time=10,
-                    cut.time.A=10,
-                    cut.L.A=8, cut.L.interaction=3,
+                    cut.covars = 8, cut.time = 10,
+                    cut.time.A = 10,
+                    cut.L.A = 8, cut.L.interaction = 3,
                     #-- maximum number of iterations in iterative tmle;
-                    maxIter=10,
-                    verbose=FALSE, verbose.sl=FALSE, check.sup=FALSE,
+                    maxIter = 10,
+                    verbose = FALSE, verbose.sl = FALSE, check.sup = FALSE,
                     #-- for comparison; output kaplan-meier and hr;
-                    output.km=FALSE, only.km=FALSE, only.cox.sl=FALSE, output.RR=FALSE,
+                    output.km = FALSE, only.km = FALSE, only.cox.sl = FALSE, output.RR = FALSE,
                     #-- models incorporated in super learner;
                     sl.change.points = (0:12)/10,
-                    sl.models=list(mod1=list(Surv(time, delta==1)~A+L1+L2+L3),
-                                   mod2=list(Surv(time, delta==1)~A+L1.squared+L2+L3),
-                                   mod3=list(Surv(time, delta==1)~L2.squared+A+L1.squared+L2+L3),
-                                   mod4=list(Surv(time, delta==1)~A+L1.squared),
-                                   mod5=list(Surv(time, delta==1)~A*L1+L2+L3),
-                                   mod6=list(Surv(time, delta==1)~A*L1.squared+L2+L3))) {
+                    sl.models = list(mod1 = list(Surv(time, delta == 1) ~ A + L1 + L2 + L3), ########### make sl.models a part of each estimation list model? ----------------------------
+                                     mod2 = list(Surv(time, delta == 1) ~ A + L1.squared + L2 + L3),
+                                     mod3 = list(Surv(time, delta == 1) ~ L2.squared + A + L1.squared + L2 + L3),
+                                     mod4 = list(Surv(time, delta == 1) ~ A + L1.squared),
+                                     mod5 = list(Surv(time, delta == 1) ~ A*L1 + L2 + L3),
+                                     mod6 = list(Surv(time, delta == 1) ~ A*L1.squared + L2 + L3))) {
 
     if (verbose) verbose.sl <- TRUE
 
     not.fit.list <- list()
 
+    #-- checks for input data table
+    if (!is.data.frame(dt))
+        stop("dt should be a data.table")
+    if (!("data.table" %in% class(dt))) {
+        dt <- data.table::as.data.table(dt)
+        warning("input dt should be in data.table format.")
+    }
+    if (max(apply(dt, 2, anyNA)) > 0 | max(apply(dt, 2, function(col) sum(is.null(col)))) > 0)
+        stop("Missing and Null values are not supported.")
+
     #-- names of time variable and event (delta) variable;
+    if (is.null(time.var)) ########## fragile, depends on Surv model spec. Remove & require user specification of time.var? ------------------------------------------
     time.var <- gsub("Surv\\(", "", unlist(strsplit(as.character(estimation[[1]][["model"]])[2], ","))[1])
+    if (!(time.var %in% colnames(dt)))
+        stop("time.var was not specified and the time-to-event variable specified in the first estimation model was not found in the input dt.")
+    if (!(typeof(unlist(dt[, time.var])) %in% c("numeric", "integer")))
+        stop(paste0("Time variable ", time.var, " must be numeric."))
+    if (any(dt[, time.var] <= 0))
+        stop("Some failure times are less than or equal zero.")
+
+    if (is.null(delta.var)) ########## fragile, depends on Surv model spec. Remove & require user specification of time.var? ------------------------------------------
     delta.var <- gsub(" ", "",
                       gsub("==", "",
                            gsub("[0-9]+\\)", "",
                                 unlist(strsplit(as.character(estimation[[1]][["model"]])[2], ","))[2])))
+    if (!(delta.var %in% colnames(dt)))
+        stop("delta.var was not specified and event type variable specified in the first estimation model was not found in the input dt.")
+    if (!(typeof(unlist(dt[, delta.var])) %in% c("numeric", "integer")))
+        stop("delta.var should be non-negative integers: 0 denoting a censoring event positive integers denoting other endpoints.")
 
     #-- add event value to list of estimation, and only include those observed;
-    estimation <- lapply(estimation, function(x) {
-        event <- as.numeric(gsub("\\D", "", unlist(strsplit(as.character(x[["model"]])[2], ","))[2]))
-        x[[length(x)+1]] <- event
-        names(x)[length(x)] <- "event"
-        if (!(event %in% dt[, unique(get(delta.var))]))
-            message(paste0("model specified for ", delta.var, "=", event,
-                           ", but there were no observations")) else return(x)
-    })
+    ############### Different model for each target outcome? --------------------------------------------------------------------------------------------------------------
+    if (length(estimation) != length(targets) + 2 | sort(names(estimation)) != sort(c(targets, "A", "0")))
+        warning("Models should be provided for censoring, treatment assignment, and each target event.")
 
-    estimation <- estimation[sapply(estimation, function(each) length(each)>0)]
+    for (var in c("A", "0", sort(targets))) {
+        if (exists(estimation[[var]])) {
+            if (var %in% as.character(targets)) {
+                if (!(as.numeric(var) %in% dt[, unique(get(delta.var))]))
+                    stop(paste0("model specified for ", delta.var, "=", event,
+                                ", but there were no observations"))
+            }
+        }
+        else {
+            stop(paste0("Model not specified for ", ifelse(var == "A", "", paste0(delta.var, "=")),
+                        var, "."))  ############ enable defaulting to a main terms model using all baseline covariates?
+        }
+    }
+
+    ############## Is this a check that estimation is specified correctly? ----------------------------------------------------
+    estimation <- estimation[sapply(estimation, function(each) length(each) > 0)]
 
     #-- is model specified multiple times for one event type?
     events <- unlist(lapply(estimation, function(each) each[["event"]]))
-    if (any(table(events)>1)) {
+    if (any(table(events) > 1)) {
         stop(paste0("multiple models specified for ", delta.var, "=",
-                    paste0(names(table(events))[table(events)>1], collapse=",")))
+                    paste0(names(table(events))[table(events) > 1], collapse = ",")))
     }
 
     #-- a missing model for one of the deltas?
-    delta.missing <- dt[, unique(get(delta.var))][!(dt[, unique(get(delta.var))] %in% unlist(lapply(estimation, function(each) each[["event"]])))]
+    delta.missing <- dt[, unique(get(delta.var))][!(dt[, unique(get(delta.var))] %in%
+                                                        unlist(lapply(estimation, function(each) each[["event"]])))]
     if (length(delta.missing)) {
-        warning(paste0("No model specified for event type=", paste0(delta.missing, collapse=","),
+        warning(paste0("No model specified for event type=", paste0(delta.missing, collapse = ","),
                        "; will use the one specified for event type=",
                        estimation[[1]][["event"]]))
         for (delta in delta.missing) {
-            estimation[[length(estimation)+1]] <- estimation[[1]]
+            estimation[[length(estimation) + 1]] <- estimation[[1]]
             estimation[[length(estimation)]][["event"]] <- delta
             estimation[[length(estimation)]][["model"]] <-
-                as.formula(paste0(gsub(estimation[[1]][["event"]], delta, estimation[[length(estimation)]][["model"]][2]),
+                as.formula(paste0(gsub(estimation[[1]][["event"]], delta,
+                                       estimation[[length(estimation)]][["model"]][2]),
                                   estimation[[length(estimation)]][["model"]][1],
                                   estimation[[length(estimation)]][["model"]][3]))
         }
@@ -166,104 +208,121 @@ contmle <- function(dt,
     #-- 0 -- some initializations:
 
     #-- are there competing risks?
-    if (length(dt[get(delta.var)>0, unique(get(delta.var))])>1) cr <- TRUE else cr <- FALSE
-    if (!cr) target <- 1 else if (length(dt[get(delta.var)>0, unique(get(delta.var))])<3)
-        target <- target[target<3]
+    cr <- FALSE
+    if (length(dt[get(delta.var) > 0, unique(get(delta.var))]) > 1)
+        cr <- TRUE
+    if (!cr)
+        target <- 1
+    else if (length(dt[get(delta.var) > 0, unique(get(delta.var))]) < 3)
+        target <- target[target < 3]
 
     #-- get number of subjects:
-    n <- length(dt[, unique(id)])
+    if (is.null(id.var)) {
+        n <- nrow(dt)
+        warning("No id variable specified. Defaulting to n equals the number of rows in the input data table.")
+    } else
+        n <- length(dt[, unique(get(id.var))])
 
     #-- get treatment colname:
-    A.name <- as.character(treat.model)[2]
+    if (is.null(A.var)) A.var <- as.character(treat.model)[2]
+
+    ##################### check support of target intervention ----------------------------------------
 
     #-- list of covariates
     covars <- NULL
+    covars <- setdiff(colnames(dt), c(delta.var, A.var, time.var, id.var))
     for (mod in c(lapply(sl.models, function(x) x[[1]]),
                   unlist(lapply(estimation, function(x) x[["model"]])))) {
         mod3 <- as.character(mod)[3]
         covars <- unique(c(covars, unlist(strsplit(gsub("\\+", " ",
                                                         mod3), " "))))
-        covars <- covars[!covars%in%c(A.name, "", "*")]
-        if (length(grep(".squared", mod3))>0) {
+        covars <- covars[!covars %in% c(A.var, "", "*")]
+        if (length(grep(".squared", mod3)) > 0) {
             names.squared <- unique(gsub(".squared", "",
                                          grep(".squared", unlist(strsplit(gsub("\\+", " ",
                                                                                mod3), " ")),
-                                              value=TRUE)))
+                                              value = TRUE)))
             for (col in names.squared)
-                dt[, (paste0(col, ".squared")):=get(col)^2]
+                dt[, (paste0(col, ".squared")) := get(col)^2]
         }
-        if (length(grep(".log", mod3))>0) {
+        if (length(grep(".log", mod3)) > 0) {
             names.log <- unique(gsub(".log", "",
                                      grep(".log", unlist(strsplit(gsub("\\+", " ",
                                                                        mod3), " ")),
-                                          value=TRUE)))
+                                          value = TRUE)))
             for (col in names.log)
-                dt[, (paste0(col, ".log")):=log(get(col))]
+                dt[, (paste0(col, ".log")) := log(get(col))]
         }
     }
-    if (length(grep(".squared", covars))>0) covars <- covars[-grep(".squared", covars)]
-    if (length(grep(".log", covars))>0) covars <- covars[-grep(".log", covars)]
-    if (length(grep("cut.", covars))>0) covars <- covars[-grep("cut.", covars)]
+    if (length(grep(".squared", covars)) > 0) covars <- covars[-grep(".squared", covars)]
+    if (length(grep(".log", covars)) > 0) covars <- covars[-grep(".log", covars)]
+    if (length(grep("cut.", covars)) > 0) covars <- covars[-grep("cut.", covars)]
 
-    covars <- covars[covars!="1"]
+    covars <- covars[covars != "1"]
     for (covar in covars) {
-        if (dt[, length(unique(get(covar)))]==1) covars <- covars[covars!=covar]
+        if (dt[, length(unique(get(covar)))] == 1) {
+            covars <- covars[covars != covar]
+            warning(paste0("The covariate ", covar, " is constantly valued and has been removed."))
+        }
     }
 
     if (verbose) print(covars)
 
     #-- get unique times in dataset
     unique.times <- sort(unique(dt[, get(time.var)]))
-    unique.times2 <- sort(unique(dt[get(delta.var)>0, get(time.var)]))
+    unique.times2 <- sort(unique(dt[get(delta.var) > 0, get(time.var)]))
 
     #-- intervals in tau where no obs?
 
     if (use.observed.times) {
         n <- nrow(dt)
-        unique.times3 <- unique.times[unique.times<=max(tau)]
+        unique.times3 <- unique.times[unique.times <= max(tau)]
         set.seed(1)
         tau <- sort(unique.times3[sample(length(unique.times3), length.times)])
     } else {
         test.tau <- findInterval(tau, unique.times2)
-        if (FALSE & !length(test.tau)==length(unique(test.tau))) {
-            tau <- na.omit(tau[(1:length(tau))[unique(findInterval(unique.times2, tau))+1]])
+        if (FALSE & !length(test.tau) == length(unique(test.tau))) {
+            tau <- na.omit(tau[(1:length(tau))[unique(findInterval(unique.times2, tau)) + 1]])
             warning("no observations between tau as specified, truncating tau")
         }
     }
 
     #-- which parameters are we interested in?
-    if (treat.effect[1]=="1") a <- 1 else if (treat.effect[1]=="0") a <- 0 else a <- c(1, 0)
+    if (treat.effect[1] == "1") a <- 1 else if (treat.effect[1] == "0") a <- 0 else a <- c(1, 0)
 
     #-- initialize dataset to be used later;
     dt2 <- NULL
-    bhaz.cox <- do.call("rbind", lapply(a, function(aa) data.table(time=c(0, unique.times), A=aa)))
-    setnames(bhaz.cox, "A", A.name)
+    bhaz.cox <- do.call("rbind", lapply(a, function(aa) data.table(time = c(0, unique.times), A = aa)))
+    setnames(bhaz.cox, "A", A.var)
 
     #-- if there is any of the outcome models that uses coxnet
     sl.models.tmp <- sl.models
     sl.models <- list()
     #-- add separate sl models when specified with, e.g., multiple changepoints
     for (k1 in 1:length(sl.models.tmp)) {
-        if (length(sl.models.tmp[[k1]])>1) {
+        if (length(sl.models.tmp[[k1]]) > 1) {
             for (k2 in 2:length(sl.models.tmp[[k1]])) {
-                sl.models[[length(sl.models)+1]] <- c(sl.models.tmp[[k1]][1],
-                                                      sl.models.tmp[[k1]][k2])
-                if (length(sl.models.tmp[[k1]])>=3) {
+                sl.models[[length(sl.models) + 1]] <- c(sl.models.tmp[[k1]][1],
+                                                        sl.models.tmp[[k1]][k2])
+                if (length(sl.models.tmp[[k1]]) >= 3) {
                     names(sl.models)[length(sl.models)] <- paste0(names(sl.models.tmp)[k1], k2)
                 } else {
                     names(sl.models)[length(sl.models)] <- names(sl.models.tmp)[k1]
                 }
             }
         } else {
-            sl.models[[length(sl.models)+1]] <- c(sl.models.tmp[[k1]][1])
+            sl.models[[length(sl.models) + 1]] <- c(sl.models.tmp[[k1]][1])
             names(sl.models)[length(sl.models)] <- names(sl.models.tmp)[k1]
         }
     }
 
     #-- 2 -- estimate treatment propensity:
-
-    prob.A <- predict(glm(as.formula(deparse(treat.model)), data=dt), type="response")
-
+    # allow other specifications for A?
+    if (estimation[["A"]][['fit']] == "glm") {
+        if (class(estimation[["A"]][["model"]]) == "formula")
+            prob.A <- predict(glm(as.formula(deparse(estimation[["A"]][["model"]])), data = dt), # would we want to save the A model & not just the A probability predictions?
+                              type = "response")
+    }
     print(summary(prob.A))
 
     #-- 3 -- estimation -- loop over causes (including censoring):
@@ -272,12 +331,13 @@ contmle <- function(dt,
 
         fit <- estimation[[each]][["fit"]][1]
         fit.model <- estimation[[each]][["model"]]
-        if (any(names(estimation[[each]])=="changepoint"))
-            fit.changepoint <- estimation[[each]][["changepoint"]] else fit.changepoint <- NULL
+        if (any(names(estimation[[each]]) == "changepoint"))
+            fit.changepoint <- estimation[[each]][["changepoint"]]
+        else fit.changepoint <- NULL
         fit.delta <- estimation[[each]][["event"]]
         fit.name <- names(estimation)[each]
 
-        if (fit[1]=="sl" | fit[1]=="cox.hal.sl") { #-- cox-sl
+        if (fit[1] == "sl" | fit[1] == "cox.hal.sl") { #-- cox-sl
 
             if (verbose) print(paste0("use sl for ", fit.name))
 
@@ -287,9 +347,9 @@ contmle <- function(dt,
             set.seed(1)
             #if (fit.delta==0) browser()
             sl.pick <- suppressWarnings(
-                cox.sl(loss.fun=cox.loss.fun, dt=dt, delta.var=delta.var,
-                       treatment=A.name, V=V, delta.value=fit.delta,
-                       cox.models=sl.models, change.points=sl.change.points))
+                cox.sl(loss.fun = cox.loss.fun, dt = dt, delta.var = delta.var,
+                       treatment = A.var, V = V, delta.value = fit.delta,
+                       cox.models = sl.models, change.points = sl.change.points))
             cve.sl.pick <- sl.pick$picked.cox.model$cve
             fit.model <- sl.pick$picked.cox.model$form
 
@@ -300,9 +360,9 @@ contmle <- function(dt,
 
             estimation[[each]]$model <- fit.model
 
-            if (any(names(sl.pick$picked.cox.model)=="change.point")) {
+            if (any(names(sl.pick$picked.cox.model) == "change.point")) {
                 fit.changepoint <- sl.pick$picked.cox.model$change.point
-                if (fit.changepoint>0) {
+                if (fit.changepoint > 0) {
                     if (verbose.sl) print(paste0("changepoint picked: ", fit.changepoint))
                     estimation[[each]]$changepoint <- fit.changepoint
                 } else {
@@ -320,7 +380,7 @@ contmle <- function(dt,
 
             if (fit[1] %in% c("km")) { #-- later for hal or if uses km
                 tmp.model <- as.character(fit.model)
-                if (fit[1]=="km") tmp.model[3] <- "strata(A)" else tmp.model[3] <- "1"
+                if (fit[1] == "km") tmp.model[3] <- "strata(A)" else tmp.model[3] <- "1"
                 estimation[[each]]$model <- fit.model <- formula(paste0(tmp.model[2], tmp.model[1], tmp.model[3]))
                 estimation[[each]]$changepoint <- fit.changepoint <- NULL
             }
@@ -330,40 +390,43 @@ contmle <- function(dt,
         estimation[[each]]$cve.sl.pick <- cve.sl.pick
 
         #-- changepoint?
-        if (length(fit.changepoint)>0 & length(dt2)==0) {
+        if (length(fit.changepoint) > 0 & length(dt2) == 0) {
             dt2 <- rbind(dt, dt)[order(id)]
         }
 
         #   fit.cox.fun <- function(mod, changepoint, fit, dt, dt2, dd=1, sl.pick="") {
-        if (length(fit.changepoint)>0) { #-- if there is a change-point:
-            delta1 <- abs(fit.delta-1)
-            dt2[, time.indicator:=(get(time.var)<=fit.changepoint)]
-            dt2[, (paste0("period", fit.delta)):=1:.N, by="id"]
-            dt2[get(paste0("period", fit.delta))==1, (paste0("tstart", fit.delta)):=0]
-            dt2[get(paste0("period", fit.delta))==1, (paste0("tstop", fit.delta)):=(get(time.var)<=fit.changepoint)*get(time.var)+
-                    (get(time.var)>fit.changepoint)*fit.changepoint]
-            dt2[get(paste0("period", fit.delta))==1, (paste0("tstart", fit.delta)):=0]
-            dt2[get(paste0("period", fit.delta))==1, (paste0("tstop", fit.delta)):=(get(time.var)<=fit.changepoint)*get(time.var)+
-                    (get(time.var)>fit.changepoint)*fit.changepoint]
-            dt2[get(paste0("period", fit.delta))==2, (paste0("tstart", fit.delta)):=fit.changepoint]
-            dt2[get(paste0("period", fit.delta))==2, (paste0("tstop", fit.delta)):=get(time.var)]
-            dt2[get(paste0("period", fit.delta))==1 & !time.indicator, (delta.var):=delta1]
+        if (length(fit.changepoint) > 0) { #-- if there is a change-point:
+            delta1 <- abs(fit.delta - 1)
+            dt2[, time.indicator := (get(time.var) <= fit.changepoint)]
+            dt2[, (paste0("period", fit.delta)) := 1:.N, by = "id"]
+            dt2[get(paste0("period", fit.delta)) == 1, (paste0("tstart", fit.delta)) := 0]
+            dt2[get(paste0("period", fit.delta)) == 1, (paste0("tstop", fit.delta)) :=
+                    (get(time.var) <= fit.changepoint) * get(time.var) +
+                    (get(time.var) > fit.changepoint) * fit.changepoint]
+            dt2[get(paste0("period", fit.delta)) == 1, (paste0("tstart", fit.delta)) := 0]
+            dt2[get(paste0("period", fit.delta)) == 1, (paste0("tstop", fit.delta)) :=
+                    (get(time.var) <= fit.changepoint) * get(time.var) +
+                    (get(time.var) > fit.changepoint) * fit.changepoint]
+            dt2[get(paste0("period", fit.delta)) == 2, (paste0("tstart", fit.delta)) := fit.changepoint]
+            dt2[get(paste0("period", fit.delta)) == 2, (paste0("tstop", fit.delta)) := get(time.var)]
+            dt2[get(paste0("period", fit.delta)) == 1 & !time.indicator, (delta.var) := delta1]
             mod1 <- as.character(fit.model)
-            mod2 <- paste0(gsub(substr(mod1[2], which(strsplit(mod1[2], "")[[1]]=="(")+1,
-                                       which(strsplit(mod1[2], "")[[1]]==",")-1), paste0("tstart", fit.delta, ", tstop", fit.delta), mod1[2]),
-                           "~",
-                           gsub(paste0("\\+", A.name, "\\+"), "", gsub(paste0("\\+", A.name, " "), "", gsub(" ", "", paste0("I((period", fit.delta,"==1)&(", A.name, "==1))",
-                                                                                                                            " + I((period", fit.delta, "==2)&(", A.name, "==1))", " + ",
-                                                                                                                            paste0("+",mod1[3]))))))
-            fit.cox <- coxph(formula(mod2), data=dt2[!time.indicator | get(paste0("period", fit.delta))==1])
+            mod2 <- paste0(gsub(substr(mod1[2], which(strsplit(mod1[2], "")[[1]] == "(") + 1,
+                                       which(strsplit(mod1[2], "")[[1]] == ",") - 1),
+                                paste0("tstart", fit.delta, ", tstop", fit.delta), mod1[2]), " ~ ",
+                           gsub(paste0("\\+", A.var, "\\+"), "",
+                                gsub(paste0("\\+", A.var, " "), "",
+                                     gsub(" ", "", paste0("I((period", fit.delta," == 1) & (", A.var, " == 1))",
+                                                          " + I((period", fit.delta, " == 2) & (", A.var,
+                                                          " == 1))", " + ", paste0(" + ", mod1[3]))))))
+            fit.cox <- coxph(formula(mod2), data=dt2[!time.indicator | get(paste0("period", fit.delta)) == 1])
         } else { #-- if there is not a change-point:
-            if (fit[1]=="sl" & length(grep("coxnet", sl.pick))>0) {
-                X <- model.matrix(as.formula(deparse(fit.model)), data=dt)
-                y <- dt[, Surv(get(time.var), get(delta.var)==fit.delta)]
-                fit.cox <- glmnet(x=X, y=y, family="cox", maxit=1000,
-                                  lambda=fit.penalty)
+            if (fit[1] == "sl" & length(grep("coxnet", sl.pick)) > 0) {
+                X <- model.matrix(as.formula(deparse(fit.model)), data = dt)
+                y <- dt[, Surv(get(time.var), get(delta.var) == fit.delta)]
+                fit.cox <- glmnet(x = X, y = y, family = "cox", maxit = 1000, lambda = fit.penalty)
             } else {
-                fit.cox <- coxph(as.formula(paste0(deparse(fit.model), collapse="")), data=dt)
+                fit.cox <- coxph(as.formula(paste0(deparse(fit.model), collapse = "")), data = dt)
             }
         }
 
@@ -373,32 +436,32 @@ contmle <- function(dt,
 
         #-- 6 -- get baseline hazard:
 
-        if (fit[1]=="km") {
-            tmp <- suppressWarnings(setDT(basehaz(fit.cox, centered=TRUE)))
+        if (fit[1] == "km") {
+            tmp <- suppressWarnings(setDT(basehaz(fit.cox, centered = TRUE)))
             setnames(tmp, "strata", "A")
-            tmp[, A:=as.numeric(gsub("A=", "", A))]
+            tmp[, A := as.numeric(gsub("A = ", "", A))]
             bhaz.cox <- merge(bhaz.cox,
-                              rbind(do.call("rbind", lapply(a, function(aa) data.table(time=0, hazard=0, A=aa))),
+                              rbind(do.call("rbind", lapply(a, function(aa) data.table(time = 0, hazard = 0, A = aa))),
                                     tmp),
-                              by=c("time", "A"), all.x=TRUE)
-            bhaz.cox[, hazard:=zoo::na.locf(hazard), by="A"]
-            bhaz.cox[, (paste0("dhaz.", fit.delta)):=c(0, diff(hazard)), by="A"]
+                              by = c("time", "A"), all.x = TRUE)
+            bhaz.cox[, hazard := zoo::na.locf(hazard), by = "A"]
+            bhaz.cox[, (paste0("dhaz.", fit.delta)) := c(0, diff(hazard)), by = "A"]
             setnames(bhaz.cox, "hazard", paste0("chaz", fit.delta))
         } else {
-            if (fit[1]=="sl" & length(grep("coxnet", sl.pick))>0) {
+            if (fit[1] == "sl" & length(grep("coxnet", sl.pick)) > 0) {
                 basehaz <- glmnet_basesurv(dt[, get(time.var)],
-                                           dt[, get(delta.var)==fit.delta], X, centered=TRUE)
-                bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
-                                                  data.table(time=basehaz$time,
-                                                             hazard=basehaz$cumulative_base_hazard)),
-                                  by="time", all.x=TRUE)
+                                           dt[, get(delta.var) == fit.delta], X, centered = TRUE)
+                bhaz.cox <- merge(bhaz.cox, rbind(data.table(time = 0, hazard = 0),
+                                                  data.table(time = basehaz$time,
+                                                             hazard = basehaz$cumulative_base_hazard)),
+                                  by = "time", all.x = TRUE)
             } else {
-                bhaz.cox <- merge(bhaz.cox, rbind(data.table(time=0, hazard=0),
-                                                  suppressWarnings(setDT(basehaz(fit.cox, centered=TRUE)))),
-                                  by="time", all.x=TRUE)
+                bhaz.cox <- merge(bhaz.cox, rbind(data.table(time = 0, hazard = 0),
+                                                  suppressWarnings(setDT(basehaz(fit.cox, centered = TRUE)))),
+                                  by = "time", all.x = TRUE)
             }
-            bhaz.cox[, hazard:=na.locf(hazard), by=A.name]
-            bhaz.cox[, (paste0("dhaz", fit.delta)):=c(0, diff(hazard)), by=A.name]
+            bhaz.cox[, hazard := zoo::na.locf(hazard), by = A.var]
+            bhaz.cox[, (paste0("dhaz", fit.delta)) := c(0, diff(hazard)), by = A.var]
             setnames(bhaz.cox, "hazard", paste0("chaz", fit.delta))
         }
 
@@ -406,11 +469,11 @@ contmle <- function(dt,
 
 
     #-- set names of bhaz.cox to match observed data
-    setnames(bhaz.cox, c("time", A.name), c(time.var, A.name))
+    setnames(bhaz.cox, c("time", A.var), c(time.var, A.var))
 
     #-- Xc -- get censoring survival one time-point back:
 
-    bhaz.cox[, chaz0.1:=c(0, chaz0[-.N])]
+    bhaz.cox[, chaz0.1 := c(0, chaz0[-.N])]
 
     #-- Y -- output Kaplan-Meier and/or crude HR?
 
@@ -419,118 +482,115 @@ contmle <- function(dt,
             km.mod <- paste0(gsub(estimation[[1]][["event"]], "",
                                   gsub("\\=", "",
                                        gsub("Surv", "Hist", as.character(estimation[[1]][["model"]])[2]))),
-                             "~", A.name)
-            km.fit <- summary(prodlim(formula(km.mod), data=dt),
-                              cause=target, times=tau, asMatrix=TRUE)$table
-            if (length(a)==1) {
-                km.est <- as.numeric(km.fit[km.fit[,2]==paste0(A.name, "=", a),,drop=FALSE][,"cuminc"])
-                km.se <- as.numeric(km.fit[km.fit[,2]==paste0(A.name, "=", a),,drop=FALSE][,"se.cuminc"])
+                             "~", A.var)
+            km.fit <- summary(prodlim(formula(km.mod), data = dt),
+                              cause = target, times = tau, asMatrix = TRUE)$table
+            if (length(a) == 1) {
+                km.est <- as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", a), ,drop = FALSE][, "cuminc"])
+                km.se <- as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", a), ,drop = FALSE][, "se.cuminc"])
             } else {
-                km.est <- as.numeric(km.fit[km.fit[,2]==paste0(A.name, "=", "1"),,drop=FALSE][,"cuminc"])-
-                    (as.numeric(km.fit[km.fit[,2]==paste0(A.name, "=", "0"),,drop=FALSE][,"cuminc"]))
-                km.se <- sqrt((as.numeric(km.fit[km.fit[,2]==paste0(A.name, "=", "1"),,drop=FALSE][,"se.cuminc"]))^2+
-                                  (as.numeric(km.fit[km.fit[,2]==paste0(A.name, "=", "0"),,drop=FALSE][,"se.cuminc"]))^2)
+                km.est <- as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", "1"), ,drop = FALSE][, "cuminc"]) -
+                    (as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", "0"), ,drop = FALSE][, "cuminc"]))
+                km.se <- sqrt((as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", "1"), , drop = FALSE][, "se.cuminc"]))^2 +
+                                  (as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", "0"), , drop = FALSE][, "se.cuminc"]))^2)
             }
         } else {
             km.mod <- paste0(gsub("Surv", "Hist", as.character(estimation[[1]][["model"]])[2]),
-                             "~", A.name)
-            km.fit <- summary(fit.km <- prodlim(formula(km.mod), data=dt),
-                              times=tau, asMatrix=TRUE)$table
-            if (length(a)==1) {
-                km.est <- 1-as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", a),,drop=FALSE][,"surv"])
-                km.se <- as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", a),,drop=FALSE][,"se.surv"])
+                             " ~ ", A.var)
+            km.fit <- summary(fit.km <- prodlim(formula(km.mod), data = dt),
+                              times = tau, asMatrix = TRUE)$table
+            if (length(a) == 1) {
+                km.est <- 1 - as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", a), , drop = FALSE][, "surv"])
+                km.se <- as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", a), , drop = FALSE][, "se.surv"])
             } else {
-                km.est <- 1-as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", "1"),,drop=FALSE][,"surv"])-
-                    (1-as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", "0"),,drop=FALSE][,"surv"]))
-                km.se <- sqrt((as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", "1"),,drop=FALSE][,"se.surv"]))^2+
-                                  (as.numeric(km.fit[km.fit[,1]==paste0(A.name, "=", "0"),,drop=FALSE][,"se.surv"]))^2)
+                km.est <- 1 - as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", "1"), , drop = FALSE][, "surv"]) -
+                    (1 - as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", "0"), , drop = FALSE][, "surv"]))
+                km.se <- sqrt((as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", "1"), , drop = FALSE][, "se.surv"]))^2 +
+                                  (as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", "0"), , drop = FALSE][, "se.surv"]))^2)
             }
         }
     }
 
-    if (length(dt2)==0) {
+    if (length(dt2) == 0)
         dt2 <- copy(dt)
-    }
 
     if (only.km) return(lapply(1:length(target), function(each.index) {
-        out <- rbind(km.est=km.est[((each.index-1)*length(tau)+1):(each.index*length(tau))],
-                     km.se=km.se[((each.index-1)*length(tau)+1):(each.index*length(tau))])
-        colnames(out) <- paste0("tau=", tau)
+        out <- rbind(km.est = km.est[((each.index - 1) * length(tau) + 1):(each.index*length(tau))],
+                     km.se = km.se[((each.index - 1) * length(tau) + 1):(each.index*length(tau))])
+        colnames(out) <- paste0("tau = ", tau)
         return(out)
     }))
 
     #-- hal?
-    any.hal <- unlist(lapply(estimation, function(each) length(grep("hal", each[["fit"]]))>0))
+    any.hal <- unlist(lapply(estimation, function(each) length(grep("hal", each[["fit"]])) > 0))
 
     if (!any(any.hal)) {
-        bhaz.cox <- bhaz.cox[get(time.var)<=max(tau)]
+        bhaz.cox <- bhaz.cox[get(time.var) <= max(tau)]
     }
 
     #-- 8 -- add subject-specific information:
 
     dt2.a <- do.call("rbind", lapply(a, function(aa) {
         dt.tmp <- copy(dt2)
-        dt.tmp[, (A.name):=aa]
+        dt.tmp[, (A.var) := aa]
     }))
 
     for (each in 1:length(estimation)) {
 
-        if (estimation[[each]][["fit"]][1]=="sl" & length(grep("coxnet", estimation[[each]][["sl.pick"]]))>0) {
-            X2.a <- model.matrix(as.formula(deparse(estimation[[each]][["model"]])), data=dt2.a)
-            dt2.a[, (paste0("fit.cox", estimation[[each]][["event"]])):=
-                      exp(predict(estimation[[each]][["fit.cox"]], newx=X2.a, type="link"))]
+        if (estimation[[each]][["fit"]][1] == "sl" & length(grep("coxnet", estimation[[each]][["sl.pick"]])) > 0) {
+            X2.a <- model.matrix(as.formula(deparse(estimation[[each]][["model"]])), data = dt2.a)
+            dt2.a[, (paste0("fit.cox", estimation[[each]][["event"]])) :=
+                      exp(predict(estimation[[each]][["fit.cox"]], newx = X2.a, type = "link"))]
         } else {
-            dt2.a[, (paste0("fit.cox", estimation[[each]][["event"]])):=
-                      predict(estimation[[each]][["fit.cox"]], newdata=dt2.a, type="risk")]
+            dt2.a[, (paste0("fit.cox", estimation[[each]][["event"]])) :=
+                      predict(estimation[[each]][["fit.cox"]], newdata = dt2.a, type = "risk")]
         }
 
-        dt2.a[get(paste0("fit.cox", estimation[[each]][["event"]]))>500, (paste0("fit.cox", estimation[[each]][["event"]])):=500]
+        dt2.a[get(paste0("fit.cox", estimation[[each]][["event"]])) > 500, (paste0("fit.cox", estimation[[each]][["event"]])) := 500]
 
     }
 
     mat <- do.call("rbind", lapply(1:n, function(i) {
-        tmp <- cbind(id=i, bhaz.cox)
-        tmp[, time.obs:=dt[id==i, get(time.var)]]
-        tmp[, delta.obs:=dt[id==i, get(delta.var)]]
-        tmp[, A.obs:=dt[id==i, get(A.name)]]
-        if (treat.effect[1]=="stochastic") {
-            tmp <- merge(tmp, dt[, c("id", covars), with=FALSE], by="id")
-            tmp[, pi.star:=pi.star.fun(.SD), .SDcols=covars]
-            tmp[, pi.star:=pi.star*get(A.name)+(1-pi.star)*(1-get(A.name))]
-            tmp[, Ht:=-(pi.star / # treatment and censoring weights
-                            ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name)))))]
+        tmp <- cbind(id = i, bhaz.cox)
+        tmp[, time.obs := dt[id == i, get(time.var)]]
+        tmp[, delta.obs := dt[id == i, get(delta.var)]]
+        tmp[, A.obs := dt[id == i, get(A.var)]]
+        if (treat.effect[1] == "stochastic") {
+            tmp <- merge(tmp, dt[, c("id", covars), with = FALSE], by = "id")
+            tmp[, pi.star := pi.star.fun(.SD), .SDcols = covars]
+            tmp[, pi.star := pi.star * get(A.var) + (1 - pi.star) * (1 - get(A.var))]
+            tmp[, Ht := -(pi.star / # treatment and censoring weights
+                              ((prob.A[i]^get(A.var) * (1 - prob.A[i])^(1 - get(A.var)))))]
         } else {
-            if (length(a)==2) {
-                tmp[, Ht:=-((get(A.name)==1) - (get(A.name)==0)) / # treatment and censoring weights
-                        ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name))))]
+            if (length(a) == 2) {
+                tmp[, Ht := -((get(A.var) == 1) - (get(A.var) == 0)) / # treatment and censoring weights
+                        ((prob.A[i]^get(A.var) * (1 - prob.A[i])^(1 - get(A.var))))]
             } else {
-                tmp[, Ht:=-((get(A.name)==a)) / # treatment and censoring weights
-                        ((prob.A[i]^get(A.name) * (1-prob.A[i])^(1-get(A.name))))]
+                tmp[, Ht := -((get(A.var) == a)) / # treatment and censoring weights
+                        ((prob.A[i]^get(A.var) * (1 - prob.A[i])^(1 - get(A.var))))]
             }
         }
         for (each in 1:length(estimation)) {
-            if (length(estimation[[each]][["changepoint"]])>0) {
-                tmp[, (paste0("period", estimation[[each]][["event"]])):=
-                        (get(time.var)<=estimation[[each]][["changepoint"]])*1+(get(time.var)>estimation[[each]][["changepoint"]])*2]
-                tmp <- merge(tmp, dt2.a[id==i, c(paste0("period", estimation[[each]][["event"]]),
-                                                 A.name,
-                                                 paste0("fit.cox", estimation[[each]][["event"]])),
-                                        with=FALSE], by=c(paste0("period", estimation[[each]][["event"]]), A.name))
+            if (length(estimation[[each]][["changepoint"]]) > 0) {
+                tmp[, (paste0("period", estimation[[each]][["event"]])) :=
+                        (get(time.var) <= estimation[[each]][["changepoint"]]) * 1 + (get(time.var) > estimation[[each]][["changepoint"]]) * 2] ############################################ times 1?
+                tmp <- merge(tmp, dt2.a[id == i, c(paste0("period", estimation[[each]][["event"]]), A.var,
+                                                   paste0("fit.cox", estimation[[each]][["event"]])),
+                                        with = FALSE], by = c(paste0("period", estimation[[each]][["event"]]), A.var))
             } else {
-                tmp <- merge(tmp, unique(dt2.a[id==i, c(A.name,
-                                                        paste0("fit.cox", estimation[[each]][["event"]])),
-                                               with=FALSE]), by=c(A.name))
+                tmp <- merge(tmp, unique(dt2.a[id == i, c(A.var, paste0("fit.cox", estimation[[each]][["event"]])),
+                                               with = FALSE]), by = c(A.var))
             }
         }
-        if (any(unlist(lapply(estimation, function(x) x[["event"]]))==0)) {
-            tmp[, surv.C1:=exp(-fit.cox0*chaz0.1)]
+        if (any(unlist(lapply(estimation, function(x) x[["event"]])) == 0)) {
+            tmp[, surv.C1 := exp(-fit.cox0 * chaz0.1)]
             #if (tmp[, any(is.na(surv.C1))]) browser()
-            if (tmp[, min(surv.C1)<cut.off.cens]) {
-                tmp[surv.C1<cut.off.cens, surv.C1:=cut.off.cens]
+            if (tmp[, min(surv.C1) < cut.off.cens]) {
+                tmp[surv.C1 < cut.off.cens, surv.C1 := cut.off.cens]
                 #warning(paste0("there seems to be positivity issues; truncated at level ",
                 #               cut.off.cens))
             }
-            tmp[, Ht:=Ht/surv.C1]
+            tmp[, Ht := Ht/surv.C1]
         }
     }))
 
@@ -544,13 +604,13 @@ contmle <- function(dt,
 
         count.hals <- 1
 
-        mat <- merge(mat, dt[, c("id", c(covars[!covars%in%names(mat)])), with=FALSE], by="id")
+        mat <- merge(mat, dt[, c("id", c(covars[!covars %in% names(mat)])), with = FALSE], by = "id")
 
-        mat[, (covars):=lapply(.SD, function(x) {
+        mat[, (covars) := lapply(.SD, function(x) {
             if (is.character(x)) {
                 return(as.numeric(as.factor(x)))
             } else return(x)
-        }), .SDcols=covars]
+        }), .SDcols = covars]
 
         for (each in (1:length(estimation))[any.hal]) {
 
@@ -560,49 +620,52 @@ contmle <- function(dt,
             fit.delta <- estimation[[each]][["event"]]
             fit.name <- names(estimation)[each]
 
-            if (any(names(estimation[[each]])=="lambda.cvs")) {
+            if (any(names(estimation[[each]]) == "lambda.cvs")) {
                 lambda.cvs.1 <- estimation[[each]][["lambda.cvs"]]
             } else {
                 lambda.cvs.1 <- lambda.cvs
             }
 
-            if (any(estimation[[each]]$fit=="cox.hal") | any(estimation[[each]]$fit=="cox.hal.sl")) { #--- only testing.
+            if (any(estimation[[each]]$fit == "cox.hal") | any(estimation[[each]]$fit == "cox.hal.sl")) { #--- only testing.
 
                 if (hal.screening) { #--- first screening
 
-                    (one.way.screening <- hal.screening(covars=covars, dt=dt, cut.one.way=5,# browse=TRUE,
-                                                        mat=mat, delta.var="delta", delta.value=fit.delta,
-                                                        treatment="A"))
+                    (one.way.screening <- hal.screening(covars = covars, dt = dt, cut.one.way = 5,# browse=TRUE,
+                                                        mat = mat, delta.var = "delta", delta.value = fit.delta,
+                                                        treatment = "A"))
 
-                    (two.way.screening <- hal.screening(covars=one.way.screening, dt=dt, cut.one.way=5,
-                                                        delta.var="delta", delta.value=fit.delta,
-                                                        treatment="A", cut.time.treatment=3, order=2,
-                                                        mat=mat))
+                    (two.way.screening <- hal.screening(covars = one.way.screening, dt = dt, cut.one.way = 5,
+                                                        delta.var = "delta", delta.value = fit.delta,
+                                                        treatment = "A", cut.time.treatment = 3, order = 2,
+                                                        mat = mat))
 
-                    if (verbose & length(one.way.screening)>0) print(paste0("variables picked by initial screening: ", paste0(one.way.screening, collapse=", ")))
+                    if (verbose & length(one.way.screening) > 0)
+                        print(paste0("variables picked by initial screening: ", paste0(one.way.screening, collapse = ", ")))
 
-                    mat <- fit.hal(covars=one.way.screening, dt=dt, cut.one.way=15,
-                                   mat=mat, delta.var="delta", V=V,
-                                   two.way=two.way.screening, cut.two.way=5,
-                                   penalize.treatment=FALSE,
-                                   delta.value=fit.delta,
-                                   verbose=verbose,
-                                   predict=max(tau), treatment.prediction="A",
-                                   treatment="A")
+                    mat <- fit.hal(covars = one.way.screening, dt = dt, cut.one.way = 15,
+                                   mat = mat, delta.var = "delta", V = V,
+                                   two.way = two.way.screening, cut.two.way = 5,
+                                   penalize.treatment = FALSE,
+                                   delta.value = fit.delta,
+                                   verbose = verbose,
+                                   predict = max(tau), treatment.prediction = "A",
+                                   treatment = "A")
 
                     if (FALSE) {
-                        diff(mat[time<=tau, exp(-cumsum(dhaz1*fit.cox1))[.N], by=c("id", A.name)][, mean(V1), by=A.name][order(V1), V1])
-                        diff(mat2[time<=tau, exp(-cumsum(dhaz1*fit.cox1))[.N], by=c("id", A.name)][, mean(V1), by=A.name][order(V1), V1])
+                        diff(mat[time <= tau, exp(-cumsum(dhaz1 * fit.cox1))[.N],
+                                 by = c("id", A.var)][, mean(V1), by = A.var][order(V1), V1])
+                        diff(mat2[time <= tau, exp(-cumsum(dhaz1 * fit.cox1))[.N],
+                                  by = c("id", A.var)][, mean(V1), by = A.var][order(V1), V1])
                     }
 
                 } else {
 
-                    mat <- fit.hal(covars=covars, dt=dt, cut.one.way=15,
-                                   mat=mat, delta.var="delta", V=V,
-                                   penalize.treatment=FALSE,
-                                   verbose=verbose, delta.value=fit.delta,
-                                   predict=max(tau), treatment.prediction="A",
-                                   treatment="A")
+                    mat <- fit.hal(covars = covars, dt = dt, cut.one.way = 15,
+                                   mat = mat, delta.var = "delta", V = V,
+                                   penalize.treatment = FALSE,
+                                   verbose = verbose, delta.value = fit.delta,
+                                   predict = max(tau), treatment.prediction = "A",
+                                   treatment = "A")
 
                 }
 
@@ -612,81 +675,84 @@ contmle <- function(dt,
 
                     print(paste0("EACH = ", each))
 
-                    (one.way.screening <- hal.screening(covars=covars, dt=dt, cut.one.way=5, time.var="time",
-                                                        cut.time=3, mat=mat, delta.var="delta.obs",
-                                                        delta.value=fit.delta,
-                                                        treatment="A.obs", cut.time.treatment=3))
+                    (one.way.screening <- hal.screening(covars = covars, dt = dt, cut.one.way = 5, time.var = "time",
+                                                        cut.time = 3, mat=mat, delta.var = "delta.obs",
+                                                        delta.value = fit.delta,
+                                                        treatment = "A.obs", cut.time.treatment = 3))
 
-                    if (length(one.way.screening)>0) {
-                        (two.way.screening <- hal.screening(covars=one.way.screening, dt=dt, cut.one.way=5,
-                                                            time.var="time", cut.time=3, delta.var="delta.obs",
-                                                            delta.value=fit.delta,
-                                                            treatment="A.obs", cut.time.treatment=3, order=2,
-                                                            mat=mat, cut.two.way=5))
-                        if (verbose & length(one.way.screening)>0) print(paste0("variables picked by initial screening: ", paste0(one.way.screening, collapse=", ")))
+                    if (length(one.way.screening) > 0) {
+                        (two.way.screening <- hal.screening(covars = one.way.screening, dt = dt, cut.one.way = 5,
+                                                            time.var = "time", cut.time = 3, delta.var = "delta.obs",
+                                                            delta.value = fit.delta, treatment = "A.obs",
+                                                            cut.time.treatment = 3, order = 2, mat = mat, cut.two.way = 5))
+                        if (verbose & length(one.way.screening) > 0)
+                            print(paste0("variables picked by initial screening: ", paste0(one.way.screening, collapse = ", ")))
                     }
 
                     if (FALSE) {
-                        diff(mat2[time<=tau, exp(-fit.Lambda[.N]), by=c("id", A.name)][, mean(V1), by=A.name][order(V1), V1])
-                        diff(mat[time<=tau, exp(-cumsum(dhaz1*fit.cox1))[.N], by=c("id", A.name)][, mean(V1), by=A.name][order(V1), V1])
+                        diff(mat2[time <= tau, exp(-fit.Lambda[.N]),
+                                  by = c("id", A.var)][, mean(V1), by = A.var][order(V1), V1])
+                        diff(mat[time <= tau, exp(-cumsum(dhaz1 * fit.cox1))[.N],
+                                 by = c("id", A.var)][, mean(V1), by = A.var][order(V1), V1])
                     }
 
-                    mat <- fit.hal(covars=one.way.screening, dt=dt, cut.one.way=15,
-                                   time.var=time.var, cut.time=10,
-                                   mat=mat, delta.var="delta.obs", V=V,
-                                   verbose=verbose, delta.value=fit.delta,
-                                   two.way=two.way.screening, cut.two.way=5,
-                                   penalize.treatment=FALSE, penalize.time=FALSE,
-                                   predict=max(tau), treatment.prediction="A",
-                                   treatment="A.obs", cut.time.treatment=10)
+                    mat <- fit.hal(covars = one.way.screening, dt = dt, cut.one.way = 15,
+                                   time.var = time.var, cut.time = 10,
+                                   mat = mat, delta.var = "delta.obs", V = V,
+                                   verbose = verbose, delta.value = fit.delta,
+                                   two.way = two.way.screening, cut.two.way = 5,
+                                   penalize.treatment = FALSE, penalize.time = FALSE,
+                                   predict = max(tau), treatment.prediction = "A",
+                                   treatment = "A.obs", cut.time.treatment = 10)
 
 
                     if (FALSE) {
-                        mat2[time<=tau, exp(-cumsum(dhaz1*fit.cox1))[.N], by=c("id", A.name)][, mean(V1), by=A.name][order(V1), V1]
-                        mat[time<=tau, exp(-cumsum(dhaz1*fit.cox1))[.N], by=c("id", A.name)][, mean(V1), by=A.name][order(V1), V1]
+                        mat2[time <= tau, exp(-cumsum(dhaz1 * fit.cox1))[.N],
+                             by = c("id", A.var)][, mean(V1), by = A.var][order(V1), V1]
+                        mat[time <= tau, exp(-cumsum(dhaz1 * fit.cox1))[.N],
+                            by = c("id", A.var)][, mean(V1), by = A.var][order(V1), V1]
                     }
 
                 } else {
 
                     print(paste0("EACH = ", each))
 
-                    mat <- fit.hal(covars=covars, dt=dt, cut.one.way=15, time.var=time.var, cut.time=10,
-                                   mat=mat, delta.var="delta.obs", V=V,
-                                   verbose=verbose, delta.value=fit.delta,
-                                   penalize.treatment=FALSE, penalize.time=FALSE,
-                                   predict=max(tau), treatment.prediction="A",
-                                   treatment="A.obs", cut.time.treatment=3)
+                    mat <- fit.hal(covars = covars, dt=dt, cut.one.way = 15, time.var = time.var,
+                                   cut.time = 10, mat = mat, delta.var="delta.obs", V = V,
+                                   verbose = verbose, delta.value = fit.delta,
+                                   penalize.treatment = FALSE, penalize.time = FALSE,
+                                   predict = max(tau), treatment.prediction = "A",
+                                   treatment = "A.obs", cut.time.treatment = 3)
 
                 }
             }
 
             if (FALSE) if (mat[["not.fit"]]) {
                 warning(paste0("hal did not fit for ", fit.name, " (", delta.var, "=", fit.delta, ")"))
-                not.fit.list[[length(not.fit.list)+1]] <-
+                not.fit.list[[length(not.fit.list) + 1]] <-
                     paste0("hal did not fit for ", fit.name, " (", delta.var, "=", fit.delta, ")")
             }
 
             #if (!(count.hals<sum(any.hal)))
             #mat <- mat[["mat"]] #else mat[["not.fit"]] <- NULL
 
-            count.hals <- count.hals+1
+            count.hals <- count.hals + 1
         }
 
-        mat <- mat[get(time.var)<=max(tau)]
+        mat <- mat[get(time.var) <= max(tau)]
 
     }
 
     #-- report if censoring weights were truncated?
 
-    if (mat[, min(surv.C1)<cut.off.cens]) {
-        mat[surv.C1<=cut.off.cens, Ht:=Ht*surv.C1/cut.off.cens]
-        mat[surv.C1<=cut.off.cens, surv.C1:=cut.off.cens]
-        if (mat[get(time.var)<=time.obs, min(surv.C1)<cut.off.cens]) {
-            not.fit.list[[length(not.fit.list)+1]] <-
+    if (mat[, min(surv.C1) < cut.off.cens]) {
+        mat[surv.C1 <= cut.off.cens, Ht := Ht * surv.C1 / cut.off.cens]
+        mat[surv.C1 <= cut.off.cens, surv.C1 := cut.off.cens]
+        if (mat[get(time.var) <= time.obs, min(surv.C1) < cut.off.cens]) {
+            not.fit.list[[length(not.fit.list) + 1]] <-
                 paste0(paste0("there seems to be positivity issues; truncated ",
-                              sum(mat[get(time.var)<=time.obs, sum(unique(surv.C1==cut.off.cens)), by="id"][,2][[1]]),
-                              " observation(s), at level ",
-                              cut.off.cens))
+                              sum(mat[get(time.var) <= time.obs, sum(unique(surv.C1 == cut.off.cens)),
+                                      by = "id"][,2][[1]]), " observation(s), at level ", cut.off.cens))
         }
     }
 
@@ -695,135 +761,131 @@ contmle <- function(dt,
 
     outcome.index <- unlist(lapply(1:length(estimation), function(each) {
         event <- estimation[[each]][["event"]]
-        each[event>0]
+        each[event > 0]
     }))
 
-    mat[, surv.t:=1]
+    mat[, surv.t := 1]
     for (each in outcome.index) {
         fit.delta <- estimation[[each]][["event"]]
-        mat[, surv.t:=surv.t*exp(-cumsum(get(paste0("dhaz", fit.delta))*
-                                             get(paste0("fit.cox", fit.delta)))),
-            by=c("id", A.name)]
+        mat[, surv.t := surv.t*exp(-cumsum(get(paste0("dhaz", fit.delta))*get(paste0("fit.cox", fit.delta)))),
+            by = c("id", A.var)]
     }
 
-    mat[, surv.t1:=c(0, surv.t[-.N]), by=c("id", A.name)]
+    mat[, surv.t1 := c(0, surv.t[-.N]), by = c("id", A.var)]
 
     for (kk in 1:length(tau)) {
-        mat[, (paste0("surv.tau", kk)):=
-                surv.t[get(time.var)==max(get(time.var)[get(time.var)<=tau[kk]])],
-            by=c("id", A.name)]
+        mat[, (paste0("surv.tau", kk)) :=
+                surv.t[get(time.var) == max(get(time.var)[get(time.var) <= tau[kk]])],
+            by = c("id", A.var)]
     }
 
     if (cr) {
         for (each in outcome.index) {
             fit.delta <- estimation[[each]][["event"]]
-            mat[, (paste0("F", fit.delta, ".t")):=cumsum(surv.t*get(paste0("dhaz", fit.delta))*
-                                                             get(paste0("fit.cox", fit.delta))),
-                by=c("id", A.name)]
+            mat[, (paste0("F", fit.delta, ".t")) := cumsum(surv.t*get(paste0("dhaz", fit.delta))*
+                                                               get(paste0("fit.cox", fit.delta))),
+                by = c("id", A.var)]
             for (kk in 1:length(tau)) {
-                mat[, (paste0("F", fit.delta, ".tau", kk)):=
-                        get(paste0("F", fit.delta, ".t"))[get(time.var)==max(get(time.var)[get(time.var)<=tau[kk]])],
-                    by=c("id", A.name)]
+                mat[, (paste0("F", fit.delta, ".tau", kk)) :=
+                        get(paste0("F", fit.delta, ".t"))[get(time.var) == max(get(time.var)[get(time.var) <= tau[kk]])],
+                    by = c("id", A.var)]
                 for (each2 in outcome.index) {
                     fit.delta2 <- estimation[[each2]][["event"]]
-                    if (fit.delta==fit.delta2) {
-                        mat[surv.t>0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)):=
-                                -(1-(get(paste0("F", fit.delta, ".tau", kk)) - get(paste0("F", fit.delta, ".t"))) / surv.t)]
+                    if (fit.delta == fit.delta2) {
+                        mat[surv.t > 0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)) :=
+                                -(1 - (get(paste0("F", fit.delta, ".tau", kk)) - get(paste0("F", fit.delta, ".t"))) / surv.t)]
                     } else {
-                        mat[surv.t>0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)):=
+                        mat[surv.t > 0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)) :=
                                 (get(paste0("F", fit.delta, ".tau", kk)) - get(paste0("F", fit.delta, ".t"))) / surv.t]
                     }
-                    mat[surv.t==0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)):=-1]
+                    mat[surv.t == 0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)) := -1]
                 }
             }
         }
     } else {
         for (kk in 1:length(tau)) {
-            mat[surv.t>0, (paste0("Ht.lambda.", kk)):=get(paste0("surv.tau", kk)) / surv.t]
-            mat[surv.t==0, (paste0("Ht.lambda.", kk)):=1]
+            mat[surv.t > 0, (paste0("Ht.lambda.", kk)) := get(paste0("surv.tau", kk)) / surv.t]
+            mat[surv.t == 0, (paste0("Ht.lambda.", kk)) := 1]
         }
     }
 
     #-- 11 -- initial fit:
 
     if (cr) {
-        if (treat.effect[1]=="stochastic") {
+        if (treat.effect[1] == "stochastic") {
             init.fit <- lapply(target, function(each) {
                 sapply(1:length(tau), function(kk) {
                     mean(rowSums(sapply(a, function(aa)
-                        (mat[get(A.name)==aa, pi.star[1]*
+                        (mat[get(A.var) == aa, pi.star[1] *
                                  get(paste0("F", estimation[[outcome.index[each]]][["event"]],
                                             ".tau", kk))[1],
-                             by="id"][,2][[1]]))))
+                             by = "id"][, 2][[1]]))))
                 })
             })
         } else {
             init.fit <- lapply(target, function(each) {
                 sapply(1:length(tau), function(kk) {
                     mean(rowSums(sapply(a, function(aa)
-                        (2*(aa==a[1])-1)*(mat[get(A.name)==aa, get(paste0("F", estimation[[outcome.index[each]]][["event"]],
-                                                                          ".tau", kk))[1],
-                                              by="id"][,2][[1]]))))
+                        (2 * (aa == a[1]) - 1) * (mat[get(A.var) == aa, get(paste0("F", estimation[[outcome.index[each]]][["event"]],
+                                                                                   ".tau", kk))[1],
+                                                      by = "id"][, 2][[1]]))))
                 })
             })
         }
         names(init.fit) <- paste0("F", sapply(outcome.index[target], function(each) estimation[[each]][["event"]]))
     } else {
-        if (treat.effect[1]=="stochastic") {
+        if (treat.effect[1] == "stochastic") {
             init.fit <- sapply(1:length(tau), function(kk) {
                 mean(rowSums(sapply(a, function(aa)
-                    (mat[get(A.name)==aa, pi.star[1]*(1-get(paste0("surv.tau", kk))[1]), by="id"][,2][[1]]))))
+                    (mat[get(A.var) == aa, pi.star[1]*(1 - get(paste0("surv.tau", kk))[1]), by = "id"][, 2][[1]]))))
             })
         } else {
             init.fit <- sapply(1:length(tau), function(kk) {
                 mean(rowSums(sapply(a, function(aa)
-                    (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
+                    (2 * (aa == a[1]) - 1) * (mat[get(A.var) == aa, 1 - get(paste0("surv.tau", kk))[1], by = "id"][, 2][[1]]))))
             })
         }
     }
 
     if (cr) {
-        eval.ic <- function(mat, fit, target.index=outcome.index, Sigma=FALSE, tau.values=tau, survival=FALSE, tau.all=tau) {
+        eval.ic <- function(mat, fit, target.index = outcome.index, Sigma = FALSE,
+                            tau.values = tau, survival = FALSE, tau.all = tau) {
             outer <- lapply(target.index, function(each) {
                 fit.delta <- estimation[[each]][["event"]]
-                each.index <- (1:length(target.index))[target.index==each]
+                each.index <- (1:length(target.index))[target.index == each]
                 sapply(1:length(tau.values), function(kk) {
-                    k2 <- (1:length(tau.all))[tau.all==max(tau.all[tau.all<=tau.values[kk]])]
+                    k2 <- (1:length(tau.all))[tau.all == max(tau.all[tau.all <= tau.values[kk]])]
                     out <- 0
                     for (each2 in outcome.index) {
                         fit.delta2 <- estimation[[each2]][["event"]]
-                        mat[get(paste0("Ht", fit.delta, ".lambda", fit.delta2,".", k2))<=-500,
-                            (paste0("Ht", fit.delta, ".lambda", fit.delta2,".", k2)):=-500]
-                        out2 <- mat[, sum( (get(A.name)==A.obs) * (get(time.var)<=tau.values[kk]) *
-                                               (get(time.var)<=time.obs) * Ht *
-                                               get(paste0("Ht", fit.delta, ".lambda", fit.delta2,".", k2)) *
-                                               ( (delta.obs==fit.delta2 & get(time.var)==time.obs) -
-                                                     get(paste0("dhaz", fit.delta2)) * get(paste0("fit.cox", fit.delta2)) )), by="id"]
+                        mat[get(paste0("Ht", fit.delta, ".lambda", fit.delta2,".", k2)) <= -500,
+                            (paste0("Ht", fit.delta, ".lambda", fit.delta2,".", k2)) := -500]
+                        out2 <- mat[, sum( (get(A.var) == A.obs) * (get(time.var) <= tau.values[kk]) *
+                                               (get(time.var) <= time.obs) * Ht *
+                                               get(paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", k2)) *
+                                               ( (delta.obs == fit.delta2 & get(time.var) == time.obs) -
+                                                     get(paste0("dhaz", fit.delta2))*get(paste0("fit.cox", fit.delta2)) )), by = "id"]
                         out <- out + out2[, 2][[1]]
                     }
-                    if (treat.effect[1]=="stochastic") {
+                    if (treat.effect[1] == "stochastic") {
                         ic.squared <- (out + rowSums(sapply(a, function(aa)
-                            (mat[get(A.name)==aa, pi.star[1]*
-                                     get(paste0("F", fit.delta,
-                                                ".tau", k2))[1],
-                                 by="id"][,2][[1]])))-
-                                fit[[paste0("F", fit.delta)]][kk])
+                            (mat[get(A.var) == aa, pi.star[1] * get(paste0("F", fit.delta, ".tau", k2))[1],
+                                 by = "id"][, 2][[1]]))) - fit[[paste0("F", fit.delta)]][kk])
                     } else {
                         ic.squared <- (out + rowSums(sapply(a, function(aa)
-                            (2*(aa==a[1])-1)*(mat[get(A.name)==aa, get(paste0("F", fit.delta,
-                                                                              ".tau", k2))[1],
-                                                  by="id"][,2][[1]])))-
-                                (length(a)==2)*fit[[paste0("F", fit.delta)]][kk]-
-                                (length(a)==1)*fit[[paste0("F", fit.delta)]][kk])
+                            (2*(aa == a[1]) - 1) * (mat[get(A.var) == aa, get(paste0("F", fit.delta, ".tau", k2))[1],
+                                                        by = "id"][, 2][[1]]))) -
+                                (length(a) == 2) * fit[[paste0("F", fit.delta)]][kk] -
+                                (length(a) == 1) * fit[[paste0("F", fit.delta)]][kk])
                     }
                     if (survival) return(ic.squared)
-                    if (Sigma) return(ic.squared) else return(sqrt(mean(ic.squared^2)/n))
+                    if (Sigma) return(ic.squared) else return(sqrt(mean(ic.squared^2) / n))
                 })
             })
             if (Sigma) {
                 outer2 <- do.call("cbind", outer)
                 Sigma.list <- lapply(1:n, function(i) {
-                    t(outer2[i,,drop=FALSE])%*%outer2[i,,drop=FALSE]
+                    t(outer2[i, , drop = FALSE]) %*% outer2[i, , drop = FALSE]
                 })
                 return(Reduce("+", Sigma.list) / length(Sigma.list))
             } else {
@@ -832,73 +894,68 @@ contmle <- function(dt,
             }
         }
     } else {
-        eval.ic <- function(mat, fit, target.index=1, Sigma=FALSE, tau.values=tau, tau.all=tau) {
+        eval.ic <- function(mat, fit, target.index = 1, Sigma = FALSE, tau.values = tau, tau.all = tau) {
             outer <- sapply(1:length(tau.values), function(kk) {
-                k2 <- (1:length(tau.all))[tau.all==max(tau.all[tau.all<=tau.values[kk]])]
+                k2 <- (1:length(tau.all))[tau.all == max(tau.all[tau.all <= tau.values[kk]])]
                 by.vars <- "id"
-                out <- mat[, sum( (get(A.name)==A.obs) * (get(time.var)<=tau.values[kk]) *
-                                      (get(time.var)<=time.obs) * Ht *
-                                      get(paste0("Ht.lambda.", k2)) *
-                                      ( (delta.obs==1 & get(time.var)==time.obs) -
-                                            dhaz1 * fit.cox1 )), by=by.vars]
-                if (treat.effect[1]=="stochastic") {
+                out <- mat[, sum( (get(A.var) == A.obs) * (get(time.var) <= tau.values[kk]) *
+                                      (get(time.var) <= time.obs) * Ht * get(paste0("Ht.lambda.", k2)) *
+                                      ((delta.obs == 1 & get(time.var) == time.obs) - dhaz1*fit.cox1)),
+                           by = by.vars]
+                if (treat.effect[1] == "stochastic") {
                     ic.squared <- (out[, 2][[1]] +
                                        rowSums(sapply(a, function(aa)
-                                           (mat[get(A.name)==aa,
-                                                pi.star[1]*(get(paste0("surv.tau", k2))[1]),
-                                                by="id"][,2][[1]]))) -
-                                       (1-fit[k2]))
+                                           (mat[get(A.var) == aa,
+                                                pi.star[1] * (get(paste0("surv.tau", k2))[1]),
+                                                by = "id"][, 2][[1]]))) - (1 - fit[k2]))
                 } else {
                     ic.squared <- (out[, 2][[1]] +
                                        rowSums(sapply(a, function(aa)
-                                           (2*(aa==a[1])-1)*(mat[get(A.name)==aa,
-                                                                 get(paste0("surv.tau", k2))[1],
-                                                                 by="id"][,2][[1]]))) -
-                                       (length(a)==2)*fit[k2] -
-                                       (length(a)==1)*(1-fit[k2]))
+                                           (2 * (aa == a[1]) - 1)*(mat[get(A.var) == aa,
+                                                                       get(paste0("surv.tau", k2))[1],
+                                                                       by = "id"][, 2][[1]]))) -
+                                       (length(a) == 2) * fit[k2] - (length(a) == 1) * (1 - fit[k2]))
                 }
-                if (Sigma) return(ic.squared) else return(sqrt(mean(ic.squared^2)/n))
+                if (Sigma) return(ic.squared) else return(sqrt(mean(ic.squared^2) / n))
             })
             if (Sigma) {
                 Sigma.list <- lapply(1:nrow(outer), function(i) {
-                    t(outer[i,,drop=FALSE])%*%outer[i,,drop=FALSE]
+                    t(outer[i, , drop = FALSE]) %*% outer[i, , drop = FALSE]
                 })
                 return(Reduce("+", Sigma.list) / nrow(outer))
             } else return(outer)
         }
     }
 
-    init.ic <- eval.ic(mat, fit=init.fit, target.index=outcome.index[target])
+    init.ic <- eval.ic(mat, fit = init.fit, target.index = outcome.index[target])
 
-    if (weighted.norm[1]=="Sigma") {
-        Sigma <- eval.ic(mat, init.fit, target.index=outcome.index[target], Sigma=TRUE)
+    if (weighted.norm[1] == "Sigma") {
+        Sigma <- eval.ic(mat, init.fit, target.index = outcome.index[target], Sigma = TRUE)
         Sigma.inv <-  try(solve(Sigma))
-        if (any(class(Sigma.inv)=="try-error")) {
-            Sigma.inv <- solve(Sigma+diag(x=0.05, nrow=nrow(Sigma)))
+        if (any(class(Sigma.inv) == "try-error")) {
+            Sigma.inv <- solve(Sigma + diag(x = 0.05, nrow = nrow(Sigma)))
             warning("regularization of Sigma needed for inversion")
             #weighted.norm[1] <- "sigma"
-            not.fit.list[[length(not.fit.list)+1]] <-
-                paste0("Sigma was regularized")
+            not.fit.list[[length(not.fit.list) + 1]] <- paste0("Sigma was regularized")
         }
     }
 
     if (FALSE) {
-        heatmap(eval.ic(mat, init.ic, target.index=outcome.index[target], Sigma=TRUE))
+        heatmap(eval.ic(mat, init.ic, target.index = outcome.index[target], Sigma = TRUE))
     }
 
     if (cr) {
         init.list <-  lapply(1:length(init.fit), function(each.index) {
-            out <- rbind(init.est=init.fit[[each.index]],
-                         init.se=init.ic[[each.index]])
+            out <- rbind(init.est = init.fit[[each.index]], init.se = init.ic[[each.index]])
             colnames(out) <- paste0("tau=", tau)
             return(out)
         })
         names(init.list) <- paste0("F", sapply(outcome.index[target], function(each) estimation[[each]]["event"]))
-        tmle.list <- list(init=init.list)
+        tmle.list <- list(init = init.list)
         if (output.km) {
             km.list <- lapply(1:length(init.fit), function(each.index) {
-                out <- rbind(km.est=km.est[((each.index-1)*length(tau)+1):(each.index*length(tau))],
-                             km.se=km.se[((each.index-1)*length(tau)+1):(each.index*length(tau))])
+                out <- rbind(km.est = km.est[((each.index - 1)*length(tau) + 1):(each.index*length(tau))],
+                             km.se = km.se[((each.index - 1)*length(tau) + 1):(each.index*length(tau))])
                 colnames(out) <- paste0("tau=", tau)
                 return(out)
             })
@@ -906,11 +963,11 @@ contmle <- function(dt,
             tmle.list$km <- km.list
         }
     }  else {
-        init.list <- rbind(init.est=init.fit, init.se=init.ic)
+        init.list <- rbind(init.est = init.fit, init.se = init.ic)
         colnames(init.list) <- paste0("tau=", tau)
-        tmle.list <- list(init=init.list)
+        tmle.list <- list(init = init.list)
         if (output.km) {
-            km.list <- rbind(km.est=km.est, km.se=km.se)
+            km.list <- rbind(km.est = km.est, km.se = km.se)
             colnames(km.list) <- paste0("tau=", tau)
             tmle.list$km <- km.list
         }
@@ -920,22 +977,21 @@ contmle <- function(dt,
     #-- 12 -- TMLE:
 
     if (cr) {
-        eval.equation <- function(mat, eps=0, target.index=outcome.index, cr.index=outcome.index, tau.values=tau, tau.all=tau) {
+        eval.equation <- function(mat, eps = 0, target.index = outcome.index,
+                                  cr.index = outcome.index, tau.values = tau, tau.all = tau) {
             outer <- lapply(target.index, function(each) {
                 fit.delta <- estimation[[each]][["event"]]
                 sapply(1:length(tau.values), function(kk) {
-                    k2 <- (1:length(tau.all))[tau.all==max(tau.all[tau.all<=tau.values[kk]])]
+                    k2 <- (1:length(tau.all))[tau.all == max(tau.all[tau.all <= tau.values[kk]])]
                     out <- 0
                     for (each2 in cr.index) {
                         fit.delta2 <- estimation[[each2]][["event"]]
-                        out2 <- mat[(get(time.var)<=tau.values[kk]) & (get(time.var)<=time.obs),
-                                    sum( (get(A.name)==A.obs) *
-                                             (get(time.var)<=time.obs) * Ht *
-                                             get(paste0("Ht", fit.delta, ".lambda", fit.delta2,".", k2)) *
-                                             ( (delta.obs==fit.delta2 & get(time.var)==time.obs) -
-                                                   exp( eps * Ht *
-                                                            get(paste0("Ht", fit.delta, ".lambda", fit.delta2,".", k2)) ) *
-                                                   get(paste0("dhaz", fit.delta2)) * get(paste0("fit.cox", fit.delta2)) )), by="id"]
+                        out2 <- mat[(get(time.var) <= tau.values[kk]) & (get(time.var) <= time.obs),
+                                    sum( (get(A.var) == A.obs)*(get(time.var) <= time.obs)*Ht*
+                                             get(paste0("Ht", fit.delta, ".lambda", fit.delta2,".", k2))*
+                                             ((delta.obs == fit.delta2 & get(time.var) == time.obs) -
+                                                  exp(eps*Ht*get(paste0("Ht", fit.delta, ".lambda", fit.delta2,".", k2)))*
+                                                  get(paste0("dhaz", fit.delta2))*get(paste0("fit.cox", fit.delta2)) )), by = "id"]
                         out <- out + out2[, 2][[1]]
                     }
                     return(mean(out))
@@ -945,16 +1001,15 @@ contmle <- function(dt,
             return(outer)
         }
     } else {
-        eval.equation <- function(mat, eps=0, target.index=1, cr.index=1, tau.values=tau, tau.all=tau) {
+        eval.equation <- function(mat, eps = 0, target.index = 1, cr.index = 1, tau.values = tau, tau.all = tau) {
             sapply(1:length(tau.values), function(kk) {
-                k2 <- (1:length(tau.all))[tau.all==max(tau.all[tau.all<=tau.values[kk]])]
-                out <- mat[(get(time.var)<=tau.values[kk]), sum( (get(A.name)==A.obs) *
-                                                                     (get(time.var)<=time.obs) * Ht *
-                                                                     get(paste0("Ht.lambda.", k2)) *
-                                                                     ( (delta.obs==1 & get(time.var)==time.obs) -
-                                                                           exp( eps * Ht *
-                                                                                    get(paste0("Ht.lambda.", k2)) ) *
-                                                                           dhaz1 * fit.cox1 )), by="id"]
+                k2 <- (1:length(tau.all))[tau.all == max(tau.all[tau.all <= tau.values[kk]])]
+                out <- mat[(get(time.var) <= tau.values[kk]), sum( (get(A.var) == A.obs)*
+                                                                       (get(time.var) <= time.obs)*Ht*
+                                                                       get(paste0("Ht.lambda.", k2))*
+                                                                       ((delta.obs == 1 & get(time.var) == time.obs) -
+                                                                            exp(eps*Ht*get(paste0("Ht.lambda.", k2)))*
+                                                                            dhaz1*fit.cox1)), by = "id"]
                 return(mean(out[, 2][[1]]))
             })
         }
@@ -962,34 +1017,34 @@ contmle <- function(dt,
 
     if (FALSE) {
         update.ic <- sqrt(mean(rowSums(sapply(target, function(target11) {
-            unlist(eval.ic(mat, init.fit, target.index=outcome.index[target11],
-                           tau.values=tt, survival=TRUE))
+            unlist(eval.ic(mat, init.fit, target.index = outcome.index[target11],
+                           tau.values = tt, survival = TRUE))
         }))^2)/n)
     }
 
-    if (check.sup & weighted.norm[1]=="Sigma") {
+    if (check.sup & weighted.norm[1] == "Sigma") {
         print("-----")
-        print(c(matrix(eval.equation(mat, eps=0), nrow=1)%*%Sigma.inv%*%matrix(eval.equation(mat, eps=0), ncol=1)))
-        print(c(matrix(eval.equation(mat, eps=0), nrow=1)%*%diag(1/(init.ic^2*n))%*%matrix(eval.equation(mat, eps=0), ncol=1)))
-        print(nrow(Sigma.inv)*c(matrix(eval.equation(mat, eps=0), nrow=1)%*%Sigma.inv%*%matrix(eval.equation(mat, eps=0), ncol=1))>=
-                  c(matrix(eval.equation(mat, eps=0), nrow=1)%*%diag(1/(init.ic^2*n))%*%matrix(eval.equation(mat, eps=0), ncol=1)))
+        print(c(matrix(eval.equation(mat, eps = 0), nrow = 1) %*% Sigma.inv %*% matrix(eval.equation(mat, eps = 0), ncol = 1)))
+        print(c(matrix(eval.equation(mat, eps = 0), nrow = 1) %*% diag(1 / (init.ic^2 * n)) %*% matrix(eval.equation(mat, eps = 0), ncol = 1)))
+        print(nrow(Sigma.inv) * c(matrix(eval.equation(mat, eps = 0), nrow = 1) %*% Sigma.inv %*% matrix(eval.equation(mat, eps = 0), ncol = 1)) >=
+                  c(matrix(eval.equation(mat, eps = 0), nrow = 1) %*% diag(1 / (init.ic^2 * n)) %*% matrix(eval.equation(mat, eps = 0), ncol = 1)))
         print("-----")
     }
 
     #----------------------------------------
     #-- 12 (I) -- multivariate one-step tmle:
 
-    if ((length(tau)>1 & !iterative) | one.step | (length(target)>1 & !iterative)) {
+    if ((length(tau) > 1 & !iterative) | one.step | (length(target) > 1 & !iterative)) {
 
         second.round <- FALSE
 
         if (verbose) print(init.fit)
         if (verbose) print(init.ic)
 
-        if (weighted.norm[1]=="sigma") {
+        if (weighted.norm[1] == "sigma") {
             if (cr) {
                 Pn.eic.fun <- function(mat) {
-                    eval <- eval.equation(mat, eps=0, target.index=outcome.index[target])
+                    eval <- eval.equation(mat, eps = 0, target.index = outcome.index[target])
                     out <- lapply(1:length(init.fit), function(each) {
                         sapply(1:length(tau), function(kk) {
                             return(eval[[each]][kk])
@@ -1000,21 +1055,21 @@ contmle <- function(dt,
                 }
             } else {
                 Pn.eic.fun <- function(mat) {
-                    eval <- eval.equation(mat, eps=0)
+                    eval <- eval.equation(mat, eps = 0)
                     sapply(1:length(tau), function(kk) {
                         return(eval[kk])
                     })
                 }
             }
-        } else if (weighted.norm[1]=="Sigma") {
+        } else if (weighted.norm[1] == "Sigma") {
             if (cr) {
                 Pn.eic.fun <- function(mat) {
-                    eval <- eval.equation(mat, eps=0, target.index=outcome.index[target])
+                    eval <- eval.equation(mat, eps = 0, target.index = outcome.index[target])
                     return(eval)
                 }
             } else {
                 Pn.eic.fun <- function(mat) {
-                    eval <- eval.equation(mat, eps=0)
+                    eval <- eval.equation(mat, eps = 0)
                     return(eval)
                 }
             }
@@ -1022,7 +1077,7 @@ contmle <- function(dt,
             if (cr) {
                 if (!separate.cr) {
                     Pn.eic.fun <- function(mat) {
-                        eval <- eval.equation(mat, eps=0, target.index=outcome.index[target])
+                        eval <- eval.equation(mat, eps = 0, target.index = outcome.index[target])
                         out <- lapply(1:length(init.fit), function(each) {
                             sapply(1:length(tau), function(kk) {
                                 (eval[[each]][kk])
@@ -1034,27 +1089,17 @@ contmle <- function(dt,
                 } else { #FIXME: NOT ADAPTED AFTER NEW SETTING
                     Pn.eic.fun <- function(mat) {
                         cbind(
-                            sapply(1:length(tau), function(kk) {
-                                eval.equation(mat, eps=0, kk=kk)
-                            }),
-                            sapply(1:length(tau), function(kk) {
-                                eval.equation(mat, eps=0, kk=kk, j2=2)
-                            }),
-                            sapply(1:length(tau), function(kk) {
-                                eval.equation(mat, eps=0, kk=kk, j=2)
-                            }),
-                            sapply(1:length(tau), function(kk) {
-                                eval.equation(mat, eps=0, kk=kk, j2=2, j=2)
-                            })
+                            sapply(1:length(tau), function(kk) {eval.equation(mat, eps = 0, kk = kk)}),
+                            sapply(1:length(tau), function(kk) {eval.equation(mat, eps = 0, kk = kk, j2 = 2)}),
+                            sapply(1:length(tau), function(kk) {eval.equation(mat, eps = 0, kk = kk, j = 2)}),
+                            sapply(1:length(tau), function(kk) {eval.equation(mat, eps = 0, kk = kk, j2 = 2, j = 2)})
                         )
                     }
                 }
             } else {
                 Pn.eic.fun <- function(mat) {
-                    eval <- eval.equation(mat, eps=0)
-                    sapply(1:length(tau), function(kk) {
-                        eval[kk]
-                    })
+                    eval <- eval.equation(mat, eps = 0)
+                    sapply(1:length(tau), function(kk) eval[kk])
                 }
             }
         }
@@ -1062,21 +1107,21 @@ contmle <- function(dt,
         Pn.eic <- Pn.eic.fun(mat)
 
         Pn.eic.norm.fun <- function(x2, x) {
-            return(sqrt(sum(unlist(x2)*unlist(x))))
+            return(sqrt(sum(unlist(x2) * unlist(x))))
         }
 
-        if (weighted.norm[1]=="sigma") {
-            Pn.eic2 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]]/(ifelse(any(unlist(init.ic)>0), init.ic[[kk]]+0.001, init.ic[[kk]])^2*n))
-            if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- unlist(Pn.eic2)
-        } else if (weighted.norm[1]=="Sigma") {
-            Pn.eic2 <- as.numeric(matrix(unlist(Pn.eic), 1, length(unlist(Pn.eic)))%*%Sigma.inv)
-            Pn.eic2 <- lapply(1:length(target), function(kk) Pn.eic2[(1+(kk-1)*length(tau)):(kk*length(tau))])
-            if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- Pn.eic2[[1]]
+        if (weighted.norm[1] == "sigma") {
+            Pn.eic2 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]] / (ifelse(any(unlist(init.ic) > 0), init.ic[[kk]] + 0.001, init.ic[[kk]])^2 * n))
+            if (length(names(Pn.eic)) > 0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- unlist(Pn.eic2)
+        } else if (weighted.norm[1] == "Sigma") {
+            Pn.eic2 <- as.numeric(matrix(unlist(Pn.eic), 1, length(unlist(Pn.eic))) %*% Sigma.inv)
+            Pn.eic2 <- lapply(1:length(target), function(kk) Pn.eic2[(1 + (kk - 1) * length(tau)):(kk * length(tau))])
+            if (length(names(Pn.eic)) > 0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- Pn.eic2[[1]]
         } else {
             Pn.eic2 <- Pn.eic
         }
 
-        criterion <- sqrt(length(target)*length(tau))/(sqrt(n)*log(n))
+        criterion <- sqrt(length(target) * length(tau)) / (sqrt(n) * log(n))
 
         Pn.eic.norm.prev <- Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic2, Pn.eic)
 
@@ -1087,20 +1132,20 @@ contmle <- function(dt,
             if (cr) {
                 for (each in outcome.index) {
                     fit.delta <- estimation[[each]][["event"]]
-                    mat[, (paste0("fit.cox", fit.delta, ".tmp")):=get(paste0("fit.cox", fit.delta))]
+                    mat[, (paste0("fit.cox", fit.delta, ".tmp")) := get(paste0("fit.cox", fit.delta))]
                     for (kk in 1:length(tau)) {
                         for (each2 in outcome.index[target]) {
                             fit.delta2 <- estimation[[each2]][["event"]]
-                            mat[, (paste0("Ht", fit.delta2, ".lambda", fit.delta,".", kk, ".tmp")):=
+                            mat[, (paste0("Ht", fit.delta2, ".lambda", fit.delta,".", kk, ".tmp")) :=
                                     get(paste0("Ht", fit.delta2, ".lambda", fit.delta,".", kk))]
 
                         }
                     }
                 }
             } else {
-                mat[, fit.cox1.tmp:=fit.cox1]
+                mat[, fit.cox1.tmp := fit.cox1]
                 for (kk in 1:length(tau)) {
-                    mat[, (paste0("Ht.lambda.", kk, ".tmp")):=get((paste0("Ht.lambda.", kk)))]
+                    mat[, (paste0("Ht.lambda.", kk, ".tmp")) := get((paste0("Ht.lambda.", kk)))]
                 }
             }
 
@@ -1108,16 +1153,16 @@ contmle <- function(dt,
                 if (!separate.cr) {
                     for (each in outcome.index) {
                         fit.delta <- estimation[[each]][["event"]]
-                        mat[, (paste0("delta", fit.delta, ".dx")):=0]
+                        mat[, (paste0("delta", fit.delta, ".dx")) := 0]
                         for (each2 in outcome.index[target]) {
                             fit.delta2 <- estimation[[each2]][["event"]]
                             for (kk in 1:length(tau)) {
-                                mat[, (paste0("delta", fit.delta, ".dx")):=
-                                        get(paste0("delta", fit.delta, ".dx"))+
-                                        (get(time.var)<=tau[kk])*Ht*(
-                                            (get(paste0("Ht", fit.delta2,".lambda", fit.delta,".", kk)))*
+                                mat[, (paste0("delta", fit.delta, ".dx")) :=
+                                        get(paste0("delta", fit.delta, ".dx")) +
+                                        (get(time.var) <= tau[kk]) * Ht * (
+                                            (get(paste0("Ht", fit.delta2,".lambda", fit.delta,".", kk))) *
                                                 Pn.eic2[[paste0("F", fit.delta2)]][kk]
-                                        )/Pn.eic.norm]
+                                        ) / Pn.eic.norm]
                             }
                         }
                     }
@@ -1125,94 +1170,93 @@ contmle <- function(dt,
                     for (each in outcome.index) {
                         fit.delta <- estimation[[each]][["event"]]
                         for (kk in 1:length(tau)) {
-                            mat[, delta1.dx:=delta1.dx+
-                                    (get(time.var)<=tau[kk])*Ht*(
-                                        (get(paste0("Ht.lambda.", kk)))*Pn.eic[kk,1]+
-                                            (get(paste0("Ht2.lambda.", kk)))*Pn.eic[kk,2]
-                                    )/Pn.eic.norm]
-                            mat[, delta2.dx:=delta2.dx+
-                                    (get(time.var)<=tau[kk])*Ht*(
-                                        (get(paste0("Ht.lambda2.", kk)))*Pn.eic[kk,3]+
-                                            (get(paste0("Ht2.lambda2.", kk)))*Pn.eic[kk,4]
-                                    )/Pn.eic.norm]
+                            mat[, delta1.dx := delta1.dx +
+                                    (get(time.var) <= tau[kk]) * Ht * (
+                                        (get(paste0("Ht.lambda.", kk))) * Pn.eic[kk, 1] +
+                                            (get(paste0("Ht2.lambda.", kk))) * Pn.eic[kk, 2]
+                                    ) / Pn.eic.norm]
+                            mat[, delta2.dx := delta2.dx +
+                                    (get(time.var) <= tau[kk]) * Ht * (
+                                        (get(paste0("Ht.lambda2.", kk))) * Pn.eic[kk, 3] +
+                                            (get(paste0("Ht2.lambda2.", kk))) * Pn.eic[kk, 4]
+                                    ) / Pn.eic.norm]
                         }
                     }
                 }
             } else {
-                mat[, delta.dx:=0]
+                mat[, delta.dx := 0]
                 for (kk in 1:length(tau)) {
-                    mat[, delta.dx:=delta.dx+
-                            (get(time.var)<=tau[kk])*
-                            Ht*get(paste0("Ht.lambda.", kk))*Pn.eic2[kk]/Pn.eic.norm]
+                    mat[, delta.dx := delta.dx +
+                            (get(time.var) <= tau[kk]) *
+                            Ht * get(paste0("Ht.lambda.", kk)) * Pn.eic2[kk] / Pn.eic.norm]
                 }
             }
 
             deps <- deps.size
 
             if (cr) {
-                mat[, surv.t:=1]
+                mat[, surv.t := 1]
                 for (each in outcome.index) {
                     fit.delta <- estimation[[each]][["event"]]
-                    mat[, (paste0("fit.cox", fit.delta)):=
-                            get(paste0("fit.cox", fit.delta))*
-                            exp(deps*get(paste0("delta", fit.delta, ".dx")))]
-                    mat[get(paste0("fit.cox", fit.delta))>500, (paste0("fit.cox", fit.delta)):=500]
-                    mat[, surv.t:=surv.t*exp(-cumsum(get(paste0("dhaz", fit.delta))*
-                                                         get(paste0("fit.cox", fit.delta)))),
-                        by=c("id", A.name)]
+                    mat[, (paste0("fit.cox", fit.delta)) :=
+                            get(paste0("fit.cox", fit.delta)) *
+                            exp(deps * get(paste0("delta", fit.delta, ".dx")))]
+                    mat[get(paste0("fit.cox", fit.delta)) > 500, (paste0("fit.cox", fit.delta)) := 500]
+                    mat[, surv.t := surv.t * exp(-cumsum(get(paste0("dhaz", fit.delta)) *
+                                                             get(paste0("fit.cox", fit.delta)))),
+                        by = c("id", A.var)]
                 }
-                mat[fit.cox1==Inf, surv.t:=0]
-                mat[, surv.t1:=c(0, surv.t[-.N]), by=c("id", A.name)]
+                mat[fit.cox1 == Inf, surv.t := 0]
+                mat[, surv.t1 := c(0, surv.t[-.N]), by = c("id", A.var)]
                 for (kk in 1:length(tau)) {
-                    mat[, (paste0("surv.tau", kk)):=
-                            surv.t[get(time.var)==max(get(time.var)[get(time.var)<=tau[kk]])],
-                        by=c("id", A.name)]
+                    mat[, (paste0("surv.tau", kk)) :=
+                            surv.t[get(time.var) == max(get(time.var)[get(time.var) <= tau[kk]])],
+                        by = c("id", A.var)]
                 }
                 for (each in outcome.index[target]) {
                     fit.delta <- estimation[[each]][["event"]]
-                    mat[, (paste0("F", fit.delta, ".t")):=cumsum(surv.t*get(paste0("dhaz", fit.delta))*
-                                                                     get(paste0("fit.cox", fit.delta))),
-                        by=c("id", A.name)]
+                    mat[, (paste0("F", fit.delta, ".t")) := cumsum(surv.t * get(paste0("dhaz", fit.delta)) *
+                                                                       get(paste0("fit.cox", fit.delta))),
+                        by = c("id", A.var)]
                     for (kk in 1:length(tau)) {
-                        mat[, (paste0("F", fit.delta, ".tau", kk)):=
-                                get(paste0("F", fit.delta, ".t"))[get(time.var)==max(get(time.var)[get(time.var)<=tau[kk]])],
-                            by=c("id", A.name)]
+                        mat[, (paste0("F", fit.delta, ".tau", kk)) :=
+                                get(paste0("F", fit.delta, ".t"))[get(time.var) == max(get(time.var)[get(time.var) <= tau[kk]])],
+                            by = c("id", A.var)]
                         for (each2 in outcome.index) {
                             fit.delta2 <- estimation[[each2]][["event"]]
-                            if (fit.delta==fit.delta2) {
-                                mat[surv.t>0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)):=
-                                        -(1-(get(paste0("F", fit.delta, ".tau", kk)) - get(paste0("F", fit.delta, ".t"))) / surv.t)]
+                            if (fit.delta == fit.delta2) {
+                                mat[surv.t > 0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)) :=
+                                        -(1 - (get(paste0("F", fit.delta, ".tau", kk)) - get(paste0("F", fit.delta, ".t"))) / surv.t)]
                             } else {
-                                mat[surv.t>0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)):=
+                                mat[surv.t > 0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)) :=
                                         (get(paste0("F", fit.delta, ".tau", kk)) - get(paste0("F", fit.delta, ".t"))) / surv.t]
                             }
-                            mat[round(surv.t,8)==0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)):=-1]
+                            mat[round(surv.t, 8) == 0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)) := -1]
                         }
                     }
                 }
             } else {
-                mat[, fit.cox1:=fit.cox1*exp(deps*delta.dx)]
-                mat[fit.cox1>500, fit.cox1:=500]
-                mat[, surv.t:=exp(-cumsum(dhaz1*fit.cox1)), by=c("id", A.name)]
+                mat[, fit.cox1 := fit.cox1 * exp(deps * delta.dx)]
+                mat[fit.cox1 > 500, fit.cox1 := 500]
+                mat[, surv.t := exp(-cumsum(dhaz1 * fit.cox1)), by = c("id", A.var)]
                 for (kk in 1:length(tau)) {
-                    mat[, (paste0("surv.tau", kk)):=
-                            surv.t[get(time.var)==max(get(time.var)[get(time.var)<=tau[kk]])],
-                        by=c("id", A.name)]
-                    mat[surv.t>0, (paste0("Ht.lambda.", kk)):=get(paste0("surv.tau", kk)) / surv.t]
-                    mat[surv.t==0, (paste0("Ht.lambda.", kk)):=1]
+                    mat[, (paste0("surv.tau", kk)) := surv.t[get(time.var) == max(get(time.var)[get(time.var) <= tau[kk]])],
+                        by = c("id", A.var)]
+                    mat[surv.t > 0, (paste0("Ht.lambda.", kk)) := get(paste0("surv.tau", kk)) / surv.t]
+                    mat[surv.t == 0, (paste0("Ht.lambda.", kk)) := 1]
                 }
             }
 
             Pn.eic <- Pn.eic.fun(mat)
             if (verbose) print(Pn.eic)
 
-            if (weighted.norm[1]=="sigma") {
-                Pn.eic2 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]]/(ifelse(any(unlist(init.ic)>0), init.ic[[kk]]+0.001, init.ic[[kk]])^2*n))
-                if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- unlist(Pn.eic2)
-            } else if (weighted.norm[1]=="Sigma") {
-                Pn.eic2 <- as.numeric(matrix(unlist(Pn.eic), 1, length(unlist(Pn.eic)))%*%Sigma.inv)
-                Pn.eic2 <- lapply(1:length(target), function(kk) Pn.eic2[(1+(kk-1)*length(tau)):(kk*length(tau))])
-                if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- Pn.eic2[[1]]
+            if (weighted.norm[1] == "sigma") {
+                Pn.eic2 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]] / (ifelse(any(unlist(init.ic) > 0), init.ic[[kk]] + 0.001, init.ic[[kk]])^2 * n))
+                if (length(names(Pn.eic)) > 0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- unlist(Pn.eic2)
+            } else if (weighted.norm[1] == "Sigma") {
+                Pn.eic2 <- as.numeric(matrix(unlist(Pn.eic), 1, length(unlist(Pn.eic))) %*% Sigma.inv)
+                Pn.eic2 <- lapply(1:length(target), function(kk) Pn.eic2[(1 + (kk - 1) * length(tau)):(kk * length(tau))])
+                if (length(names(Pn.eic)) > 0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- Pn.eic2[[1]]
             } else {
                 Pn.eic2 <- Pn.eic
             }
@@ -1220,7 +1264,7 @@ contmle <- function(dt,
             Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic2, Pn.eic)
             if (verbose) print(Pn.eic.norm)
 
-            if (Pn.eic.norm.prev<=Pn.eic.norm) {
+            if (Pn.eic.norm.prev <= Pn.eic.norm) {
                 if (verbose) {
                     print("----")
                     print(step)
@@ -1230,39 +1274,39 @@ contmle <- function(dt,
                 if (cr) {
                     for (each in outcome.index) {
                         fit.delta <- estimation[[each]][["event"]]
-                        mat[, (paste0("fit.cox", fit.delta)):=get(paste0("fit.cox", fit.delta, ".tmp"))]
+                        mat[, (paste0("fit.cox", fit.delta)) := get(paste0("fit.cox", fit.delta, ".tmp"))]
                         for (kk in 1:length(tau)) {
                             for (each2 in outcome.index[target]) {
                                 fit.delta2 <- estimation[[each2]][["event"]]
-                                mat[, (paste0("Ht", fit.delta2, ".lambda", fit.delta,".", kk)):=
+                                mat[, (paste0("Ht", fit.delta2, ".lambda", fit.delta,".", kk)) :=
                                         get(paste0("Ht", fit.delta2, ".lambda", fit.delta,".", kk, ".tmp"))]
 
                             }
                         }
                     }
                 } else {
-                    mat[, fit.cox1.tmp:=fit.cox1]
+                    mat[, fit.cox1.tmp := fit.cox1]
                     for (kk in 1:length(tau)) {
-                        mat[, (paste0("Ht.lambda.", kk)):=get((paste0("Ht.lambda.", kk, ".tmp")))]
+                        mat[, (paste0("Ht.lambda.", kk)) := get((paste0("Ht.lambda.", kk, ".tmp")))]
                     }
                 }
 
                 Pn.eic <- Pn.eic.fun(mat)
                 if (verbose) print(Pn.eic)
 
-                if (weighted.norm[1]=="sigma") {
-                    Pn.eic2 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]]/(ifelse(any(unlist(init.ic)>0), init.ic[[kk]]+0.001, init.ic[[kk]])^2*n))
-                    if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- unlist(Pn.eic2)
-                } else if (weighted.norm[1]=="Sigma") {
-                    Pn.eic2 <- as.numeric(matrix(unlist(Pn.eic), 1, length(unlist(Pn.eic)))%*%Sigma.inv)
-                    Pn.eic2 <- lapply(1:length(target), function(kk) Pn.eic2[(1+(kk-1)*length(tau)):(kk*length(tau))])
-                    if (length(names(Pn.eic))>0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- Pn.eic2[[1]]
+                if (weighted.norm[1] == "sigma") {
+                    Pn.eic2 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]] / (ifelse(any(unlist(init.ic) > 0), init.ic[[kk]] + 0.001, init.ic[[kk]])^2 * n))
+                    if (length(names(Pn.eic)) > 0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- unlist(Pn.eic2)
+                } else if (weighted.norm[1] == "Sigma") {
+                    Pn.eic2 <- as.numeric(matrix(unlist(Pn.eic), 1, length(unlist(Pn.eic))) %*% Sigma.inv)
+                    Pn.eic2 <- lapply(1:length(target), function(kk) Pn.eic2[(1 + (kk - 1) * length(tau)):(kk * length(tau))])
+                    if (length(names(Pn.eic)) > 0) names(Pn.eic2) <- names(Pn.eic) else Pn.eic2 <- Pn.eic2[[1]]
                 } else {
                     Pn.eic2 <- Pn.eic
                 }
 
-                Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic2, Pn.eic)#sqrt(sum(Pn.eic^2))
-                deps.size <- 0.5*deps.size#0.1*deps.size
+                Pn.eic.norm <- Pn.eic.norm.fun(Pn.eic2, Pn.eic) #sqrt(sum(Pn.eic^2))
+                deps.size <- 0.5 * deps.size #0.1*deps.size
 
             } else {
                 Pn.eic.norm.prev <- Pn.eic.norm
@@ -1271,78 +1315,79 @@ contmle <- function(dt,
             if (verbose) print(criterion)
             if (verbose) print(Pn.eic.norm)
 
-            if (weighted.norm[1]==FALSE) {
-                Pn.eic3 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]]/(ifelse(any(unlist(init.ic)>0), init.ic[[kk]]+0.001, init.ic[[kk]])^2*n))
-                if (length(names(Pn.eic))>0) names(Pn.eic3) <- names(Pn.eic) else Pn.eic3 <- unlist(Pn.eic3)
+            if (weighted.norm[1] == FALSE) {
+                Pn.eic3 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]] / (ifelse(any(unlist(init.ic) > 0), init.ic[[kk]] + 0.001, init.ic[[kk]])^2 * n))
+                if (length(names(Pn.eic)) > 0) names(Pn.eic3) <- names(Pn.eic) else Pn.eic3 <- unlist(Pn.eic3)
                 left.criterion <- Pn.eic.norm.fun(Pn.eic3, Pn.eic2)
             } else {
                 left.criterion <- Pn.eic.norm
             }
 
-            if (left.criterion<=criterion) {
-                Pn.eic4 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]]/(ifelse(any(unlist(init.ic)>0), init.ic[[kk]]+0.001, init.ic[[kk]])*sqrt(n)))
-                check.sup.norm <- max(abs(unlist(Pn.eic4)))<=(criterion/sqrt(length(target)*length(tau)))
-                if (check.sup) print(paste0("check supremum norm: ",
-                                            check.sup.norm))
+            if (left.criterion <= criterion) {
+                Pn.eic4 <- lapply(1:length(Pn.eic), function(kk) Pn.eic[[kk]] / (ifelse(any(unlist(init.ic) > 0), init.ic[[kk]] + 0.001, init.ic[[kk]]) * sqrt(n)))
+                check.sup.norm <- max(abs(unlist(Pn.eic4))) <= (criterion / sqrt(length(target) * length(tau)))
+                if (check.sup) print(paste0("check supremum norm: ", check.sup.norm))
                 if (check.sup & verbose) print(paste0("sup norm = ", max(unlist(Pn.eic4))))
-                if (check.sup & verbose) print(paste0("criterion = ", (criterion/sqrt(length(target)*length(tau)))))
+                if (check.sup & verbose) print(paste0("criterion = ", (criterion/sqrt(length(target) * length(tau)))))
                 if (verbose) print(paste0("converged", " at ", step, "th step"))
 
                 #-- 12c -- compute sd:
                 if (cr) {
-                    if (treat.effect[1]=="stochastic") {
+                    if (treat.effect[1] == "stochastic") {
                         final.fit <- lapply(target, function(each) {
                             sapply(1:length(tau), function(kk) {
                                 mean(rowSums(sapply(a, function(aa)
-                                    (mat[get(A.name)==aa, pi.star[1]*
+                                    (mat[get(A.var) == aa, pi.star[1] *
                                              get(paste0("F", estimation[[outcome.index[each]]][["event"]],
                                                         ".tau", kk))[1],
-                                         by="id"][,2][[1]]))))
+                                         by = "id"][,2][[1]]))))
                             })
                         })
                     } else {
                         final.fit <- lapply(outcome.index[target], function(each) {
                             sapply(1:length(tau), function(kk) {
                                 mean(rowSums(sapply(a, function(aa)
-                                    (2*(aa==a[1])-1)*(mat[get(A.name)==aa,
-                                                          get(paste0("F", estimation[[each]][["event"]],
-                                                                     ".tau", kk))[1],
-                                                          by="id"][,2][[1]]))))
+                                    (2 * (aa == a[1]) - 1) * (mat[get(A.var) == aa,
+                                                                  get(paste0("F", estimation[[each]][["event"]],
+                                                                             ".tau", kk))[1],
+                                                                  by = "id"][,2][[1]]))))
                             })
                         })
                     }
                     names(final.fit) <- paste0("F", sapply(outcome.index[target], function(each) estimation[[each]][["event"]]))
-                    final.ic <- eval.ic(mat, final.fit, target.index=outcome.index[target])
+                    final.ic <- eval.ic(mat, final.fit, target.index = outcome.index[target])
                 } else {
-                    if (treat.effect[1]=="stochastic") {
+                    if (treat.effect[1] == "stochastic") {
                         final.fit <- list(sapply(1:length(tau), function(kk) {
                             mean(rowSums(sapply(a, function(aa)
-                                (mat[get(A.name)==aa, pi.star[1]*(1-get(paste0("surv.tau", kk))[1]), by="id"][,2][[1]]))))
+                                (mat[get(A.var) == aa, pi.star[1] * (1 - get(paste0("surv.tau", kk))[1]), by = "id"][, 2][[1]]))))
                         }))
                     } else {
                         final.fit <- list(sapply(1:length(tau), function(kk) {
                             mean(rowSums(sapply(a, function(aa)
-                                (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
+                                (2 * (aa == a[1]) - 1) * (mat[get(A.var) == aa, 1 - get(paste0("surv.tau", kk))[1], by = "id"][, 2][[1]]))))
                         }))
                     }
                     final.ic <- list(eval.ic(mat, final.fit[[1]]))
                 }
 
                 final.list <-  lapply(1:length(final.fit), function(each.index) {
-                    out <- rbind(tmle.est=final.fit[[each.index]],
-                                 tmle.se=final.ic[[each.index]])
+                    out <- rbind(tmle.est = final.fit[[each.index]],
+                                 tmle.se = final.ic[[each.index]])
                     colnames(out) <- paste0("tau=", tau)
                     return(out)
                 })
 
-                if (cr) names(final.list) <- paste0("F", sapply(outcome.index[target], function(each) estimation[[each]]["event"])) else final.list <- final.list[[1]]
+                if (cr) names(final.list) <- paste0("F", sapply(outcome.index[target],
+                                                                function(each) estimation[[each]]["event"]))
+                else final.list <- final.list[[1]]
 
-                if (length(target)==length(outcome.index) & length(outcome.index)>1) {
+                if (length(target) == length(outcome.index) & length(outcome.index) > 1) {
                     S.se <- sapply(tau, function(tt) sqrt(mean(rowSums(sapply(1:length(outcome.index), function(target11) {
-                        unlist(eval.ic(mat, unlist(lapply(final.list, function(xx) xx["tmle.est",paste0("tau=", tt)])), target.index=outcome.index[target11],
-                                       tau.values=tt, survival=TRUE))
-                    }))^2)/n))
-                    S.fit <- sapply(tau, function(tt) (treat.effect!="ate")-sum(sapply(final.list, function(fl) fl["tmle.est",paste0("tau=", tt)])))
+                        unlist(eval.ic(mat, unlist(lapply(final.list, function(xx) xx["tmle.est", paste0("tau=", tt)])),
+                                       target.index = outcome.index[target11], tau.values = tt, survival = TRUE))}))^2) / n))
+                    S.fit <- sapply(tau, function(tt) (treat.effect != "ate") -
+                                        sum(sapply(final.list, function(fl) fl["tmle.est", paste0("tau=", tt)])))
 
                     final.S <- rbind(S.fit, S.se)
                     colnames(final.S) <- paste0("tau=", tau)
@@ -1354,21 +1399,21 @@ contmle <- function(dt,
                 if (!second.round) {
                     tmle.list$tmle <- final.list
                     if (check.sup) tmle.list$check.sup.norm <- list(
-                        check.sup.norm=check.sup.norm,
-                        lhs=max(abs(unlist(Pn.eic4))),
-                        rhs=criterion/sqrt(length(target)*length(tau)))
+                        check.sup.norm = check.sup.norm,
+                        lhs = max(abs(unlist(Pn.eic4))),
+                        rhs = criterion / sqrt(length(target) * length(tau)))
                     tmle.list$convergenced.at.step <- step
 
                     if (!push.criterion)
-                        break else criterion <- criterion/sqrt(length(target)*length(tau))
+                        break else criterion <- criterion / sqrt(length(target) * length(tau))
                     second.round <- TRUE
                 } else {
                     tmle.list$tmle.second.round <- final.list
                     if (check.sup) tmle.list$check.sup.norm.second.round <- list(
-                        check.sup.norm=
-                            max(abs(unlist(Pn.eic4)))<=(criterion),
-                        lhs=max(abs(unlist(Pn.eic4))),
-                        rhs=criterion/sqrt(length(target)*length(tau)))
+                        check.sup.norm =
+                            max(abs(unlist(Pn.eic4))) <= (criterion),
+                        lhs = max(abs(unlist(Pn.eic4))),
+                        rhs = criterion / sqrt(length(target) * length(tau)))
                     tmle.list$convergenced.at.step.second.round <- step
                     break
                 }
@@ -1382,45 +1427,40 @@ contmle <- function(dt,
 
         mat1 <- copy(mat)
 
-        if (length(target)==length(outcome.index) & length(outcome.index)>1) target2 <- c(target, 0) else target2 <- target
+        if (length(target) == length(outcome.index) & length(outcome.index) > 1) target2 <- c(target, 0)
+        else target2 <- target
 
         update.fit <- lapply(target2, function(target1) {
-
             update.fit.inner <- lapply(tau, function(tt) {
 
                 mat <- copy(mat1)
-                if (target1==0) {
-                    target1 <- 1:length(outcome.index)
-                }
+                if (target1 == 0) target1 <- 1:length(outcome.index)
 
-                target1.index <- (1:length(target))[target==target1]
+                target1.index <- (1:length(target))[target == target1]
 
                 #; target1 <- outcome.index
 
                 for (iter in 1:maxIter) {
 
                     if (FALSE) {
-
-                        plot(sapply(seq(-1, 1, length=100), function(eps) unlist(eval.equation(mat, eps,
-                                                                                               target.index=outcome.index[target1],
-                                                                                               cr.index=index))))
-                        lines(sapply(seq(-1, 1, length=100), function(eps) sum(unlist(
-                            eval.equation(mat, eps, target.index=outcome.index[target1]))[tau==tt])))
+                        plot(sapply(seq(-1, 1, length = 100), function(eps)
+                            unlist(eval.equation(mat, eps, target.index = outcome.index[target1], cr.index = index))))
+                        lines(sapply(seq(-1, 1, length = 100), function(eps)
+                            sum(unlist(eval.equation(mat, eps, target.index = outcome.index[target1]))[tau == tt])))
                     }
 
-                    if (length(target1)==1) {
+                    if (length(target1) == 1) {
                         eps.hat <- sapply(outcome.index, function(index) {
-                            nleqslv(0.01, function(eps) unlist(eval.equation(mat, eps,
-                                                                             target.index=outcome.index[target1],
-                                                                             cr.index=index))[tau==tt])$x
+                            nleqslv(0.01, function(eps)
+                                unlist(eval.equation(mat, eps, target.index = outcome.index[target1],
+                                                     cr.index = index))[tau == tt])$x
                         })
                     } else {
                         eps.hat <- sapply(outcome.index, function(index) {
                             nleqslv(0.01, function(eps)
                                 sum(sapply(1:length(outcome.index), function(target1)
-                                    unlist(eval.equation(mat, eps,
-                                                         target.index=outcome.index[target1],
-                                                         cr.index=index))[tau==tt])))$x
+                                    unlist(eval.equation(mat, eps, target.index = outcome.index[target1],
+                                                         cr.index = index))[tau == tt])))$x
                         })
                     }
 
@@ -1433,155 +1473,151 @@ contmle <- function(dt,
 
                     #-- 12b -- update hazard(s):
                     if (cr) {
-                        mat[, surv.t:=1]
+                        mat[, surv.t := 1]
                         #for (target11 in target1) {
-                        for (kk in (1:length(tau))[tau==tt]) {
+                        for (kk in (1:length(tau))[tau == tt]) {
                             for (each in outcome.index) {
                                 fit.delta <- estimation[[each]][["event"]]
-                                index <- (1:length(outcome.index))[outcome.index==each]
-                                mat[, (paste0("fit.cox", fit.delta)):=
-                                        get(paste0("fit.cox", fit.delta))*
-                                        exp(eps.hat[index]*Ht*
+                                index <- (1:length(outcome.index))[outcome.index == each]
+                                mat[, (paste0("fit.cox", fit.delta)) :=
+                                        get(paste0("fit.cox", fit.delta)) *
+                                        exp(eps.hat[index] * Ht *
                                                 rowSums(sapply(target1, function(target11) get(paste0("Ht", target11,".lambda", fit.delta,".", kk)))))]
-                                mat[get(paste0("fit.cox", fit.delta))>500, (paste0("fit.cox", fit.delta)):=500]
-                                mat[, surv.t:=surv.t*exp(-cumsum(get(paste0("dhaz", fit.delta))*
-                                                                     get(paste0("fit.cox", fit.delta)))),
-                                    by=c("id", A.name)]
-                                mat[get(paste0("fit.cox", fit.delta))==Inf, surv.t:=0]
+                                mat[get(paste0("fit.cox", fit.delta)) > 500, (paste0("fit.cox", fit.delta)) := 500]
+                                mat[, surv.t := surv.t * exp(-cumsum(get(paste0("dhaz", fit.delta)) *
+                                                                         get(paste0("fit.cox", fit.delta)))),
+                                    by = c("id", A.var)]
+                                mat[get(paste0("fit.cox", fit.delta)) == Inf, surv.t := 0]
                             }
                         }
                         #}
-                        mat[, surv.t1:=c(0, surv.t[-.N]), by=c("id", A.name)]
+                        mat[, surv.t1 := c(0, surv.t[-.N]), by = c("id", A.var)]
                         for (each in outcome.index[target1]) {
                             fit.delta <- estimation[[each]][["event"]]
-                            mat[, (paste0("F", fit.delta, ".t")):=cumsum(surv.t*get(paste0("dhaz", fit.delta))*
-                                                                             get(paste0("fit.cox", fit.delta))),
-                                by=c("id", A.name)]
-                            for (kk in (1:length(tau))[tau==tt]) {
-                                mat[, (paste0("F", fit.delta, ".tau", kk)):=
-                                        get(paste0("F", fit.delta, ".t"))[get(time.var)==max(get(time.var)[get(time.var)<=tau[kk]])],
-                                    by=c("id", A.name)]
+                            mat[, (paste0("F", fit.delta, ".t")) := cumsum(surv.t * get(paste0("dhaz", fit.delta)) *
+                                                                               get(paste0("fit.cox", fit.delta))),
+                                by = c("id", A.var)]
+                            for (kk in (1:length(tau))[tau == tt]) {
+                                mat[, (paste0("F", fit.delta, ".tau", kk)) :=
+                                        get(paste0("F", fit.delta, ".t"))[get(time.var) == max(get(time.var)[get(time.var) <= tau[kk]])],
+                                    by = c("id", A.var)]
                                 for (each2 in outcome.index) {
                                     fit.delta2 <- estimation[[each2]][["event"]]
-                                    if (fit.delta==fit.delta2) {
-                                        mat[surv.t>0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)):=
-                                                -(1-(get(paste0("F", fit.delta, ".tau", kk)) - get(paste0("F", fit.delta, ".t"))) / surv.t)]
+                                    if (fit.delta == fit.delta2) {
+                                        mat[surv.t > 0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)) :=
+                                                -(1 - (get(paste0("F", fit.delta, ".tau", kk)) - get(paste0("F", fit.delta, ".t"))) / surv.t)]
                                     } else {
-                                        mat[surv.t>0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)):=
+                                        mat[surv.t > 0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)) :=
                                                 (get(paste0("F", fit.delta, ".tau", kk)) - get(paste0("F", fit.delta, ".t"))) / surv.t]
                                     }
-                                    mat[surv.t==0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)):=-1]
+                                    mat[surv.t == 0, (paste0("Ht", fit.delta, ".lambda", fit.delta2, ".", kk)) := -1]
                                 }
                             }
                         }
                     } else {
-                        mat[, surv.t:=1]
-                        for (kk in (1:length(tau))[tau==tt]) {
-                            mat[, (paste0("fit.cox1")):=
-                                    get(paste0("fit.cox1"))*
-                                    exp(eps.hat*Ht*
-                                            get(paste0("Ht.lambda.", kk)))]
+                        mat[, surv.t := 1]
+                        for (kk in (1:length(tau))[tau == tt]) {
+                            mat[, (paste0("fit.cox1")) :=
+                                    get(paste0("fit.cox1")) * exp(eps.hat * Ht * get(paste0("Ht.lambda.", kk)))]
                         }
-                        mat[, surv.t:=surv.t*exp(-cumsum(get(paste0("dhaz1"))*
-                                                             get(paste0("fit.cox1")))),
-                            by=c("id", A.name)]
-                        mat[get(paste0("fit.cox", target1))==Inf, surv.t:=0]
-                        mat[, surv.t1:=c(0, surv.t[-.N]), by=c("id", "A")]
-                        for (kk in (1:length(tau))[tau==tt]) {
-                            mat[, (paste0("surv.tau", kk)):=
-                                    surv.t[get(time.var)==max(get(time.var)[get(time.var)<=tau[kk]])],
-                                by=c("id", A.name)]
-                            mat[surv.t>0, (paste0("Ht.lambda.", kk)):=get(paste0("surv.tau", kk)) / surv.t]
-                            mat[surv.t==0, (paste0("Ht.lambda.", kk)):=1]
+                        mat[, surv.t := surv.t * exp(-cumsum(get(paste0("dhaz1")) * get(paste0("fit.cox1")))),
+                            by = c("id", A.var)]
+                        mat[get(paste0("fit.cox", target1)) == Inf, surv.t := 0]
+                        mat[, surv.t1 := c(0, surv.t[-.N]), by = c("id", "A")]
+                        for (kk in (1:length(tau))[tau == tt]) {
+                            mat[, (paste0("surv.tau", kk)) :=
+                                    surv.t[get(time.var) == max(get(time.var)[get(time.var) <= tau[kk]])],
+                                by = c("id", A.var)]
+                            mat[surv.t > 0, (paste0("Ht.lambda.", kk)) := get(paste0("surv.tau", kk)) / surv.t]
+                            mat[surv.t == 0, (paste0("Ht.lambda.", kk)) := 1]
                         }
                     }
 
-                    if (length(target1)==1) {
+                    if (length(target1) == 1) {
                         eval.iter <- abs(sum(unlist(
-                            eval.equation(mat, 0, target.index=outcome.index[target1]))[tau==tt]))
-                        if (is.list(init.ic)) rhs <- (init.ic[[target1.index]][tau==tt]*
-                                                          sqrt(n))/(sqrt(n)*log(n)) else rhs <- (init.ic[tau==tt]#[[target1.index]]
-                                                                                                 *sqrt(n))/(sqrt(n)*log(n))
+                            eval.equation(mat, 0, target.index = outcome.index[target1]))[tau == tt]))
+                        if (is.list(init.ic)) rhs <- (init.ic[[target1.index]][tau == tt] * sqrt(n)) / (sqrt(n) * log(n))
+                        else rhs <- (init.ic[tau == tt]#[[target1.index]]
+                                     * sqrt(n)) / (sqrt(n) * log(n))
                     } else {
                         eval.iter <- abs(sum(
                             sapply(1:length(outcome.index), function(target1) {
-                                unlist(
-                                    eval.equation(mat, 0, target.index=outcome.index[target1]))[tau==tt]})))
+                                unlist(eval.equation(mat, 0, target.index = outcome.index[target1]))[tau == tt]})))
                         if (is.list(init.ic)) rhs <- (sqrt(sum(sapply(1:length(outcome.index), function(target1) {
-                            (init.ic[[target1]][tau==tt])^2
-                        })))*
-                            sqrt(n))/(sqrt(n)*log(n)) else rhs <- (init.ic[tau==tt]#[[target1.index]]
-                                                                   *sqrt(n))/(sqrt(n)*log(n))
+                            (init.ic[[target1]][tau == tt])^2
+                        }))) * sqrt(n)) / (sqrt(n) * log(n))
+                        else rhs <- (init.ic[tau == tt]#[[target1.index]]
+                                     * sqrt(n)) / (sqrt(n) * log(n))
                     }
 
 
-                    if (eval.iter<=rhs) {
+                    if (eval.iter <= rhs) {
                         if (cr) {
-                            if (treat.effect[1]=="stochastic") {
-                                update.est <- sapply((1:length(tau))[tau==tt], function(kk) {
+                            if (treat.effect[1] == "stochastic") {
+                                update.est <- sapply((1:length(tau))[tau == tt], function(kk) {
                                     mean(rowSums(sapply(a, function(aa)
-                                        (mat[get(A.name)==aa,
-                                             pi.star[1]*
+                                        (mat[get(A.var) == aa,
+                                             pi.star[1] *
                                                  get(paste0("F", estimation[[outcome.index[target1]]][["event"]],
                                                             ".tau", kk))[1],
-                                             by="id"][,2][[1]]))))
+                                             by = "id"][, 2][[1]]))))
                                 })
                             } else {
-                                update.est <- c(sapply((1:length(tau))[tau==tt], function(kk) {
+                                update.est <- c(sapply((1:length(tau))[tau == tt], function(kk) {
                                     lapply(target1, function(target11) {
                                         mean(rowSums(sapply(a, function(aa)
-                                            (2*(aa==a[1])-1)*(mat[get(A.name)==aa,
-                                                                  get(paste0("F", estimation[[outcome.index[target11]]][["event"]],
-                                                                             ".tau", kk))[1],
-                                                                  by="id"][,2][[1]]))))
+                                            (2 * (aa == a[1]) - 1) * (mat[get(A.var) == aa,
+                                                                          get(paste0("F", estimation[[outcome.index[target11]]][["event"]],
+                                                                                     ".tau", kk))[1],
+                                                                          by = "id"][, 2][[1]]))))
                                     })
                                 }))
                             }
                         } else {
-                            if (treat.effect[1]=="stochastic") {
-                                update.est <- sapply((1:length(tau))[tau==tt], function(kk) {
+                            if (treat.effect[1] == "stochastic") {
+                                update.est <- sapply((1:length(tau))[tau == tt], function(kk) {
                                     mean(rowSums(sapply(a, function(aa)
-                                        (mat[get(A.name)==aa, pi.star[1]*(1-get(paste0("surv.tau", kk))[1]), by="id"][,2][[1]]))))
+                                        (mat[get(A.var) == aa, pi.star[1] * (1 - get(paste0("surv.tau", kk))[1]), by = "id"][, 2][[1]]))))
                                 })
                             } else {
-                                update.est <- sapply((1:length(tau))[tau==tt], function(kk) {
+                                update.est <- sapply((1:length(tau))[tau == tt], function(kk) {
                                     mean(rowSums(sapply(a, function(aa)
-                                        (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
+                                        (2 * (aa == a[1]) - 1) * (mat[get(A.var) == aa, 1 - get(paste0("surv.tau", kk))[1], by = "id"][, 2][[1]]))))
                                 })
                             }
                         }
                         #update.est <- list(update.est)
                         names(update.est) <- paste0("F", target1)
-                        if (length(target1)>1) {
+                        if (length(target1) > 1) {
                             update.ic <- sqrt(mean(rowSums(sapply(target1, function(target11) {
-                                unlist(eval.ic(mat, update.est, target.index=outcome.index[target11],
-                                               tau.values=tt, survival=TRUE))
-                            }))^2)/n)#[[1]]
+                                unlist(eval.ic(mat, update.est, target.index = outcome.index[target11],
+                                               tau.values = tt, survival = TRUE))
+                            }))^2) / n)#[[1]]
                             if (FALSE) update.ic <- sqrt(sum(sapply(target1, function(target11) {
-                                unlist(eval.ic(mat, update.est, target.index=outcome.index[target11],
-                                               tau.values=tt))
+                                unlist(eval.ic(mat, update.est, target.index = outcome.index[target11],
+                                               tau.values = tt))
                             })^2))
-                            if (treat.effect[1]=="ate") {
-                                update.est <- list(S=-sum(unlist(update.est)))
+                            if (treat.effect[1] == "ate") {
+                                update.est <- list(S = -sum(unlist(update.est)))
                             } else {
-                                update.est <- list(S=1-sum(unlist(update.est)))
+                                update.est <- list(S = 1 -sum(unlist(update.est)))
                             }
                             update.ic <- sqrt(sum(update.ic^2))
                         } else {
-                            update.ic <- unlist(eval.ic(mat, update.est, target.index=outcome.index[target1],
-                                                        tau.values=tt))#[[1]]
+                            update.ic <- unlist(eval.ic(mat, update.est, target.index = outcome.index[target1],
+                                                        tau.values = tt))#[[1]]
                         }
-                        out.list <- list(update.est=update.est, update.ic=update.ic)
+                        out.list <- list(update.est = update.est, update.ic = update.ic)
                         if (cr) {
-                            if (length(target1)==1) {
+                            if (length(target1) == 1) {
                                 names(out.list)[length(out.list)] <- paste0("F", target1)
                             } else {
                                 names(out.list)[length(out.list)] <- paste0("S")
                             }
                         }
                         #break
-                        return(list(update.est=update.est, update.ic=update.ic))
-                    } else if (iter==maxIter) {
+                        return(list(update.est = update.est, update.ic = update.ic))
+                    } else if (iter == maxIter) {
                         message("Warning: Algorithm did not converge")
                     }
                 }
@@ -1589,8 +1625,8 @@ contmle <- function(dt,
 
             #-- 12c -- evaluate target parameter:
             update.list.inner <- do.call("cbind", lapply(1:length(update.fit.inner), function(each.index) {
-                out <- rbind(tmle.est=update.fit.inner[[each.index]]$update.est,
-                             tmle.se=update.fit.inner[[each.index]]$update.ic)
+                out <- rbind(tmle.est = update.fit.inner[[each.index]]$update.est,
+                             tmle.se = update.fit.inner[[each.index]]$update.ic)
                 colnames(out) <- paste0("tau=", tau[each.index])
                 return(out)
             }))
@@ -1601,14 +1637,14 @@ contmle <- function(dt,
         #-- 12c -- evaluate target parameter:
 
         if (FALSE) update.list <- lapply(1:length(update.fit), function(each.index) {
-            out <- rbind(tmle.est=update.fit[[each.index]]$update.est,
-                         tmle.se=update.fit[[each.index]]$update.ic)
+            out <- rbind(tmle.est = update.fit[[each.index]]$update.est,
+                         tmle.se = update.fit[[each.index]]$update.ic)
             colnames(out) <- paste0("tau=", tt)
             return(out)
         }) else update.list <- update.fit
 
         if (cr) {
-            if (length(target)==length(update.list)) {
+            if (length(target) == length(update.list)) {
                 names(update.list) <- paste0("F", target)
             } else {
                 names(update.list) <- c(paste0("F", target), "S")
@@ -1622,25 +1658,25 @@ contmle <- function(dt,
         tmle.list$tmle <- update.list
     }
 
-    if (length(not.fit.list)>0) {
-        tmle.list[[length(tmle.list)+1]] <- not.fit.list
+    if (length(not.fit.list) > 0) {
+        tmle.list[[length(tmle.list) + 1]] <- not.fit.list
         names(tmle.list)[length(tmle.list)] <- "messages"
     }
 
     if (simultaneous.ci) {
-        Sigma <- eval.ic(mat, init.fit, target.index=outcome.index[target], Sigma=TRUE)+0.000001
-        rho <- matrix(0, nrow=nrow(Sigma), ncol=ncol(Sigma))
+        Sigma <- eval.ic(mat, init.fit, target.index = outcome.index[target], Sigma = TRUE) + 0.000001
+        rho <- matrix(0, nrow = nrow(Sigma), ncol = ncol(Sigma))
         for (j1 in 1:nrow(rho)) {
             for (j2 in 1:nrow(rho)) {
-                rho[j1,j2] <- Sigma[j1,j2] / sqrt(Sigma[j1,j1]*Sigma[j2,j2])
+                rho[j1, j2] <- Sigma[j1, j2] / sqrt(Sigma[j1, j1] * Sigma[j2, j2])
             }
         }
         generate.max <- list()
         for (mm in 1:10000) {
             Z0 <- rnorm(nrow(rho))
             #Z <- sqrtm(rho)%*%Z0
-            Z <-  try(mvrnorm(n=1, rep(0, nrow(rho)), rho, tol=1e-6, empirical=FALSE))
-            if (any(class(Z)=="try-error")) {
+            Z <-  try(mvrnorm(n = 1, rep(0, nrow(rho)), rho, tol = 1e-6, empirical = FALSE))
+            if (any(class(Z) == "try-error")) {
                 generate.max[[mm]] <- NA
                 warning("NA in Sigma; cannot estimate q95")
                 break
@@ -1648,24 +1684,24 @@ contmle <- function(dt,
                 generate.max[[mm]] <- max(Z)
             }
         }
-        if (length(generate.max)==10000) {
-            q.max.95 <- quantile(unlist(generate.max), p=0.95)
+        if (length(generate.max) == 10000) {
+            q.max.95 <- quantile(unlist(generate.max), p = 0.95)
             tmle.list$q.max.95 <- q.max.95
         }
     }
 
     if (FALSE) {
-        mean(mat[A==1, unique(surv.tau1), by="id"][,2][[1]])
-        1-sum(unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.est",])))
+        mean(mat[A == 1, unique(surv.tau1), by = "id"][, 2][[1]])
+        1 - sum(unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.est",])))
         sqrt(sum(unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.se",]^2))))
         update.ic <- sqrt(mean(rowSums(sapply(1:length(outcome.index), function(target11) {
-            unlist(eval.ic(mat, unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.est",])), target.index=outcome.index[target11],
-                           tau.values=tau, survival=TRUE))
+            unlist(eval.ic(mat, unlist(lapply(tmle.list$tmle.second.round, function(xx) xx["tmle.est",])), target.index = outcome.index[target11],
+                           tau.values = tau, survival = TRUE))
         }))^2)/n)#[[1]]
     }
 
     if (length(check.times.size)>0) {
-        unique.times3 <- unique.times[unique.times<=max(tau)]
+        unique.times3 <- unique.times[unique.times <= max(tau)]
         set.seed(2444231)
         unique.times2 <- sort(unique.times3[sample(length(unique.times3), check.times.size)])
 
@@ -1673,32 +1709,32 @@ contmle <- function(dt,
         ## print(tau)
 
         for (kk in 1:length(unique.times2)) {
-            mat[, (paste0("surv.tau", kk)):=
-                    surv.t[get(time.var)==max(get(time.var)[get(time.var)<=unique.times2[kk]])],
-                by=c("id", A.name)]
-            mat[surv.t>0, (paste0("Ht.lambda.", kk)):=get(paste0("surv.tau", kk)) / surv.t]
-            mat[surv.t==0, (paste0("Ht.lambda.", kk)):=1]
+            mat[, (paste0("surv.tau", kk)) :=
+                    surv.t[get(time.var) == max(get(time.var)[get(time.var) <= unique.times2[kk]])],
+                by = c("id", A.var)]
+            mat[surv.t > 0, (paste0("Ht.lambda.", kk)) := get(paste0("surv.tau", kk)) / surv.t]
+            mat[surv.t == 0, (paste0("Ht.lambda.", kk)) := 1]
         }
 
         all.fit <- sapply(1:length(unique.times2), function(kk) {
             mean(rowSums(sapply(a, function(aa)
-                (2*(aa==a[1])-1)*(mat[get(A.name)==aa, 1-get(paste0("surv.tau", kk))[1], by="id"][,2][[1]]))))
+                (2 * (aa == a[1]) - 1) * (mat[get(A.var) == aa, 1 - get(paste0("surv.tau", kk))[1], by = "id"][, 2][[1]]))))
         })
 
-        all.ic <- eval.ic(mat, all.fit, target.index=outcome.index[target], tau.values=unique.times2, tau=unique.times2)
+        all.ic <- eval.ic(mat, all.fit, target.index = outcome.index[target], tau.values = unique.times2, tau = unique.times2)
 
-        Pn.eic.all <- eval.equation(mat, 0, target.index=outcome.index[target1], tau.values=unique.times2, tau=unique.times2)
+        Pn.eic.all <- eval.equation(mat, 0, target.index = outcome.index[target1], tau.values = unique.times2, tau = unique.times2)
 
-        Pn.eic.all4 <- lapply(1:length(Pn.eic.all), function(kk) Pn.eic.all[[kk]]/(ifelse(any(unlist(all.ic)>0), all.ic[[kk]]+0.001, all.ic[[kk]])*sqrt(n)))
-        check.sup.norm.all <- abs(unlist(Pn.eic.all4))<=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau)))
+        Pn.eic.all4 <- lapply(1:length(Pn.eic.all), function(kk) Pn.eic.all[[kk]] / (ifelse(any(unlist(all.ic) > 0), all.ic[[kk]] + 0.001, all.ic[[kk]]) * sqrt(n)))
+        check.sup.norm.all <- abs(unlist(Pn.eic.all4)) <= criterion/ifelse(push.criterion, 1, sqrt(length(target) * length(tau)))
 
         tmle.list$check.sup.norm.all <- list(
-            check.sup.norm.all=mean(check.sup.norm.all),
-            lhs=max(abs(unlist(Pn.eic.all4))),
-            rhs=criterion/ifelse(push.criterion, 1, sqrt(length(target)*length(tau))),
-            Pn.eic=data.table(times=unique.times2,
-                              Pn.eic=unlist(Pn.eic.all4),
-                              tf=1*check.sup.norm.all))
+            check.sup.norm.all = mean(check.sup.norm.all),
+            lhs = max(abs(unlist(Pn.eic.all4))),
+            rhs = criterion / ifelse(push.criterion, 1, sqrt(length(target) * length(tau))),
+            Pn.eic = data.table(times = unique.times2,
+                                Pn.eic = unlist(Pn.eic.all4),
+                                tf = 1 * check.sup.norm.all))
 
     }
 
