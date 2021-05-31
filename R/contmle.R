@@ -1,8 +1,12 @@
 #' contmle
 #'
-#' @param dt \[data.table\] comprised of (t) time-to-event \[numeric\], (J) event type \[integer\] where censoring events = 0, (A) intervention \[numeric\], (L) covariates, (ID) id
+#' @param time
+#' @param type
+#' @param trt
+#' @param adjust.vars
+#' @param outcome.target
+#' @param id
 #' @param estimation named \[list\] of models: one for each target outcome event \[j\], one for censoring \[0\], and one for treatment assignment \[A\]
-#' @param target \[numeric: 1\] . Which event(s) to target
 #' @param hal.screening \[logical: F\] use poisson-based (T/F?) or cox-based hal (T/F?)
 #' @param one.step \[logical: F\] use one-step tmle (T) or iterative TMLE (F). Defaults to TRUE if competing risks are present)
 #' @param deps.size \[numeric: 0.1\]
@@ -48,49 +52,54 @@
 #' @export
 #'
 #' @examples
-contmle <- function(dt,
-                    time.var = NULL,
-                    delta.var = NULL,
-                    A.var = NULL,
-                    id.var = NULL,
+contmle <- function(time,
+                    type,
+                    trt,
+                    adjust.vars,
                     #-- outcome model;
-                    estimation = list("outcome" = list(fit = c("sl", "sl", "hal", "km"),
-                                                       model = Surv(time, delta == 1) ~ A + .,
-                                                       changepoint = NULL),
-                                      "cens" = list(fit = c("sl", "sl", "hal", "km"),
-                                                    model = Surv(time, delta == 0) ~ A + .,
-                                                    changepoint = NULL),
-                                      "treat" = list(fit = c("sl", "glm"),
-                                                     model = A ~ .)
-                    ), # should add treatmodel to this estimation list
+                    estimation = list("A" = list(target = "trt",
+                                                 fit = "glm",
+                                                 model = A ~ .),
+                                      "0" = list(target = 0,
+                                                 fit = "km",
+                                                 model = Surv(time, type == 0) ~ A + .),
+                                      "1" = list(target = 1,
+                                                 fit = "sl",
+                                                 model = list(Surv(time, type == 1) ~ A,
+                                                              Surv(time, type == 1) ~ A + .,
+                                                              Surv(time, type == 1) ~ A*. + .))
+                    ), # should add treat.model to this estimation list
+                    #-- treatment model;
+                    treat.model = A ~ L1 + L2 + L3,
                     #-- when there are competing risks, what is the target?
-                    target = 1,
+                    outcome.target = unique(type[type != 0]),
+                    trt.target = unique(trt),
+                    #-- treatment effect of interest;
+                    treat.effect = c("1", "0", "ate", "stochastic"),
+                    #-- ID variable
+                    id.var = NULL,
                     #-- use poisson-based or cox-based hal?
-                    hal.screening=FALSE,
+                    hal.screening = FALSE,
                     #-- use iterative or one-step tmle; (for competing risks, one-step is default)
                     one.step = FALSE, deps.size = 0.1, no.small.steps = 500,
                     push.criterion = FALSE,
                     iterative = FALSE,
                     #-- simultaneous inference;
                     simultaneous.ci = FALSE,
-                    #-- treatment model;
-                    treat.model = A ~ L1 + L2 + L3,
                     #-- cut-off for truncation of censoring weights;
                     cut.off.cens = 1e-3,
                     #-- target cause-specific hazards separately or together in one-step tmle;
                     separate.cr = FALSE, #DO NOT CHANGE.
                     #-- use weighted norm in multivariate one-step;
                     weighted.norm = c(FALSE, "sigma", "Sigma"),
-                    #-- treatment effect of interest;
-                    treat.effect = c("1", "0", "ate", "stochastic"),
                     #-- specify stochastic intervention;
                     pi.star.fun = function(L) L$L1*0.2,
                     #-- time-point(s) of interest;
-                    tau = c(1.2),
+                    tau = max(time[type > 0]),
                     #-- increasing grid? ;
                     use.observed.times = FALSE,
                     length.times = length(tau),
-                    check.times.size = NULL,#100,
+                    check.times.size = NULL,#100, ## HELENE: What does this do?
                     #-- pick super learning loss (should not change this);
                     sl.method = 3, #DO NOT CHANGE.
                     #-- number of folds in cross-validation;
@@ -116,7 +125,7 @@ contmle <- function(dt,
                     output.km = FALSE, only.km = FALSE, only.cox.sl = FALSE, output.RR = FALSE,
                     #-- models incorporated in super learner;
                     sl.change.points = (0:12)/10,
-                    sl.models = list(mod1 = list(Surv(time, delta == 1) ~ A + L1 + L2 + L3), ########### make sl.models a part of each estimation list model? ----------------------------
+                    sl.models = list(mod1 = list(Surv(time, delta == 1) ~ A + L1 + L2 + L3), ## make sl.models a part of each estimation list model? ----------------------------
                                      mod2 = list(Surv(time, delta == 1) ~ A + L1.squared + L2 + L3),
                                      mod3 = list(Surv(time, delta == 1) ~ L2.squared + A + L1.squared + L2 + L3),
                                      mod4 = list(Surv(time, delta == 1) ~ A + L1.squared),
@@ -127,150 +136,86 @@ contmle <- function(dt,
 
     not.fit.list <- list()
 
-    #-- checks for input data table
-    if (!is.data.frame(dt))
-        stop("dt should be a data.table")
-    if (!("data.table" %in% class(dt))) {
-        dt <- data.table::as.data.table(dt)
-        warning("input dt should be in data.table format.")
-    }
-    if (max(apply(dt, 2, anyNA)) > 0 | max(apply(dt, 2, function(col) sum(is.null(col)))) > 0)
-        stop("Missing and Null values are not supported.")
+    # 0) Check Inputs ----
+    checked.args <- check.contmle.inputs(time = time, type = type, trt = trt, adjust.vars = adjust.vars,
+                                         tau = tau, outcome.target = outcome.target, trt.target = trt.target,
+                                         estimation = estimation, id.var = id.var)
 
-    #-- names of time variable and event (delta) variable;
-    if (is.null(time.var)) ########## fragile, depends on Surv model spec. Remove & require user specification of time.var? ------------------------------------------
-    time.var <- gsub("Surv\\(", "", unlist(strsplit(as.character(estimation[[1]][["model"]])[2], ","))[1])
-    if (!(time.var %in% colnames(dt)))
-        stop("time.var was not specified and the time-to-event variable specified in the first estimation model was not found in the input dt.")
-    if (!(typeof(unlist(dt[, time.var])) %in% c("numeric", "integer")))
-        stop(paste0("Time variable ", time.var, " must be numeric."))
-    if (any(dt[, time.var] <= 0))
-        stop("Some failure times are less than or equal zero.")
+    # 1) Initializations ----
+    dt <- as.data.table(cbind('time' = checked.args$time,
+                              'type' = checked.args$type,
+                              'trt' = checked.args$trt,
+                              checked.args$adjust.vars))
 
-    if (is.null(delta.var)) ########## fragile, depends on Surv model spec. Remove & require user specification of time.var? ------------------------------------------
-    delta.var <- gsub(" ", "",
-                      gsub("==", "",
-                           gsub("[0-9]+\\)", "",
-                                unlist(strsplit(as.character(estimation[[1]][["model"]])[2], ","))[2])))
-    if (!(delta.var %in% colnames(dt)))
-        stop("delta.var was not specified and event type variable specified in the first estimation model was not found in the input dt.")
-    if (!(typeof(unlist(dt[, delta.var])) %in% c("numeric", "integer")))
-        stop("delta.var should be non-negative integers: 0 denoting a censoring event positive integers denoting other endpoints.")
+    estimation <- checked.args$estimation
 
-    #-- add event value to list of estimation, and only include those observed;
-    ############### Different model for each target outcome? --------------------------------------------------------------------------------------------------------------
-    if (length(estimation) != length(targets) + 2 | sort(names(estimation)) != sort(c(targets, "A", "0")))
-        warning("Models should be provided for censoring, treatment assignment, and each target event.")
+    ## competing risks? ----
+    target <- checked.args$outcome.target
+    cr <- length(target) > 1
 
-    for (var in c("A", "0", sort(targets))) {
-        if (exists(estimation[[var]])) {
-            if (var %in% as.character(targets)) {
-                if (!(as.numeric(var) %in% dt[, unique(get(delta.var))]))
-                    stop(paste0("model specified for ", delta.var, "=", event,
-                                ", but there were no observations"))
-            }
-        }
-        else {
-            stop(paste0("Model not specified for ", ifelse(var == "A", "", paste0(delta.var, "=")),
-                        var, "."))  ############ enable defaulting to a main terms model using all baseline covariates?
-        }
-    }
+    if (length(dt[get(delta.var) > 0, unique(get(delta.var))]) < 3) ### HELENE: What does this do? ----
+    target <- target[target < 3]
 
-    ############## Is this a check that estimation is specified correctly? ----------------------------------------------------
-    estimation <- estimation[sapply(estimation, function(each) length(each) > 0)]
-
-    #-- is model specified multiple times for one event type?
-    events <- unlist(lapply(estimation, function(each) each[["event"]]))
-    if (any(table(events) > 1)) {
-        stop(paste0("multiple models specified for ", delta.var, "=",
-                    paste0(names(table(events))[table(events) > 1], collapse = ",")))
-    }
-
-    #-- a missing model for one of the deltas?
-    delta.missing <- dt[, unique(get(delta.var))][!(dt[, unique(get(delta.var))] %in%
-                                                        unlist(lapply(estimation, function(each) each[["event"]])))]
-    if (length(delta.missing)) {
-        warning(paste0("No model specified for event type=", paste0(delta.missing, collapse = ","),
-                       "; will use the one specified for event type=",
-                       estimation[[1]][["event"]]))
-        for (delta in delta.missing) {
-            estimation[[length(estimation) + 1]] <- estimation[[1]]
-            estimation[[length(estimation)]][["event"]] <- delta
-            estimation[[length(estimation)]][["model"]] <-
-                as.formula(paste0(gsub(estimation[[1]][["event"]], delta,
-                                       estimation[[length(estimation)]][["model"]][2]),
-                                  estimation[[length(estimation)]][["model"]][1],
-                                  estimation[[length(estimation)]][["model"]][3]))
-        }
-    }
-
-
-    #-- 0 -- some initializations:
-
-    #-- are there competing risks?
-    cr <- FALSE
-    if (length(dt[get(delta.var) > 0, unique(get(delta.var))]) > 1)
-        cr <- TRUE
-    if (!cr)
-        target <- 1
-    else if (length(dt[get(delta.var) > 0, unique(get(delta.var))]) < 3)
-        target <- target[target < 3]
-
-    #-- get number of subjects:
-    if (is.null(id.var)) {
+    ## get number of subjects: ----
+    if (is.null(checked.args$id.var)) {
         n <- nrow(dt)
-        warning("No id variable specified. Defaulting to n equals the number of rows in the input data table.")
-    } else
+        warning("No id variable specified. Defaulting to n = the length of input vectors.")
+    } else {
         n <- length(dt[, unique(get(id.var))])
+        # adjust.vars <- dt[, colnames(dt) != id.var] ### HELENE: remove id.var from adjustment set? ----
+    }
 
-    #-- get treatment colname:
-    if (is.null(A.var)) A.var <- as.character(treat.model)[2]
+    ## get treatment colname ----
+    A.var <- "trt"
+    ## get delta colname ----
+    delta.var <- "type"
+    ## get time colname ----
+    time.var <- "time"
 
-    ##################### check support of target intervention ----------------------------------------
-
-    #-- list of covariates
-    covars <- NULL
+    # list of covariates ----
     covars <- setdiff(colnames(dt), c(delta.var, A.var, time.var, id.var))
-    for (mod in c(lapply(sl.models, function(x) x[[1]]),
-                  unlist(lapply(estimation, function(x) x[["model"]])))) {
-        mod3 <- as.character(mod)[3]
-        covars <- unique(c(covars, unlist(strsplit(gsub("\\+", " ",
-                                                        mod3), " "))))
-        covars <- covars[!covars %in% c(A.var, "", "*")]
-        if (length(grep(".squared", mod3)) > 0) {
-            names.squared <- unique(gsub(".squared", "",
-                                         grep(".squared", unlist(strsplit(gsub("\\+", " ",
-                                                                               mod3), " ")),
-                                              value = TRUE)))
-            for (col in names.squared)
-                dt[, (paste0(col, ".squared")) := get(col)^2]
-        }
-        if (length(grep(".log", mod3)) > 0) {
-            names.log <- unique(gsub(".log", "",
-                                     grep(".log", unlist(strsplit(gsub("\\+", " ",
-                                                                       mod3), " ")),
-                                          value = TRUE)))
-            for (col in names.log)
-                dt[, (paste0(col, ".log")) := log(get(col))]
-        }
-    }
-    if (length(grep(".squared", covars)) > 0) covars <- covars[-grep(".squared", covars)]
-    if (length(grep(".log", covars)) > 0) covars <- covars[-grep(".log", covars)]
-    if (length(grep("cut.", covars)) > 0) covars <- covars[-grep("cut.", covars)]
-
-    covars <- covars[covars != "1"]
-    for (covar in covars) {
-        if (dt[, length(unique(get(covar)))] == 1) {
-            covars <- covars[covars != covar]
-            warning(paste0("The covariate ", covar, " is constantly valued and has been removed."))
-        }
-    }
-
     if (verbose) print(covars)
 
-    #-- get unique times in dataset
+    ## Make user provide all necessary covariates in adjust.vars? ----
+    ### TODO: implement model formula checks in check.contmle.inputs ----
+    # covars <- NULL
+    for (mod in c(lapply(sl.models, function(x) x[[1]]),
+                  unlist(lapply(estimation, function(x) x[["model"]])))) {
+        #     mod3 <- as.character(mod)[3]
+        #     covars <- unique(c(covars, unlist(strsplit(gsub("\\+", " ",
+        #                                                     mod3), " "))))
+        #     covars <- covars[!covars %in% c(A.var, "", "*")]
+        #     if (length(grep(".squared", mod3)) > 0) {
+        #         names.squared <- unique(gsub(".squared", "",
+        #                                      grep(".squared", unlist(strsplit(gsub("\\+", " ",
+        #                                                                            mod3), " ")),
+        #                                           value = TRUE)))
+        #         for (col in names.squared)
+        #             dt[, (paste0(col, ".squared")) := get(col)^2]
+        #     }
+        #     if (length(grep(".log", mod3)) > 0) {
+        #         names.log <- unique(gsub(".log", "",
+        #                                  grep(".log", unlist(strsplit(gsub("\\+", " ",
+        #                                                                    mod3), " ")),
+        #                                       value = TRUE)))
+        #         for (col in names.log)
+        #             dt[, (paste0(col, ".log")) := log(get(col))]
+        #     }
+    }
+    ### can be done with ~ var^2 ? ----
+    # if (length(grep(".squared", covars)) > 0) covars <- covars[-grep(".squared", covars)]
+    ### can be done with ~ log(var) ? ----
+    # if (length(grep(".log", covars)) > 0) covars <- covars[-grep(".log", covars)]
+    ### can be done with ~ I(var ? cut))? ----
+    # if (length(grep("cut.", covars)) > 0) covars <- covars[-grep("cut.", covars)]
+
+
+    # get unique times in dataset ----
     unique.times <- sort(unique(dt[, get(time.var)]))
     unique.times2 <- sort(unique(dt[get(delta.var) > 0, get(time.var)]))
+
+    unique.times <- checked.args$uniq.t
+    unique.times2 <- checked.args$uniq.t.event
 
     #-- intervals in tau where no obs?
 
@@ -287,18 +232,21 @@ contmle <- function(dt,
         }
     }
 
-    #-- which parameters are we interested in?
-    if (treat.effect[1] == "1") a <- 1 else if (treat.effect[1] == "0") a <- 0 else a <- c(1, 0)
+    # which parameters are we interested in? ----
+    a <- ifelse(checked.args$trt.target %in% c("ate", "rr", "stochastic"), ## does this work with stochastic trt.target?
+                1:0,
+                as.numeric(checked.args$trt.target))
 
-    #-- initialize dataset to be used later;
+
+    # initialize dataset to be used later ----
     dt2 <- NULL
-    bhaz.cox <- do.call("rbind", lapply(a, function(aa) data.table(time = c(0, unique.times), A = aa)))
+    bhaz.cox <- do.call("rbind", lapply(a, function(aa) data.table::data.table(time = c(0, unique.times), A = aa)))
     setnames(bhaz.cox, "A", A.var)
 
-    #-- if there is any of the outcome models that uses coxnet
+    # if there is any of the outcome models that uses coxnet ----
     sl.models.tmp <- sl.models
     sl.models <- list()
-    #-- add separate sl models when specified with, e.g., multiple changepoints
+    # add separate sl models when specified with, e.g., multiple changepoints ----
     for (k1 in 1:length(sl.models.tmp)) {
         if (length(sl.models.tmp[[k1]]) > 1) {
             for (k2 in 2:length(sl.models.tmp[[k1]])) {
@@ -316,16 +264,18 @@ contmle <- function(dt,
         }
     }
 
-    #-- 2 -- estimate treatment propensity:
-    # allow other specifications for A?
+    # 2) estimate treatment propensity ----
+    ## allow other specifications for A? ----
+    ## would we want to save the A model & not just the A probability predictions? ----
     if (estimation[["A"]][['fit']] == "glm") {
         if (class(estimation[["A"]][["model"]]) == "formula")
-            prob.A <- predict(glm(as.formula(deparse(estimation[["A"]][["model"]])), data = dt), # would we want to save the A model & not just the A probability predictions?
+            prob.A <- predict(glm(as.formula(deparse(estimation[["A"]][["model"]])), data = dt),
                               type = "response")
     }
-    print(summary(prob.A))
+    if (verbose)
+        print(summary(prob.A))
 
-    #-- 3 -- estimation -- loop over causes (including censoring):
+    # 3) estimation -- loop over causes (including censoring) ----
 
     for (each in 1:length(estimation)) {
 
@@ -1034,7 +984,7 @@ contmle <- function(dt,
     #----------------------------------------
     #-- 12 (I) -- multivariate one-step tmle:
 
-    if ((length(tau) > 1 & !iterative) | one.step | (length(target) > 1 & !iterative)) {
+    if ((length(tau) + length(target) > 1 & !iterative) | one.step) {
 
         second.round <- FALSE
 
