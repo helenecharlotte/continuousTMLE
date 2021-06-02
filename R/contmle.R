@@ -1,12 +1,13 @@
 #' contmle
 #'
-#' @param time
-#' @param type
-#' @param trt
-#' @param adjust.vars
-#' @param outcome.target
-#' @param id
-#' @param estimation named \[list\] of models: one for each target outcome event \[j\], one for censoring \[0\], and one for treatment assignment \[A\]
+#' @param time \[numeric\] vector of observed event times
+#' @param type \[numeric\]
+#' @param trt \[numeric\]
+#' @param adjust.vars \[data.frame\]
+#' @param outcome.target \[numeric\]
+#' @param trt.target \[numeric/character\] numeric vector of
+#' @param id.var \[character: NULL\] name of the id column in the adjust.vars data.frame, if such an id column exists
+#' @param estimation \[list\] of models: one for each target outcome event \[j\], one for censoring \[0\], and one for treatment assignment \[A\]
 #' @param hal.screening \[logical: F\] use poisson-based (T/F?) or cox-based hal (T/F?)
 #' @param one.step \[logical: F\] use one-step tmle (T) or iterative TMLE (F). Defaults to TRUE if competing risks are present)
 #' @param deps.size \[numeric: 0.1\]
@@ -56,28 +57,29 @@ contmle <- function(time,
                     type,
                     trt,
                     adjust.vars,
-                    #-- outcome model;
                     estimation = list("A" = list(target = "trt",
                                                  fit = "glm",
-                                                 model = A ~ .),
+                                                 model = ~ .),
                                       "0" = list(target = 0,
                                                  fit = "km",
-                                                 model = Surv(time, type == 0) ~ A + .),
+                                                 model = ~ trt + .),
                                       "1" = list(target = 1,
                                                  fit = "sl",
-                                                 model = list(Surv(time, type == 1) ~ A,
-                                                              Surv(time, type == 1) ~ A + .,
-                                                              Surv(time, type == 1) ~ A*. + .))
-                    ), # should add treat.model to this estimation list
-                    #-- treatment model;
-                    treat.model = A ~ L1 + L2 + L3,
-                    #-- when there are competing risks, what is the target?
+                                                 model = list(~ trt,
+                                                              ~ trt + .,
+                                                              ~ trt*. + .))),
                     outcome.target = unique(type[type != 0]),
-                    trt.target = unique(trt),
-                    #-- treatment effect of interest;
-                    treat.effect = c("1", "0", "ate", "stochastic"),
-                    #-- ID variable
+                    trt.target = unique(trt), # c("1", "0", "ate", "rr", "stochastic")
                     id.var = NULL,
+                    tau = max(time[type > 0]),
+                    use.obs.times = list("t.min" = min(time[type > 0]),
+                                         "t.max" = max(time[type > 0]),
+                                         "length" = 3L), # NULL if don't want to use observed times
+                    use.observed.times = FALSE, # deprecated?
+                    length.times = length(tau), # deprecated?
+                    check.times.size = NULL, # 100, # What does this do?
+                    treat.model = A ~ L1 + L2 + L3, # deprecated?
+                    treat.effect = c("1", "0", "ate", "stochastic"), # deprecated?
                     #-- use poisson-based or cox-based hal?
                     hal.screening = FALSE,
                     #-- use iterative or one-step tmle; (for competing risks, one-step is default)
@@ -94,12 +96,6 @@ contmle <- function(time,
                     weighted.norm = c(FALSE, "sigma", "Sigma"),
                     #-- specify stochastic intervention;
                     pi.star.fun = function(L) L$L1*0.2,
-                    #-- time-point(s) of interest;
-                    tau = max(time[type > 0]),
-                    #-- increasing grid? ;
-                    use.observed.times = FALSE,
-                    length.times = length(tau),
-                    check.times.size = NULL,#100, ## HELENE: What does this do?
                     #-- pick super learning loss (should not change this);
                     sl.method = 3, #DO NOT CHANGE.
                     #-- number of folds in cross-validation;
@@ -139,30 +135,32 @@ contmle <- function(time,
     # 0) Check Inputs ----
     checked.args <- check.contmle.inputs(time = time, type = type, trt = trt, adjust.vars = adjust.vars,
                                          tau = tau, outcome.target = outcome.target, trt.target = trt.target,
-                                         estimation = estimation, id.var = id.var)
+                                         estimation = estimation, id.var = id.var, use.obs.times = use.obs.times)
 
     # 1) Initializations ----
-    dt <- as.data.table(cbind('time' = checked.args$time,
-                              'type' = checked.args$type,
-                              'trt' = checked.args$trt,
-                              checked.args$adjust.vars))
+    dt <- as.data.table(cbind('time' = checked.args[["time"]],
+                              'type' = checked.args[["type"]],
+                              'trt' = checked.args[["trt"]],
+                              checked.args[["adjust.vars"]]))
 
-    estimation <- checked.args$estimation
+    estimation <- checked.args[["estimation"]]
 
     ## competing risks? ----
-    target <- checked.args$outcome.target
+    target <- checked.args[["outcome.target"]]
     cr <- length(target) > 1
 
-    if (length(dt[get(delta.var) > 0, unique(get(delta.var))]) < 3) ### HELENE: What does this do? ----
-    target <- target[target < 3]
+    ### HELENE: What does this do? ----
+    # if (length(dt[get(delta.var) > 0, unique(get(delta.var))]) < 3)
+    #     target <- target[target < 3]
 
     ## get number of subjects: ----
-    if (is.null(checked.args$id.var)) {
+    if (is.null(checked.args[["id.var"]])) {
         n <- nrow(dt)
         warning("No id variable specified. Defaulting to n = the length of input vectors.")
     } else {
-        n <- length(dt[, unique(get(id.var))])
-        # adjust.vars <- dt[, colnames(dt) != id.var] ### HELENE: remove id.var from adjustment set? ----
+        n <- length(dt[, unique(get(checked.args[["id.var"]]))])
+        ### HELENE: should we remove id.var from adjustment set here? ----
+        # adjust.vars <- dt[, colnames(dt) != id.var]
     }
 
     ## get treatment colname ----
@@ -210,32 +208,32 @@ contmle <- function(time,
     # if (length(grep("cut.", covars)) > 0) covars <- covars[-grep("cut.", covars)]
 
 
-    # get unique times in dataset ----
-    unique.times <- sort(unique(dt[, get(time.var)]))
-    unique.times2 <- sort(unique(dt[get(delta.var) > 0, get(time.var)]))
+    # get unique times in dataset (moved into check.contmle.inputs) ----
+    # unique.times <- sort(unique(dt[, get(time.var)]))
+    # unique.times2 <- sort(unique(dt[get(delta.var) > 0, get(time.var)]))
 
-    unique.times <- checked.args$uniq.t
-    unique.times2 <- checked.args$uniq.t.event
+    unique.times <- checked.args[["uniq.t"]]
+    unique.times2 <- checked.args[["uniq.t.event"]]
 
-    #-- intervals in tau where no obs?
 
-    if (use.observed.times) {
-        n <- nrow(dt)
-        unique.times3 <- unique.times[unique.times <= max(tau)]
-        set.seed(1)
-        tau <- sort(unique.times3[sample(length(unique.times3), length.times)])
-    } else {
-        test.tau <- findInterval(tau, unique.times2)
-        if (FALSE & !length(test.tau) == length(unique(test.tau))) {
-            tau <- na.omit(tau[(1:length(tau))[unique(findInterval(unique.times2, tau)) + 1]])
-            warning("no observations between tau as specified, truncating tau")
-        }
-    }
+    # intervals in tau where no obs? (moved to check.contmle.inputs) ----
+    # if (use.observed.times) {
+    #     n <- nrow(dt)
+    #     unique.times3 <- unique.times[unique.times <= max(tau)]
+    #     set.seed(1)
+    #     tau <- sort(unique.times3[sample(length(unique.times3), length.times)])
+    # } else {
+    #     test.tau <- findInterval(tau, unique.times2)
+    #     if (FALSE & !length(test.tau) == length(unique(test.tau))) {
+    #         tau <- na.omit(tau[(1:length(tau))[unique(findInterval(unique.times2, tau)) + 1]])
+    #         warning("no observations between tau as specified, truncating tau")
+    #     }
+    # }
 
     # which parameters are we interested in? ----
-    a <- ifelse(checked.args$trt.target %in% c("ate", "rr", "stochastic"), ## does this work with stochastic trt.target?
+    a <- ifelse(checked.args[["trt.target"]] %in% c("ate", "rr", "stochastic"), ## does this work with stochastic trt.target?
                 1:0,
-                as.numeric(checked.args$trt.target))
+                as.numeric(checked.args[["trt.target"]]))
 
 
     # initialize dataset to be used later ----
@@ -267,18 +265,24 @@ contmle <- function(time,
     # 2) estimate treatment propensity ----
     ## allow other specifications for A? ----
     ## would we want to save the A model & not just the A probability predictions? ----
-    if (estimation[["A"]][['fit']] == "glm") {
-        if (class(estimation[["A"]][["model"]]) == "formula")
-            prob.A <- predict(glm(as.formula(deparse(estimation[["A"]][["model"]])), data = dt),
-                              type = "response")
+    trt.model <- estimation[[which(sapply(estimation, function(i) i$target) == "trt")]]
+    trt.model.family <- ifelse(all(unique(dt$trt) %in% c(0, 1)) | is.logical(dt$trt), "binomial", "gaussian")
+    if (trt.model$fit == "glm") {
+        fit.A <- glm(formula = as.formula(deparse(trt.model$model)),
+                     family = trt.model.family, data = dt[, -c("time", "type")])
+        prob.A <- predict(fit.A, data = dt, type = "response")
+    } else if (trt.model$fit == "sl") {
+        warning("A simple glm is recommended for estimating treatment assignment if treatments are randomized")
+        fit.A <- SuperLearner::SuperLearner(Y = dt$trt, X = checked.args[["adjust_vars"]],
+                                            family = trt.model.family, SL.library = trt.model[["model"]])
+        prob.A <- predict(fit.A, data = dt, type = "response")
     }
-    if (verbose)
-        print(summary(prob.A))
+
+    if (verbose) print(summary(prob.A))
 
     # 3) estimation -- loop over causes (including censoring) ----
 
     for (each in 1:length(estimation)) {
-
         fit <- estimation[[each]][["fit"]][1]
         fit.model <- estimation[[each]][["model"]]
         if (any(names(estimation[[each]]) == "changepoint"))
@@ -287,9 +291,9 @@ contmle <- function(time,
         fit.delta <- estimation[[each]][["event"]]
         fit.name <- names(estimation)[each]
 
-        if (fit[1] == "sl" | fit[1] == "cox.hal.sl") { #-- cox-sl
+        if (fit[1] %in% c("sl", "cox.hal.sl")) { #-- cox-sl
 
-            if (verbose) print(paste0("use sl for ", fit.name))
+            if (verbose) print(paste0("using sl for ", fit.name))
 
             #dt.tmp <- copy(dt)
             #dt.tmp[, (delta.var):=1*((get(delta.var))==fit.delta)]
