@@ -10,8 +10,9 @@
 #' @param trt.target
 #' @param estimation
 #' @param id.var
-#' @param use.observed.times
-#' @param ...
+#' @param use.obs.times
+#' @param verbose
+#' @param output.km
 #'
 #' @return
 #' @export
@@ -21,10 +22,16 @@
 
 
 check.contmle.inputs <- function(time, type, trt, adjust.vars, tau, outcome.target, trt.target, estimation, id.var,
-                                 use.obs.times, ...) {
+                                 use.obs.times, verbose = F, output.km,...) {
     # NULL values ----
     if (sum(is.null(time), is.null(type), is.null(trt)) > 0)
         stop("NULL values are not allowed in time, type, or trt")
+
+    # NULL adjust.vars ----
+    if (is.null(adjust.vars)) {
+        warning("No adjustment covariates provided. Defaulting to Kaplan-Meier estimates")
+        output.km <- T
+    }
 
     # missing values ----
     if (anyNA(time) | anyNA(type) | anyNA(trt) | anyNA(adjust.vars))
@@ -82,68 +89,93 @@ check.contmle.inputs <- function(time, type, trt, adjust.vars, tau, outcome.targ
     # trt.target ----
     if ( !(all(trt.target %in% unique(trt)) | all(trt.target %in% c("ate", "rr", "stochastic"))) )
         stop("trt.target must be element(s) in trt or one of 'stochastic', 'ate', or 'rr'")
-    ## IMPLEMENT: check support of target intervention ----
+    ## IMPLEMENT: check support of target intervention (at tau?) ----
+    a <- 0:1
+    if (!(all(trt.target %in% 0:1) | all(trt.target %in% c("ate", "rr", "stochastic"))))
+        a <- as.numeric(trt.target) ## does this work with stochastic trt.target?
 
     # outcome.target ----
     outcome.not.targeted <- !(unique(type) %in% c(0, outcome.target))
     if (any(outcome.not.targeted))
         stop(paste0("All events in type must be included in outcome.target or reformatted as censoring (=0): type ",
                     paste(unique(type)[outcome.not.targeted], collapse = ", ")))
-    if (all(trt.target != "stochastic")) {
-        for (j in outcome.target) {
-            if (sum(type[time <= max(tau)] == j) == 0)
-                stop(paste0("No endpoints of type = ", j, "before time tau = ", max(tau),
-                            ". Adjust outcome.target and/or tau accordingly."))
-            for (z in trt.target) {
-                if (sum(type[time <= max(tau)] == j & trt[time <= max(tau)] == z) == 0)
-                    stop(paste0("No endpoints of type = ", j, " in group trt = ", z, " before time tau = ",
-                                max(tau), ". Adjust outcome.target, trt.target, and/or tau accordingly."))
-            }
-        }
-    } else {
-        ## HELENE - how to make this check work with stochastic interventions? -----
-    }
 
     # use.obs.times ----
-    uniq.t <- unique(time)[order(unique(time))] ### HELENE: why not just use event times even if we're using observed times? ----
+    uniq.t <- unique(time)[order(unique(time))]
     uniq.t.event <- unique(time[type > 0])[order(unique(time[type > 0]))]
+    uniq.t.btwn <- NULL
 
     if (!is.null(use.obs.times)) {
-        id.var <- NULL ### does [n <- nrow(dt)] why? redundant? ----
-        warning("Using observed times: function argument `tau` will be ignored")
+        id.var <- NULL
+        warning("Using observed times: function argument `tau` will be replaced")
         if (!is.list(use.obs.times) | !all(c("t.min", "t.max", "length") %in% names(use.obs.times)))
             stop("use.obs.times must be a list containing the arguments `t.min`, `t.max`, and `length`")
         else {
-            if (use.obs.times[["t.min"]] < min(time[type > 0])) {
-                warning("specified use.obs.times$t.min preceded earliest event, so has been reset to that observed time")
-                use.obs.times[["t.min"]] <- min(time[type > 0])
+            min.time <- max.time <- NULL
+            for (aa in a) {
+                min.time <- c(min.time, min(time[type > 0 & trt == aa]))
+                max.time <- c(max.time, max(time[type > 0 & trt == aa]))
             }
-            if (use.obs.times[["t.max"]] > max(time[type > 0])) {
-                warning("specified use.obs.times$t.max fell after last observed event, so has been reset to that observed time")
-                use.obs.times[["t.max"]] <- max(time[type > 0])
+            min.time <- max(min.time)
+            max.time <- min(max.time)
+            if (use.obs.times[["t.min"]] < min.time & verbose) {
+                ## is this appropriate, or just use 0? ----
+                use.obs.times[["t.min"]] <- min.time
             }
-            if (!is.numeric(use.obs.times[["length"]]) | use.obs.times[["length"]] < 1L | length(use.obs.times[["length"]]) != 1) {
+            if (use.obs.times[["t.max"]] > max.time & verbose) {
+                # warning(paste0("some event-trt combinations do not occur after ", signif(max.time, 2),
+                #                ", so t.max has been reset to that time"))
+                use.obs.times[["t.max"]] <- max.time
+            }
+            if (!is.numeric(use.obs.times[["length"]]) | use.obs.times[["length"]] < 1L | length(use.obs.times[["length"]]) != 1)
                 stop("use.obs.times$length must be a positive integer")
-            } else if (!is.integer(use.obs.times[["length"]])) {
-                warning("use.obs.times$length should be a positive integer. numeric length input has been coerced into an integer")
-                use.obs.times[["length"]] <- as.integer(use.obs.times[["length"]])
-            }
+            use.obs.times[["length"]] <- as.integer(use.obs.times[["length"]])
+
             uniq.t.btwn <- uniq.t[uniq.t >= use.obs.times[["t.min"]] & uniq.t <= use.obs.times[["t.max"]]]
             tau <- quantile(uniq.t.btwn, seq(0, 1, length.out = use.obs.times[["length"]]))
+            if (verbose) {
+                if (length(tau) <= 6)
+                    warning(paste0("tau has been replaced by: ", paste0(signif(tau, 3), collapse = ",")))
+                else
+                    warning(paste0("tau has been replaced by: ",
+                                   paste0(signif(head(tau, 3), 3), collapse = ","), ",...,",
+                                   paste0(signif(tail(tau, 3), 3), collapse = ",")))
+            }
         }
     }
 
     # tau ----
     if (!(is.numeric(tau) & is.vector(tau))) {
         stop("tau must be a numeric vector")
-    } else if (min(time[type > 0]) > min(tau) | max(time[type > 0]) < max(tau)) {
-        stop(paste0("There are no observed events before ", min(time[type > 0]), "or after ",
-                    max(time[type > 0]),". Please redefine min/max values for tau accordingly"))
     }
     test.tau <- findInterval(tau, uniq.t.event) # using event times for both, see above
     if (length(test.tau) != length(unique(test.tau))) {
         tau <- na.omit(tau[(1:length(tau))[unique(findInterval(uniq.t.event, tau)) + 1]])
         warning("tau as specified includes intervals with no observed events. Truncating tau")
+    }
+    ## prune inputs to times <= max(tau)
+    type <- type[time <= max(tau)]
+    trt <- trt[time <= max(tau)]
+    if (!is.null(adjust.vars))
+        adjust.vars <- adjust.vars[time <= max(tau), ]
+    time <- time[time <= max(tau)]
+
+    ## check events have occurred by min(tau) for every j-a combination ----
+    if (all(trt.target != "stochastic")) {
+        for (j in outcome.target) {
+            for (z in trt.target) {
+                if (min(time[type == j & trt == z]) > min(tau))
+                    warning(paste0("tau=", signif(min(tau), 2), " precedes the first endpoint of type=",
+                                   j, " in trt=", z, "(time=", signif(min(time[type == j & trt == z]), 2),
+                                   "). Extrapolated estimates may not be reliable"))
+                if (max(time[type == j & trt == z]) < max(tau))
+                    warning(paste0("tau=", signif(max(tau), 2), " falls after the last endpoint of type=",
+                                   j, " in trt=", z, "(time=", signif(max(time[type == j & trt == z]), 2),
+                                   "). Extrapolated estimates may not be reliable"))
+            }
+        }
+    } else {
+        ## HELENE - how to make this check work with stochastic interventions? Nima? -----
     }
 
     # estimation ----
@@ -181,8 +213,7 @@ check.contmle.inputs <- function(time, type, trt, adjust.vars, tau, outcome.targ
             if (est[["fit"]] == "glm" & est[["target"]] != "trt")
                 stop(paste0("glm should not be used to estimate targets other than trt. Choose a ",
                             "different fitting method for estimating ", est[["target"]]))
-            ### HELENE - Should we allow trt to be estimated with something other than glm or sl? ------
-            if (est[["target"]] == "trt" & !(est[["fit"]] %in% c("glm", "sl")))
+            if (est[["target"]] == "trt" & !(est[["fit"]] %in% c("glm", "sl", "hal")))
                 stop("Estimation of `target=trt` should be with either `fit=glm` or `fit=sl`")
 
             ## est$model ----
@@ -190,63 +221,74 @@ check.contmle.inputs <- function(time, type, trt, adjust.vars, tau, outcome.targ
                 stop(paste0("the `model` argument in estimation must be either the right hand side ",
                             "of a formula or a character vector coercible into such a formula, ",
                             "or in the case of changepoints - a list containing such vectors"))
+            ### changepoint ----
+            if (!is.null(est[["changepoint"]])) {
+                cp <- est[["changepoint"]]
+                if (!is.numeric(cp) | any(cp <= 0) | any(cp > max(tau)))
+                    stop("changepoint should be a numeric vector with values between 0 and max(tau)")
+                if (!is.list(est[["model"]]) |
+                    !length(est[["model"]]) %in% c(1, length(cp) + 1))
+                    stop(paste0("When specifying changepoints, 'model' should be a list of formulas, ",
+                                "or if using 'sl' with changepoints, a list of lists of formulas."))
+            }
 
-            format_model_spec <- function(model, target) {
+            format_model_spec <- function(model, target, fit) {
                 if (target == "trt") {
+                    if (fit == "sl")
+                        return(model)
                     prefix <- "trt ~ "
                 } else {
                     prefix <- paste0("Surv(time, type == ", target, ") ~ ")
                 }
                 if (is.list(model)) {
                     for (i in 1:length(model))
-                        model[[i]] <- format_model_spec(model[[i]], target)
+                        model[[i]] <- format_model_spec(model[[i]], target, fit)
                 } else {
                     model <- as.character(model)
                     model <- ifelse(grep("~", model),
                                     paste0(prefix, tail(unlist(strsplit(model, "~")), 1)),
                                     paste0(prefix, model))
-                    # model <- as.formula(model)
+                    if (fit == "km")
+                        model <- paste0(prefix, "strata(trt)")
+                    model <- as.formula(model)
                 }
                 return(model)
             }
-            est[["model"]] <- format_model_spec(est[["model"]], est[["target"]])
+
+            est[["model"]] <- format_model_spec(est[["model"]], est[["target"]], est[["fit"]])
+            ### TODO: implement model formula checks in check.contmle.inputs ----
 
             ### est$model (glm) ----
             if (est[["fit"]] == "glm") {
-                if (!(class(est[["model"]]) %in% c("formula", "character")))
+                if (!(class(est[["model"]]) %in% c("formula")))
                     stop(paste0("for estimation using glm, the `model` argument must be the ",
                                 "right hand side of a formula or coercible into that form."))
             }
             ### est$model (sl) UNFINISHED ----
-            if (est[["fit"]] == "sl" & !(class(est[["model"]]) %in% c("formula", "character", "list")))
+            if (est[["fit"]] == "sl" & !(class(est[["model"]]) %in% c("formula", "list")))
                 stop(paste0("for estimation using superlearner, the `model` argument must be a vector of formulas, ",
                             "a vector of Superlearner wrappers, or a list of one the these vectors for each changepoint."))
             ### est$model (hal) UNFINISHED ----
             if (est[["fit"]] == "hal")
                 stop()
             ### est$model (cox) UNFINISHED ----
-            if (est[["fit"]] == "cox" & !(class(est[["model"]]) %in% c("list", "formula", "character")))
+            if (est[["fit"]] == "cox" & !(class(est[["model"]]) %in% c("list", "formula")))
                 stop(paste0("for estimation using a cox model (fit=`cox`), the 'model' argument ",
                             "must be a formula of structure: Surv(time, type == `j`) ~ ..."))
             ### est$model (km) UNFINISHED ----
-            if (est[["fit"]] == "km") print("no KM check yet")
-            # stop()
+            if (est[["fit"]] == "km" & !(class(est[["model"]]) %in% c("formula")))
+                stop("for estimation using KM, the model shouldn't matter. this is a bug. contact package maintainers")
 
             estimation[[i]] <- est
         }
     }
     names(estimation) <- est.names
 
-    # id.var ----
-    if (!(is.null(id.var)))
-        if (!(id.var %in% colnames(adjust.vars) | length(id.var) != 1))
-            stop("id.var must be either NULL or the name of the ID column in adjust.vars")
-
     # next input variable ----
 
     # return checked args ----
     return(list(time = time, type = type, trt = trt, adjust.vars = adjust.vars, tau = tau,
                 outcome.target = outcome.target, trt.target = trt.target, estimation = estimation,
-                id.var = id.var, use.obs.times = use.obs.times, uniq.t.event = uniq.t.event,
-                uniq.t = uniq.t))
+                use.obs.times = use.obs.times, uniq.t.event = uniq.t.event, uniq.t = uniq.t,
+                uniq.t.btwn = uniq.t.btwn, a = a, output.km = output.km))
 }

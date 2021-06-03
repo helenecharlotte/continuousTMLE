@@ -70,7 +70,6 @@ contmle <- function(time,
                                                               ~ trt*. + .))),
                     outcome.target = unique(type[type != 0]),
                     trt.target = unique(trt), # c("1", "0", "ate", "rr", "stochastic")
-                    id.var = NULL,
                     tau = max(time[type > 0]),
                     use.obs.times = list("t.min" = min(time[type > 0]),
                                          "t.max" = max(time[type > 0]),
@@ -126,16 +125,16 @@ contmle <- function(time,
                                      mod3 = list(Surv(time, delta == 1) ~ L2.squared + A + L1.squared + L2 + L3),
                                      mod4 = list(Surv(time, delta == 1) ~ A + L1.squared),
                                      mod5 = list(Surv(time, delta == 1) ~ A*L1 + L2 + L3),
-                                     mod6 = list(Surv(time, delta == 1) ~ A*L1.squared + L2 + L3))) {
-
+                                     mod6 = list(Surv(time, delta == 1) ~ A*L1.squared + L2 + L3))
+                    ) {
     if (verbose) verbose.sl <- TRUE
-
-    not.fit.list <- list()
+    not.fit.list <- list() ## HELENE: what does this do? ----
 
     # 0) Check Inputs ----
     checked.args <- check.contmle.inputs(time = time, type = type, trt = trt, adjust.vars = adjust.vars,
                                          tau = tau, outcome.target = outcome.target, trt.target = trt.target,
-                                         estimation = estimation, id.var = id.var, use.obs.times = use.obs.times)
+                                         estimation = estimation, use.obs.times = use.obs.times,
+                                         verbose = verbose, output.km = output.km)
 
     # 1) Initializations ----
     dt <- as.data.table(cbind('time' = checked.args[["time"]],
@@ -144,126 +143,50 @@ contmle <- function(time,
                               checked.args[["adjust.vars"]]))
 
     estimation <- checked.args[["estimation"]]
+    tau <- checked.args[["tau"]]
+    output.km <- checked.args[["output.km"]]
 
     ## competing risks? ----
     target <- checked.args[["outcome.target"]]
     cr <- length(target) > 1
 
-    ### HELENE: What does this do? ----
-    # if (length(dt[get(delta.var) > 0, unique(get(delta.var))]) < 3)
-    #     target <- target[target < 3]
-
     ## get number of subjects: ----
-    if (is.null(checked.args[["id.var"]])) {
-        n <- nrow(dt)
-        warning("No id variable specified. Defaulting to n = the length of input vectors.")
-    } else {
-        n <- length(dt[, unique(get(checked.args[["id.var"]]))])
-        ### HELENE: should we remove id.var from adjustment set here? ----
-        # adjust.vars <- dt[, colnames(dt) != id.var]
-    }
+    n <- nrow(dt)
+    id <- 1:n
 
     ## get treatment colname ----
     A.var <- "trt"
+
     ## get delta colname ----
     delta.var <- "type"
+
     ## get time colname ----
     time.var <- "time"
 
     # list of covariates ----
-    covars <- setdiff(colnames(dt), c(delta.var, A.var, time.var, id.var))
+    covars <- setdiff(colnames(dt), c(delta.var, A.var, time.var))
     if (verbose) print(covars)
-
-    ## Make user provide all necessary covariates in adjust.vars? ----
     ### TODO: implement model formula checks in check.contmle.inputs ----
-    # covars <- NULL
-    for (mod in c(lapply(sl.models, function(x) x[[1]]),
-                  unlist(lapply(estimation, function(x) x[["model"]])))) {
-        #     mod3 <- as.character(mod)[3]
-        #     covars <- unique(c(covars, unlist(strsplit(gsub("\\+", " ",
-        #                                                     mod3), " "))))
-        #     covars <- covars[!covars %in% c(A.var, "", "*")]
-        #     if (length(grep(".squared", mod3)) > 0) {
-        #         names.squared <- unique(gsub(".squared", "",
-        #                                      grep(".squared", unlist(strsplit(gsub("\\+", " ",
-        #                                                                            mod3), " ")),
-        #                                           value = TRUE)))
-        #         for (col in names.squared)
-        #             dt[, (paste0(col, ".squared")) := get(col)^2]
-        #     }
-        #     if (length(grep(".log", mod3)) > 0) {
-        #         names.log <- unique(gsub(".log", "",
-        #                                  grep(".log", unlist(strsplit(gsub("\\+", " ",
-        #                                                                    mod3), " ")),
-        #                                       value = TRUE)))
-        #         for (col in names.log)
-        #             dt[, (paste0(col, ".log")) := log(get(col))]
-        #     }
-    }
-    ### can be done with ~ var^2 ? ----
-    # if (length(grep(".squared", covars)) > 0) covars <- covars[-grep(".squared", covars)]
-    ### can be done with ~ log(var) ? ----
-    # if (length(grep(".log", covars)) > 0) covars <- covars[-grep(".log", covars)]
-    ### can be done with ~ I(var ? cut))? ----
-    # if (length(grep("cut.", covars)) > 0) covars <- covars[-grep("cut.", covars)]
-
 
     # get unique times in dataset (moved into check.contmle.inputs) ----
-    # unique.times <- sort(unique(dt[, get(time.var)]))
-    # unique.times2 <- sort(unique(dt[get(delta.var) > 0, get(time.var)]))
-
     unique.times <- checked.args[["uniq.t"]]
     unique.times2 <- checked.args[["uniq.t.event"]]
-
+    unique.times3 <- checked.args[["uniq.t.btwn"]]
 
     # intervals in tau where no obs? (moved to check.contmle.inputs) ----
-    # if (use.observed.times) {
-    #     n <- nrow(dt)
-    #     unique.times3 <- unique.times[unique.times <= max(tau)]
-    #     set.seed(1)
-    #     tau <- sort(unique.times3[sample(length(unique.times3), length.times)])
-    # } else {
-    #     test.tau <- findInterval(tau, unique.times2)
-    #     if (FALSE & !length(test.tau) == length(unique(test.tau))) {
-    #         tau <- na.omit(tau[(1:length(tau))[unique(findInterval(unique.times2, tau)) + 1]])
-    #         warning("no observations between tau as specified, truncating tau")
-    #     }
-    # }
 
-    # which parameters are we interested in? ----
-    a <- ifelse(checked.args[["trt.target"]] %in% c("ate", "rr", "stochastic"), ## does this work with stochastic trt.target?
-                1:0,
-                as.numeric(checked.args[["trt.target"]]))
-
+    # which treatment levels are we interested in? ----
+    a <- checked.args[["a"]]
 
     # initialize dataset to be used later ----
     dt2 <- NULL
     bhaz.cox <- do.call("rbind", lapply(a, function(aa) data.table::data.table(time = c(0, unique.times), A = aa)))
-    setnames(bhaz.cox, "A", A.var)
 
     # if there is any of the outcome models that uses coxnet ----
     sl.models.tmp <- sl.models
     sl.models <- list()
-    # add separate sl models when specified with, e.g., multiple changepoints ----
-    for (k1 in 1:length(sl.models.tmp)) {
-        if (length(sl.models.tmp[[k1]]) > 1) {
-            for (k2 in 2:length(sl.models.tmp[[k1]])) {
-                sl.models[[length(sl.models) + 1]] <- c(sl.models.tmp[[k1]][1],
-                                                        sl.models.tmp[[k1]][k2])
-                if (length(sl.models.tmp[[k1]]) >= 3) {
-                    names(sl.models)[length(sl.models)] <- paste0(names(sl.models.tmp)[k1], k2)
-                } else {
-                    names(sl.models)[length(sl.models)] <- names(sl.models.tmp)[k1]
-                }
-            }
-        } else {
-            sl.models[[length(sl.models) + 1]] <- c(sl.models.tmp[[k1]][1])
-            names(sl.models)[length(sl.models)] <- names(sl.models.tmp)[k1]
-        }
-    }
 
     # 2) estimate treatment propensity ----
-    ## allow other specifications for A? ----
     ## would we want to save the A model & not just the A probability predictions? ----
     trt.model <- estimation[[which(sapply(estimation, function(i) i$target) == "trt")]]
     trt.model.family <- ifelse(all(unique(dt$trt) %in% c(0, 1)) | is.logical(dt$trt), "binomial", "gaussian")
@@ -276,19 +199,21 @@ contmle <- function(time,
         fit.A <- SuperLearner::SuperLearner(Y = dt$trt, X = checked.args[["adjust_vars"]],
                                             family = trt.model.family, SL.library = trt.model[["model"]])
         prob.A <- predict(fit.A, data = dt, type = "response")
+    } else if (trt.model$fit == "hal") {
+        warning("A simple glm is recommended for estimating treatment assignment if treatments are randomized")
+        ### TODO: HAL trt fit ----
     }
-
     if (verbose) print(summary(prob.A))
 
     # 3) estimation -- loop over causes (including censoring) ----
 
-    for (each in 1:length(estimation)) {
-        fit <- estimation[[each]][["fit"]][1]
+    for (each in (1:length(estimation))[names(estimation) != "trt"]) {
+        fit <- estimation[[each]][["fit"]]
         fit.model <- estimation[[each]][["model"]]
+        fit.changepoint <- NULL
         if (any(names(estimation[[each]]) == "changepoint"))
             fit.changepoint <- estimation[[each]][["changepoint"]]
-        else fit.changepoint <- NULL
-        fit.delta <- estimation[[each]][["event"]]
+        fit.delta <- estimation[[each]][["target"]]
         fit.name <- names(estimation)[each]
 
         if (fit[1] %in% c("sl", "cox.hal.sl")) { #-- cox-sl
@@ -300,10 +225,15 @@ contmle <- function(time,
 
             set.seed(1)
             #if (fit.delta==0) browser()
-            sl.pick <- suppressWarnings(
-                cox.sl(loss.fun = cox.loss.fun, dt = dt, delta.var = delta.var,
-                       treatment = A.var, V = V, delta.value = fit.delta,
-                       cox.models = sl.models, change.points = sl.change.points))
+            sl.pick <-
+                # cox.sl(dt = dt, V = 5, A.name = "A", method = 3, only.cox.sl = F,
+                #               time.var = "time", delta.var = "type", verbose = T,
+                #               outcome.models = estimation[[each]][["model"]])
+            # cox.sl(loss.fun = cox.loss.fun, dt = dt, delta.value = delta.var,
+            #        treatment = A.var, V = V, delta.value = fit.delta, cox.models = sl.models,
+            #        change.points = sl.change.points)
+
+
             cve.sl.pick <- sl.pick$picked.cox.model$cve
             fit.model <- sl.pick$picked.cox.model$form
 
@@ -334,7 +264,10 @@ contmle <- function(time,
 
             if (fit[1] %in% c("km")) { #-- later for hal or if uses km
                 tmp.model <- as.character(fit.model)
-                if (fit[1] == "km") tmp.model[3] <- "strata(A)" else tmp.model[3] <- "1"
+                if (fit[1] == "km") {
+                    tmp.model[3] <- "strata(trt)" # implemented in check.contmle.inputs
+                } else
+                    tmp.model[3] <- "1"
                 estimation[[each]]$model <- fit.model <- formula(paste0(tmp.model[2], tmp.model[1], tmp.model[3]))
                 estimation[[each]]$changepoint <- fit.changepoint <- NULL
             }
@@ -343,7 +276,7 @@ contmle <- function(time,
         estimation[[each]]$sl.pick <- fit.model
         estimation[[each]]$cve.sl.pick <- cve.sl.pick
 
-        #-- changepoint?
+        # changepoint? ----
         if (length(fit.changepoint) > 0 & length(dt2) == 0) {
             dt2 <- rbind(dt, dt)[order(id)]
         }
@@ -373,7 +306,7 @@ contmle <- function(time,
                                      gsub(" ", "", paste0("I((period", fit.delta," == 1) & (", A.var, " == 1))",
                                                           " + I((period", fit.delta, " == 2) & (", A.var,
                                                           " == 1))", " + ", paste0(" + ", mod1[3]))))))
-            fit.cox <- coxph(formula(mod2), data=dt2[!time.indicator | get(paste0("period", fit.delta)) == 1])
+            fit.cox <- coxph(formula(mod2), data = dt2[!time.indicator | get(paste0("period", fit.delta)) == 1])
         } else { #-- if there is not a change-point:
             if (fit[1] == "sl" & length(grep("coxnet", sl.pick)) > 0) {
                 X <- model.matrix(as.formula(deparse(fit.model)), data = dt)
@@ -393,7 +326,7 @@ contmle <- function(time,
         if (fit[1] == "km") {
             tmp <- suppressWarnings(setDT(basehaz(fit.cox, centered = TRUE)))
             setnames(tmp, "strata", "A")
-            tmp[, A := as.numeric(gsub("A = ", "", A))]
+            tmp[, A := as.numeric(stringr::str_extract(A, "\\d+"))]
             bhaz.cox <- merge(bhaz.cox,
                               rbind(do.call("rbind", lapply(a, function(aa) data.table(time = 0, hazard = 0, A = aa))),
                                     tmp),
@@ -422,45 +355,65 @@ contmle <- function(time,
     }
 
 
-    #-- set names of bhaz.cox to match observed data
+    ## set names of bhaz.cox to match observed data ----
     setnames(bhaz.cox, c("time", A.var), c(time.var, A.var))
 
-    #-- Xc -- get censoring survival one time-point back:
+    ## Xc: get censoring survival one time-point back  ----
 
     bhaz.cox[, chaz0.1 := c(0, chaz0[-.N])]
 
-    #-- Y -- output Kaplan-Meier and/or crude HR?
+    ## Y: output Kaplan-Meier and/or crude HR?  ----
 
     if (output.km) {
-        if (cr) {
-            km.mod <- paste0(gsub(estimation[[1]][["event"]], "",
-                                  gsub("\\=", "",
-                                       gsub("Surv", "Hist", as.character(estimation[[1]][["model"]])[2]))),
-                             "~", A.var)
-            km.fit <- summary(prodlim(formula(km.mod), data = dt),
-                              cause = target, times = tau, asMatrix = TRUE)$table
-            if (length(a) == 1) {
-                km.est <- as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", a), ,drop = FALSE][, "cuminc"])
-                km.se <- as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", a), ,drop = FALSE][, "se.cuminc"])
-            } else {
-                km.est <- as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", "1"), ,drop = FALSE][, "cuminc"]) -
-                    (as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", "0"), ,drop = FALSE][, "cuminc"]))
-                km.se <- sqrt((as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", "1"), , drop = FALSE][, "se.cuminc"]))^2 +
-                                  (as.numeric(km.fit[km.fit[, 2] == paste0(A.var, " = ", "0"), , drop = FALSE][, "se.cuminc"]))^2)
-            }
+        km.mod <- as.formula(prodlim::Hist(time, type) ~ trt)
+        km.fit <- summary(prodlim::prodlim(km.mod, data = dt, type = "risk"),
+                          cause = target, times = tau, asMatrix = TRUE, surv = FALSE)$table
+        km.fit[, "X"] <- as.numeric(regmatches(km.fit[, "X"], regexpr(km.fit[, "X"], pattern = "\\d+")))
+        km.est <- t(apply(km.fit, 1, as.numeric))
+        colnames(km.est) <- gsub("X", "A", colnames(km.fit))
+        km.est <- t(apply(km.est, 1, function(r) {
+            if (is.na(r["cuminc"]) & r["n.risk"] == 0) {
+                r[c("cuminc", "se.cuminc", "lower", "upper")] <- c(1, NaN, NaN, NaN)
+            } else if (is.na(r["cuminc"]))
+                stop(paste0("survival probability is NA for A=", r["A"], " and time=", r["time"]))
+            return(r)
+        }))
+        if (all(sort(a) == 0:1)) {
+            km.est.0 <- km.est[km.est[, "A"] == 0, ]
+            km.est.1 <- km.est[km.est[, "A"] == 1, ]
+
+            ## KM output for ATE (not yet checked) ----
+            km.est <- km.est.0[, colnames(km.est.0) %in% c("Event", "time")]
+            km.est <- cbind(km.est,
+                            "F0" = km.est.0[, "cuminc"],
+                            "F0.se" = km.est.0[, "se.cuminc"],
+                            "F1" = km.est.1[, "cuminc"],
+                            "F1.se" = km.est.1[, "se.cuminc"],
+                            "ATE" = km.est.1[, "cuminc"] - km.est.0[, "cuminc"],
+                            "ATE.se" = sqrt(km.est.1[, "se.cuminc"]^2 + km.est.0[, "se.cuminc"]^2),
+                            "RR" = km.est.1[, "cuminc"] / km.est.0[, "cuminc"],
+                            "RR.se " = sqrt((km.est.1[, "se.cuminc"] / km.est.0[, "cuminc"])^2 +
+                                                (km.est.0[, "se.cuminc"] * km.est.1[, "cuminc"] / km.est.0[, "cuminc"]^2 )^2))
+        }
+        if (length(a) == 1) {
+            km.est <- as.numeric(km.fit[km.fit[, 2] == paste0(A.var, "=", a), , drop = FALSE][, "cuminc"])
+            km.se <- as.numeric(km.fit[km.fit[, 2] == paste0(A.var, "=", a), , drop = FALSE][, "se.cuminc"])
+        } else if (all(sort(a) == 0:1)) { ## doesn't work for stochastic
+
+
         } else {
-            km.mod <- paste0(gsub("Surv", "Hist", as.character(estimation[[1]][["model"]])[2]),
-                             " ~ ", A.var)
-            km.fit <- summary(fit.km <- prodlim(formula(km.mod), data = dt),
-                              times = tau, asMatrix = TRUE)$table
             if (length(a) == 1) {
-                km.est <- 1 - as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", a), , drop = FALSE][, "surv"])
-                km.se <- as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", a), , drop = FALSE][, "se.surv"])
-            } else {
-                km.est <- 1 - as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", "1"), , drop = FALSE][, "surv"]) -
-                    (1 - as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", "0"), , drop = FALSE][, "surv"]))
-                km.se <- sqrt((as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", "1"), , drop = FALSE][, "se.surv"]))^2 +
-                                  (as.numeric(km.fit[km.fit[, 1] == paste0(A.var, " = ", "0"), , drop = FALSE][, "se.surv"]))^2)
+                km.est <- 1 - as.numeric(km.fit[km.fit[, 1] == a, , drop = FALSE][, "surv"])
+                km.se <- as.numeric(km.fit[km.fit[, 1] == a, , drop = FALSE][, "se.surv"])
+            } else if (all(sort(a) == 0:1)) {
+                km.est <- c(1 - as.numeric(km.fit[km.fit[, 1] == paste0(A.var, "=", "1"), , drop = FALSE][, "surv"]),
+                            1 - as.numeric(km.fit[km.fit[, 1] == paste0(A.var, "=", "0"), , drop = FALSE][, "surv"]))
+                km.se <- c(as.numeric(km.fit[km.fit[, 1] == paste0(A.var, "=", "1"), , drop = FALSE][, "se.surv"]),
+                           as.numeric(km.fit[km.fit[, 1] == paste0(A.var, "=", "0"), , drop = FALSE][, "se.surv"]))
+                if (all(checked.args[["trt.target"]] == "ate")) {
+                    km.est <- km.est["1"] - km.est["0"]
+                    km.se <- sqrt((km.se["1"])^2 + (km.se["0"])^2)
+                }
             }
         }
     }
@@ -491,7 +444,7 @@ contmle <- function(time,
 
     for (each in 1:length(estimation)) {
 
-        if (estimation[[each]][["fit"]][1] == "sl" & length(grep("coxnet", estimation[[each]][["sl.pick"]])) > 0) {
+        if (estimation[[each]][["fit"]] == "sl" & length(grep("coxnet", estimation[[each]][["sl.pick"]])) > 0) {
             X2.a <- model.matrix(as.formula(deparse(estimation[[each]][["model"]])), data = dt2.a)
             dt2.a[, (paste0("fit.cox", estimation[[each]][["event"]])) :=
                       exp(predict(estimation[[each]][["fit.cox"]], newx = X2.a, type = "link"))]
