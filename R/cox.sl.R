@@ -1,3 +1,23 @@
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param loss.fun should just be set to cox.loss.fun.
+##' @param dt dataset.
+##' @param V number of folds in cross-validation.
+##' @param seed random seed :). 
+##' @param method.rik option to pick different cross-validation schemes for cox models; basically it picks the
+##' risk set for the partial likelihood. Should be chosen as 'test'.
+##' @param delta.var name of event type variable. 
+##' @param delta.value type of event of interest here-
+##' @param treatment name of treatment variable. 
+##' @param change.points specified if there is (a) changepoint(s) in the effect of treatment across time.
+##' @param cox.models a list of Cox models to be compared with cross-validation.
+##' @return 
+##' @seealso 
+##' @examples 
+##' @export 
+##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 cox.sl <- function(loss.fun, dt, V=5, seed=19192, method.risk=c("test","train","VvH"),
                    delta.var=NULL, delta.value=NULL, treatment="A",
                    change.points=(0:12)/10, 

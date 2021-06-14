@@ -1,3 +1,21 @@
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param train.fit model fitted to training data. 
+##' @param dt dataset. 
+##' @param risk.set risk.set used for partial likelihood. 
+##' @param test.set validation data. 
+##' @param X design matrix if one of c("coxnet", "cv.glmnet", "glmnet") is used.
+##' @param lambda.cv grid over which to choose penalization if one of c("coxnet", "cv.glmnet", "glmnet") is used.
+##' @param delta.var name of event type variable. 
+##' @param delta.value type of event of interest here-
+##' @param change.point specified if there is a changepoint in the effect of treatment across time.
+##' @return 
+##' @seealso 
+##' @examples 
+##' @export 
+##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 cox.loss.fun <- function(train.fit, dt, risk.set, test.set, X=NULL, lambda.cv=NULL,
                          delta.var="delta", delta.value=1, change.point=NULL) {
 

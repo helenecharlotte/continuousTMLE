@@ -1,3 +1,21 @@
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param train.fit model fitted to training data. 
+##' @param dt dataset. 
+##' @param risk.set risk.set used for partial likelihood; here NULL. 
+##' @param test.set validation data. 
+##' @param time.var name of time variable.
+##' @param X HAL design matrix. 
+##' @param lambda.cv grid over which to choose penalization.
+##' @param delta.var name of event type variable. 
+##' @param delta.value type of event of interest here-
+##' @return 
+##' @seealso 
+##' @examples 
+##' @export 
+##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 lebesgue.loss.fun <- function(train.fit, dt, risk.set=NULL, test.set, time.var=NULL, X=NULL, lambda.cv=NULL,
                               delta.var="delta", delta.value=1) {
 

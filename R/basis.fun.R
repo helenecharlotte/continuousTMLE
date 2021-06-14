@@ -1,3 +1,26 @@
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param covars covariates to include in HAL model. 
+##' @param cut.one.way cut-offs for main effect indicators. 
+##' @param dt dataset. 
+##' @param treatment name of treatment variable. 
+##' @param Y outcome object. 
+##' @param delta.var name of event type variable. 
+##' @param delta.value type of event of interest here. 
+##' @param two.way two-way interactions of variables to include. 
+##' @param cut.two.way cut-offs for two-way interactions.
+##' @param cut.time.treatment cut-off for time/treatment interaction.
+##' @param predict time-horizon to make prediction (temporary option). 
+##' @param pseudo.dt dataset with information for HAL. 
+##' @param time.var name of time-variable. 
+##' @param cut.time cut-off for time variable. 
+##' @return 
+##' @seealso 
+##' @examples 
+##' @export 
+##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 basis.fun <- function(covars, cut.one.way, dt, treatment=NULL,
                       Y=paste0("(", delta.var, "==", delta.value, ")"),
                       delta.var="delta", delta.value=1,

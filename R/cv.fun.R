@@ -1,3 +1,29 @@
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param loss.fun should be set to cox.loss.fun if comparing cox models; 
+##' @param dt dataset. 
+##' @param V number of folds in cross-validation. 
+##' @param seed random seed :). 
+##' @param X design matrix if one of c("coxnet", "cv.glmnet", "glmnet") is used.
+##' @param Y outcome object (Surv)  if one of c("coxnet", "cv.glmnet", "glmnet") is used.
+##' @param offset offset used to construct poission hal. 
+##' @param method.risk option to pick different cross-validation schemes for cox models; basically it picks the
+##' risk set for the partial likelihood. Should be chosen as 'test'.
+##' @param time.var name of time variable. 
+##' @param penalty.factor variable to specify if certain (groups of) variables should not be penalized. 
+##' @param delta.var name of event type variable. 
+##' @param delta.value type of event of interest here-
+##' @param change.point specified if there is a changepoint in the effect of treatment across time.
+##' @param treatment name of treatment variable. 
+##' @param cox.model model to compute the cve for. 
+##' @param lambda.cv grid over which to choose penalization if one of c("coxnet", "cv.glmnet", "glmnet") is used.
+##' @return 
+##' @seealso 
+##' @examples 
+##' @export 
+##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 cv.fun <- function(loss.fun, dt, V=5, seed=19192, X=NULL, Y=NULL, offset=NULL,
                    method.risk=c("test","train","VvH"), time.var=NULL,
                    penalty.factor=rep(1, ncol(X)), delta.var="delta", delta.value=1,
