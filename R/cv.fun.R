@@ -1,30 +1,37 @@
-#' cv.fun
-#'
-#' @param loss.fun loss function, taking arguments...?
-#' @param dt \[data.frame\] outcome column must be named "time",...
-#' @param id.vec \[vector\] vector identifying each row in dt
-#' @param V \[numeric: 5\] number of cross-validation folds
-#' @param seed \[numeric: 19192\] random seed
-#' @param offset \[numeric?: NULL\]
-#' @param method.risk \[character\] one of "test", "train", or "VvH"
-#' @param time.var necessary?
-#' @param penalty.factor \[numeric: rep(1, ncol(X))\] what does this do?
-#' @param delta.var necessary?
-#' @param delta.value \[numeric\] designate target type=?
-#' @param change.point \[numeric: NULL\]
-#' @param treatment necessary?
-#' @param cox.model \[list\] ?
-#' @param lambda.cvs \[numeric\]
-#'
-#' @return
-#' @export
-#'
-#' @examples
-cv.fun <- function(loss.fun, dt, id.vec, V = 5, seed = 19192, offset = NULL, X = NULL, Y = NULL,
-                   method.risk = c("test","train","VvH"), time.var = NULL,
-                   penalty.factor = rep(1, ncol(X)), delta.var = "type", delta.value = 1,
-                   change.point=NULL, treatment=NULL,
-                   cox.model=NULL, lambda.cvs = c(sapply(1:5, function(jjj) (9:1)/(10^jjj)))) {
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param loss.fun should be set to cox.loss.fun if comparing cox models; 
+##' @param dt dataset. 
+##' @param V number of folds in cross-validation. 
+##' @param seed random seed :). 
+##' @param X design matrix if one of c("coxnet", "cv.glmnet", "glmnet") is used.
+##' @param Y outcome object (Surv)  if one of c("coxnet", "cv.glmnet", "glmnet") is used.
+##' @param offset offset used to construct poission hal. 
+##' @param method.risk option to pick different cross-validation schemes for cox models; basically it picks the
+##' risk set for the partial likelihood. Should be chosen as 'test'.
+##' @param time.var name of time variable. 
+##' @param penalty.factor variable to specify if certain (groups of) variables should not be penalized. 
+##' @param delta.var name of event type variable. 
+##' @param delta.value type of event of interest here-
+##' @param change.point specified if there is a changepoint in the effect of treatment across time.
+##' @param treatment name of treatment variable. 
+##' @param cox.model model to compute the cve for. 
+##' @param lambda.cv grid over which to choose penalization if one of c("coxnet", "cv.glmnet", "glmnet") is used.
+##' @return 
+##' @seealso 
+##' @examples 
+##' @export 
+##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
+cv.fun <- function(loss.fun, dt, V=5, seed=19192, X=NULL, Y=NULL, offset=NULL,
+                   method.risk=c("test","train","VvH"), time.var=NULL,
+                   penalty.factor=rep(1, ncol(X)), delta.var="delta", delta.value=1,
+                   change.point=NULL, treatment=NULL, 
+                   cox.model=NULL, lambda.cvs=c(sapply(1:5, function(jjj) (9:1)/(10^jjj)))) {
+    ## id: require input id.vec, or can pull from X ? ----
+	id.vec <- 1:nrow(X)
+	
     delta.var <- "type"
     time.var <- "time"
     dt <- cbind("time" = Y, X)

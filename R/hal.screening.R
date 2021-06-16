@@ -1,3 +1,32 @@
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param covars covariates to include in HAL model. 
+##' @param dt dataset. 
+##' @param V number of folds in cross-validation. 
+##' @param cut.one.way cut-offs for main effect indicators. 
+##' @param method.risk option to pick different cross-validation schemes for cox models; basically it picks the
+##' risk set for the partial likelihood. Should be chosen as 'test'.
+##' @param cv.glmnet if TRUE, default of glmnet is used to find penalization (do not want this). 
+##' @param seed random seed :). 
+##' @param grouped option to set cross-validation method in glmnet. Keep grouped=TRUE. 
+##' @param use.min combind with cv.glmnet, uses the minimal optimal value of penalization.
+##' @param order order of interactions screened. 
+##' @param cut.time.treatment cut-off for time/treatment interaction.
+##' @param delta.var name of event type variable. 
+##' @param delta.value type of event of interest here-
+##' @param treatment name of treatment variable.
+##' @param time.var name of time varaible. 
+##' @param cut.time cut-off for time variable. 
+##' @param mat dataset with information for HAL.
+##' @param browse browser() for helene :). 
+##' @param cut.two.way cut-offs for two-way interactions.
+##' @return 
+##' @seealso 
+##' @examples 
+##' @export 
+##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 hal.screening <- function(covars, dt, V=5, cut.one.way=18, method.risk="test", cv.glmnet=FALSE,
                           seed=13349, grouped=TRUE, use.min=TRUE, order=1,
                           cut.time.treatment=NULL,

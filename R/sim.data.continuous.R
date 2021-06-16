@@ -275,6 +275,8 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
                 print(phiT3)
             }
         }
+        print(paste0("shape parameter (eta) = ", eta))
+        print(paste0("scale parameter (nu) = ", nu))
     }
 
 

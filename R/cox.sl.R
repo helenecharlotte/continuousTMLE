@@ -1,31 +1,36 @@
-#' cox.sl
-#'
-#' @param loss.fun \[function\] loss function, taking arguments...?
-#' @param dt \[data.frame\] outcome column must be named "time",...
-#' @param id.vec \[vector\] vector identifying each row in dt
-#' @param V \[numeric: 5\] number of cross-validation folds
-#' @param seed \[numeric: 19192\] random seed
-#' @param method.risk \[character\] one of "test", "train", or "VvH"
-#' @param delta.var \[vector\] necessary?
-#' @param delta.value \[numeric\] designate target type=?
-#' @param treatment \[vector\] necessary?
-#' @param change.point \[numeric: NULL\]
-#' @param cox.models \[list\] ?
-#'
-#' @return
-#' @export
-#'
-#' @examples
-cox.sl <- function(loss.fun, dt, id.vec, V=5, seed=19192, method.risk=c("test","train","VvH"),
-                   delta.var=NULL, delta.value=NULL, treatment="A", change.point=(0:12)/10,
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param loss.fun should just be set to cox.loss.fun.
+##' @param dt dataset.
+##' @param V number of folds in cross-validation.
+##' @param seed random seed :). 
+##' @param method.rik option to pick different cross-validation schemes for cox models; basically it picks the
+##' risk set for the partial likelihood. Should be chosen as 'test'.
+##' @param delta.var name of event type variable. 
+##' @param delta.value type of event of interest here-
+##' @param treatment name of treatment variable. 
+##' @param change.points specified if there is (a) changepoint(s) in the effect of treatment across time.
+##' @param cox.models a list of Cox models to be compared with cross-validation.
+##' @return 
+##' @seealso 
+##' @examples 
+##' @export 
+##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
+cox.sl <- function(loss.fun, dt, V=5, seed=19192, method.risk=c("test","train","VvH"),
+                   delta.var=NULL, delta.value=NULL, treatment="A",
+                   change.points=(0:12)/10, 
                    cox.models=list(mod1=list(Surv(time, delta==1)~A+L1+L2+L3),
                                    mod2=list(Surv(time, delta==1)~A+L1.squared+L2+L3),
                                    mod3=list(Surv(time, delta==1)~L2.squared+A+L1.squared+L2+L3),
                                    mod4=list(Surv(time, delta==1)~A+L1.squared),
                                    mod5=list(Surv(time, delta==1)~A*L1+L2+L3),
                                    mod6=list(Surv(time, delta==1)~A*L1.squared+L2+L3))) {
-    browser()
     delta.var <- "type"
+    
+    # delta.value constant or iterated, pulled from cox.models? ----
+    delta.value <- TBD
 
     cox.cve <- lapply(cox.models, function(cox.model) {
         # make users supply all necessary covars ----

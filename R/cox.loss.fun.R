@@ -1,11 +1,29 @@
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param train.fit model fitted to training data. 
+##' @param dt dataset. 
+##' @param risk.set risk.set used for partial likelihood. 
+##' @param test.set validation data. 
+##' @param X design matrix if one of c("coxnet", "cv.glmnet", "glmnet") is used.
+##' @param lambda.cv grid over which to choose penalization if one of c("coxnet", "cv.glmnet", "glmnet") is used.
+##' @param delta.var name of event type variable. 
+##' @param delta.value type of event of interest here-
+##' @param change.point specified if there is a changepoint in the effect of treatment across time.
+##' @return 
+##' @seealso 
+##' @examples 
+##' @export 
+##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 cox.loss.fun <- function(train.fit, dt, risk.set, test.set, X=NULL, lambda.cv=NULL,
                          delta.var="delta", delta.value=1, change.point=NULL) {
+
 
     tmp <- copy(dt)
 
     if (length(change.point) > 0) {
-        ## time-varying covariates? Currently doesn't handle ----
-        ## purpose of id column if no time-varying covariates? ----
+    	# if changepoint
         cuts <- c(0, change.point, max(tmp[["time"]]))
         time.period <- cut(tmp[["time"]], breaks = cuts, labels = FALSE, include.lowest = TRUE)
         tmp <- do.call(rbind, lapply(1:(length(change.point) + 1), function(i) {
@@ -20,24 +38,24 @@ cox.loss.fun <- function(train.fit, dt, risk.set, test.set, X=NULL, lambda.cv=NU
         time.period <- tmp[["t.period"]]
         tmp <- tmp[, -c("time", "t.period")]
     }
-
-    if (any(class(train.fit) %in% c("coxnet", "cv.glmnet", "glmnet"))) {
-        tmp[, fit.lp := predict(train.fit, type = "link", newx = X, s = lambda.cv)]
+    
+    if (any(class(train.fit)%in%c("coxnet", "cv.glmnet", "glmnet"))) {
+        tmp[, fit.lp:=predict(train.fit, type="link", newx=X, s=lambda.cv)]
     } else {
-        tmp[, fit.lp := predict(train.fit, type = "lp", newdata=tmp)]
+        tmp[, fit.lp:=predict(train.fit, type="lp", newdata=tmp)]
     }
 
-    tmp[, risk := 0]
-    tmp[id %in% risk.set, risk := 1]
+    tmp[, risk:=0]
+    tmp[id%in%risk.set, risk:=1]
 
     tmp <- tmp[rev(order(time))]
-
+   
     if (ifelse(length(change.point)>0, change.point>0, FALSE)) {
-        tmp[, term2 := cumsum(risk*exp(fit.lp)), by="time.period"]
+        tmp[, term2:=cumsum(risk*exp(fit.lp)), by="time.period"]
     } else {
-        tmp[, term2 := cumsum(risk*exp(fit.lp))]
+        tmp[, term2:=cumsum(risk*exp(fit.lp))]
     }
-
+    
     tmp[term2==0, term2:=1]
 
     if (ifelse(length(change.point)>0, change.point>0, FALSE)) {
@@ -47,5 +65,5 @@ cox.loss.fun <- function(train.fit, dt, risk.set, test.set, X=NULL, lambda.cv=NU
     } else {
         return(-sum(tmp[id%in%test.set, (get(delta.var)==delta.value)*(fit.lp - log(term2))]))
     }
-
+    
 }

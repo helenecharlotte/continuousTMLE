@@ -1,3 +1,38 @@
+##' .. content for \description{} (no empty lines) ..
+##'
+##' .. content for \details{} ..
+##' @title
+##' @param covars covariates to include in HAL model. 
+##' @param dt dataset. 
+##' @param treatment name of treatment variable. 
+##' @param V number of folds in cross-validation. 
+##' @param cut.one.way cut-offs for main effect indicators. 
+##' @param method.risk option to pick different cross-validation schemes for cox models; basically it picks the
+##' risk set for the partial likelihood. Should be chosen as 'test'.
+##' @param cv.glmnet if TRUE, default of glmnet is used to find penalization (do not want this). 
+##' @param seed random seed :). 
+##' @param grouped option to set cross-validation method in glmnet. Keep grouped=TRUE. 
+##' @param use.min combind with cv.glmnet, uses the minimal optimal value of penalization.
+##' @param penalize.treatment option to penalize/not penalize treatment indicators. 
+##' @param penalize.time option to penalize/not penalize time indicators. 
+##' @param treatment.prediction name of treatment variable. 
+##' @param delta.var name of event type variable. 
+##' @param delta.value type of event of interest here-
+##' @param time.var name of time varaible. 
+##' @param cut.time cut-off for time variable. 
+##' @param cut.time.treatment cut-off for time/treatment interaction.
+##' @param browse browser() for helene :). 
+##' @param predict time-horizon at which to predict (if want prediction). 
+##' @param mat dataset with information for HAL.
+##' @param verbose produce comments for code throughout. 
+##' @param lambda.cvs grid over which to choose penalization. 
+##' @param two.way two-way interactions of variables to include. 
+##' @param cut.two.way cut-offs for two-way interactions.
+##' @return 
+##' @seealso 
+##' @examples 
+##' @export 
+##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 fit.hal <- function(covars, dt, treatment=NULL, V=5, cut.one.way=8, method.risk="test", cv.glmnet=FALSE,
                     seed=13349, grouped=TRUE, use.min=TRUE, penalize.treatment=FALSE,
                     penalize.time=TRUE, treatment.prediction=treatment, 
