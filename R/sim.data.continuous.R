@@ -1,4 +1,4 @@
-sim.data2 <- function(n, setting=1, competing.risk=FALSE, no.cr=2,
+sim.data2 <- function(n, setting=1, competing.risk=FALSE, no.cr=2, cr.setting=1, 
                       censoring.informative=FALSE,
                       no.effect.A=FALSE,
                       randomize.A=TRUE,
@@ -42,6 +42,7 @@ sim.data2 <- function(n, setting=1, competing.risk=FALSE, no.cr=2,
                     square.effect1=square.effect1,
                     print.forms=print.forms,
                     reversed.setting=reversed.setting,
+                    cr.setting=cr.setting,
                     interaction.Atime=interaction.Atime))
     
 }
@@ -51,7 +52,7 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
                      nu=0.5, eta=4/sqrt(2)*(1/8),
                      firstevent=TRUE,
                      censoring=TRUE,
-                     competing.risk=FALSE, cr.both=FALSE, no.cr=2,
+                     competing.risk=FALSE, cr.both=FALSE, no.cr=2, cr.setting=1,
                      seed=sample(4034244, 1),
                      interaction.AL=FALSE,
                      interaction.Atime=FALSE, t0=0.3,
@@ -234,18 +235,36 @@ sim.data <- function(n, loop.max=20, endoffollowup=30,
 
     if (square.effect2 & !interaction.Atime) {
         if (betaA==0) betaA2 <- 0.8 else betaA2 <- 0.4
-        phiT2 <- function(t, A, L1, L2, L3) {
-            return(exp(+0.4+0.7*L1-betaA2*A))
+        if (cr.setting==1) {
+            phiT2 <- function(t, A, L1, L2, L3) {
+                return(exp(+0.4+0.7*L1-betaA2*A))
+            }
+        } else {
+            phiT2 <- function(t, A, L1, L2, L3) {
+                return(exp(+0.4-0.7*L1+betaA2*A))
+            }
         }
     } else if (square.effect1 & interaction.Atime) {
         if (betaA==0) betaA2 <- 0.8 else betaA2 <- 0.3
-        phiT2 <- function(t, A, L1, L2, L3) {
-            return(exp(-0.2+0.7*L1-0.4*L3+betaA2*A))
+        if (cr.setting==1) {
+            phiT2 <- function(t, A, L1, L2, L3) {
+                return(exp(-0.2+0.7*L1-0.4*L3+betaA2*A))
+            }
+        } else {
+            phiT2 <- function(t, A, L1, L2, L3) {
+                return(exp(-0.2-0.7*L1-0.4*L3-betaA2*A))
+            }
         }
     } else {
         if (betaA==0) betaA2 <- 0.8 else betaA2 <- 0.4
-        phiT2 <- function(t, A, L1, L2, L3) {
-            return(exp(-1.4+0.7*L1-betaA2*A))
+        if (cr.setting==1) {
+            phiT2 <- function(t, A, L1, L2, L3) {
+                return(exp(-1.4+0.7*L1-betaA2*A))
+            }
+        } else {
+            phiT2 <- function(t, A, L1, L2, L3) {
+                return(exp(-1.4-0.7*L1+betaA2*A))
+            }
         }
     }
     
