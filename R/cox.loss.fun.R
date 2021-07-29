@@ -1,7 +1,7 @@
-##' .. content for \description{} (no empty lines) ..
+##' bla
 ##'
-##' .. content for \details{} ..
-##' @title
+##' blub
+##' @title atitle
 ##' @param train.fit model fitted to training data. 
 ##' @param dt dataset. 
 ##' @param risk.set risk.set used for partial likelihood. 
@@ -11,9 +11,9 @@
 ##' @param delta.var name of event type variable. 
 ##' @param delta.value type of event of interest here-
 ##' @param change.point specified if there is a changepoint in the effect of treatment across time.
-##' @return 
-##' @seealso 
-##' @examples 
+##' @return a
+##' @seealso b
+##' @examples c
 ##' @export 
 ##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 cox.loss.fun <- function(train.fit, dt, risk.set, test.set, X=NULL, lambda.cv=NULL,

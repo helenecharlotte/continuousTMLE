@@ -1,7 +1,7 @@
-##' .. content for \description{} (no empty lines) ..
+##' bla
 ##'
-##' .. content for \details{} ..
-##' @title
+##' blub
+##' @title atitle
 ##' @param covars covariates to include in HAL model. 
 ##' @param cut.one.way cut-offs for main effect indicators. 
 ##' @param dt dataset. 
@@ -16,9 +16,9 @@
 ##' @param pseudo.dt dataset with information for HAL. 
 ##' @param time.var name of time-variable. 
 ##' @param cut.time cut-off for time variable. 
-##' @return 
-##' @seealso 
-##' @examples 
+##' @return a
+##' @seealso b
+##' @examples c
 ##' @export 
 ##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 basis.fun <- function(covars, cut.one.way, dt, treatment=NULL,

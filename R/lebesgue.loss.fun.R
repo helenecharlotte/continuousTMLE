@@ -1,7 +1,7 @@
-##' .. content for \description{} (no empty lines) ..
+##' bla
 ##'
-##' .. content for \details{} ..
-##' @title
+##' blub
+##' @title atitle
 ##' @param train.fit model fitted to training data. 
 ##' @param dt dataset. 
 ##' @param risk.set risk.set used for partial likelihood; here NULL. 
@@ -11,9 +11,9 @@
 ##' @param lambda.cv grid over which to choose penalization.
 ##' @param delta.var name of event type variable. 
 ##' @param delta.value type of event of interest here-
-##' @return 
-##' @seealso 
-##' @examples 
+##' @return a
+##' @seealso b
+##' @examples c
 ##' @export 
 ##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 lebesgue.loss.fun <- function(train.fit, dt, risk.set=NULL, test.set, time.var=NULL, X=NULL, lambda.cv=NULL,

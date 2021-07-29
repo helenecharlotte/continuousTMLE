@@ -1,7 +1,7 @@
-##' .. content for \description{} (no empty lines) ..
+##' bla
 ##'
-##' .. content for \details{} ..
-##' @title
+##' blub
+##' @title atitle
 ##' @param loss.fun should be set to cox.loss.fun if comparing cox models; 
 ##' @param dt dataset. 
 ##' @param V number of folds in cross-validation. 
@@ -19,9 +19,9 @@
 ##' @param treatment name of treatment variable. 
 ##' @param cox.model model to compute the cve for. 
 ##' @param lambda.cv grid over which to choose penalization if one of c("coxnet", "cv.glmnet", "glmnet") is used.
-##' @return 
-##' @seealso 
-##' @examples 
+##' @return a
+##' @seealso b
+##' @examples c
 ##' @export 
 ##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 cv.fun <- function(loss.fun, dt, V=5, seed=19192, X=NULL, Y=NULL, offset=NULL,

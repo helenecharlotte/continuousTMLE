@@ -1,7 +1,7 @@
-##' .. content for \description{} (no empty lines) ..
+##' bla
 ##'
-##' .. content for \details{} ..
-##' @title
+##' blub
+##' @title atitle
 ##' @param covars covariates to include in HAL model. 
 ##' @param dt dataset. 
 ##' @param V number of folds in cross-validation. 
@@ -22,9 +22,9 @@
 ##' @param mat dataset with information for HAL.
 ##' @param browse browser() for helene :). 
 ##' @param cut.two.way cut-offs for two-way interactions.
-##' @return 
-##' @seealso 
-##' @examples 
+##' @return a
+##' @seealso b
+##' @examples c
 ##' @export 
 ##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 hal.screening <- function(covars, dt, V=5, cut.one.way=18, method.risk="test", cv.glmnet=FALSE,

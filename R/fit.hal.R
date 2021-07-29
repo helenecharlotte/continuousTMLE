@@ -1,7 +1,7 @@
-##' .. content for \description{} (no empty lines) ..
+##' bla
 ##'
-##' .. content for \details{} ..
-##' @title
+##' blub
+##' @title atitle
 ##' @param covars covariates to include in HAL model. 
 ##' @param dt dataset. 
 ##' @param treatment name of treatment variable. 
@@ -28,9 +28,9 @@
 ##' @param lambda.cvs grid over which to choose penalization. 
 ##' @param two.way two-way interactions of variables to include. 
 ##' @param cut.two.way cut-offs for two-way interactions.
-##' @return 
-##' @seealso 
-##' @examples 
+##' @return a
+##' @seealso b
+##' @examples c
 ##' @export 
 ##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 fit.hal <- function(covars, dt, treatment=NULL, V=5, cut.one.way=8, method.risk="test", cv.glmnet=FALSE,

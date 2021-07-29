@@ -1,7 +1,7 @@
-##' .. content for \description{} (no empty lines) ..
+##' bla
 ##'
-##' .. content for \details{} ..
-##' @title
+##' blub
+##' @title atitle
 ##' @param loss.fun should just be set to cox.loss.fun.
 ##' @param dt dataset.
 ##' @param V number of folds in cross-validation.
@@ -11,9 +11,9 @@
 ##' @param treatment name of treatment variable. 
 ##' @param change.points specified if there is a changepoint in the effect of treatment across time.
 ##' @param cox.models a list of Cox models to be compared with cross-validation.
-##' @return 
-##' @seealso 
-##' @examples 
+##' @return a
+##' @seealso b
+##' @examples c
 ##' @export 
 ##' @author Helene C. W. Rytgaard <hely@@biostat.ku.dk>
 cox.sl <- function(loss.fun, dt, V=5, seed=19192,
